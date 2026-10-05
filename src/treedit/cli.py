@@ -1379,10 +1379,13 @@ Reviewing with the user (they see the tree, your replies and every file change l
    b. The user's saved edits that are not committed yet: commit them first, on their own, as theirs:
       `git add <their paths>` then `git commit -m "user: <what they changed>"`. Never mix them into
       your commits and never revert them.
-   c. Unsaved drafts are the user's work in progress. Leave those files alone if you can; if you must
-      change one, say so in your reply - the window merges your change into their unsaved edits.
-      Never write a draft's content to disk yourself. If a draft shows a block twice (near-copies)
-      that the saved file has once, tell the user: it is in their editor only, and theirs to drop.
+   c. Unsaved drafts are input, not untouchable work in progress: they may be finished points the
+      user never saved. When you edit a file that has a draft, read its diff (`treedit edits`) and
+      merge every new point from it into your edit - keep the user's wording where you can, and
+      carry over no doubled blocks. Write the result to disk yourself; don't leave a draft out
+      because it is unsaved. Say in your commit and reply that the draft is included
+      (`agent: <what changed>, with the user's unsaved draft (treedit #ID)`), so the user can load
+      the disk version in the window and let the draft go.
    d. Your own work: one commit per feedback item, staging only the files you changed
       (`git add <path>...`, never `git add -A`):
       `git commit -m "agent: <what changed> (treedit #ID)"`.
@@ -1404,7 +1407,8 @@ Annotations and feedback live in .treenotes.json; use the CLI rather than editin
 Agent roll - when the user asks you to "roll" (pick up their manual edits and act on them):
 1. `git status` and `treedit edits`; commit the user's saved edits as theirs first (3b).
 2. Housekeeping on the files they touched, then a separate commit `agent: housekeeping (<files>)`,
-   so their own diff and your tidy-up stay apart. Skip files that still have unsaved drafts.
+   so their own diff and your tidy-up stay apart. Files with unsaved drafts: merge the draft in
+   first (3c), then tidy the result.
    - Frontmatter: add or repair it where the file type expects it (a SKILL.md needs `name` and
      `description`); follow the convention of neighbouring files and invent no fields.
    - Names: when a new file or folder has a placeholder or unclear name, propose a better one in
