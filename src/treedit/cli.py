@@ -1027,7 +1027,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, ws.export(q.get("counts", "1") != "0").encode("utf-8"), "text/plain; charset=utf-8")
         b = self.body()
         if method == "PUT" and path == "/api/draft":
-            draft = {k: b[k] for k in ("base_hash", "diff", "full") if b.get(k) is not None}
+            draft = {k: b[k] for k in ("base_hash", "diff", "full", "base") if b.get(k) is not None}
             ws.set_draft(b.get("path", ""), draft if ("diff" in draft or "full" in draft) else None)
             return self.send_json(200, {"ok": True})
         if method == "POST" and path == "/api/draft-drop":
@@ -1381,7 +1381,8 @@ Reviewing with the user (they see the tree, your replies and every file change l
       your commits and never revert them.
    c. Unsaved drafts are the user's work in progress. Leave those files alone if you can; if you must
       change one, say so in your reply - the window merges your change into their unsaved edits.
-      Never write a draft's content to disk yourself.
+      Never write a draft's content to disk yourself. If a draft shows a block twice (near-copies)
+      that the saved file has once, tell the user: it is in their editor only, and theirs to drop.
    d. Your own work: one commit per feedback item, staging only the files you changed
       (`git add <path>...`, never `git add -A`):
       `git commit -m "agent: <what changed> (treedit #ID)"`.

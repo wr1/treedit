@@ -572,10 +572,41 @@ function applyPatch(text, diff) {  // apply a unifiedDiff, finding each hunk's l
   }
   return lines.join('\n');
 }
-function rebaseEdits(original, mine, theirs) {  // your edits (original -> mine) re-applied onto theirs; null on overlap
-  if (mine === original) return theirs;
-  const d = unifiedDiff(original, mine);
-  return d == null ? null : applyPatch(theirs, d);
+function lineHunks(o, x) {  // the changes from o to x as [{s, e, lines}]: line s..e-1 of o replaced by lines; null if too large
+  const d = lineDiff(o, x);
+  if (!d) return null;
+  const out = [];
+  let i = 0, cur = null;
+  for (const [t, l] of d) {
+    if (t === ' ') { cur = null; i++; continue; }
+    if (!cur) { cur = { s: i, e: i, lines: [] }; out.push(cur); }
+    if (t === '-') cur.e = ++i; else cur.lines.push(l);
+  }
+  return out;
+}
+function merge3(original, mine, theirs) {  // three-way merge; null when both sides change the same or touching lines differently
+  if (mine === original || mine === theirs) return theirs;
+  if (theirs === original) return mine;
+  const O = original.split('\n'), ha = lineHunks(original, mine), hb = lineHunks(original, theirs);
+  if (!ha || !hb) return null;
+  const all = [...ha.map(h => ({ ...h, side: 0 })), ...hb.map(h => ({ ...h, side: 1 }))].sort((x, y) => x.s - y.s || x.e - y.e);
+  const out = [];
+  let pos = 0;
+  for (let k = 0; k < all.length;) {
+    const gs = all[k].s, grp = [all[k++]];
+    let ge = grp[0].e;
+    while (k < all.length && all[k].s <= ge) { ge = Math.max(ge, all[k].e); grp.push(all[k++]); }  // overlapping or touching
+    const render = hs => { const r = []; let p = gs; for (const h of hs) { r.push(...O.slice(p, h.s), ...h.lines); p = h.e; } return [...r, ...O.slice(p, ge)]; };
+    const a = grp.filter(h => h.side === 0), b = grp.filter(h => h.side === 1);
+    const ra = render(a), rb = render(b);
+    if (a.length && b.length && ra.join('\n') !== rb.join('\n')) return null;  // never keep both versions of a block
+    out.push(...O.slice(pos, gs), ...(a.length ? ra : rb));
+    pos = ge;
+  }
+  return [...out, ...O.slice(pos)].join('\n');
+}
+function rebaseEdits(original, mine, theirs) {  // your edits (original -> mine) merged into theirs; null on overlap
+  return merge3(original, mine, theirs);
 }
 async function rebaseBuffers(paths) {  // background buffers follow the agent's changes to their files
   for (const p of paths) {
@@ -605,7 +636,8 @@ async function syncDrafts() {  // mirror unsaved edits to the server as diffs (e
     for (const [p, b] of now) {
       if (S.draftSent.get(p) === b.value) continue;
       const diff = unifiedDiff(b.original, b.value);
-      await api('PUT', '/api/draft', diff == null ? { path: p, base_hash: b.hash, full: b.value } : { path: p, base_hash: b.hash, diff });
+      await api('PUT', '/api/draft', diff == null ? { path: p, base_hash: b.hash, full: b.value }
+                                                 : { path: p, base_hash: b.hash, diff, base: b.original });
       S.draftSent.set(p, b.value);
     }
     for (const p of [...S.draftSent.keys()]) if (!now.has(p)) { await api('POST', '/api/draft-drop', { path: p }); S.draftSent.delete(p); }
@@ -622,7 +654,9 @@ async function hydrateDrafts() {
     if (!n || n.type !== 'file' || n.kind !== 'text') { S.stuck[p] = { ...dr, why: 'the file is gone' }; continue; }
     let f;
     try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { S.stuck[p] = { ...dr, why: 'the file cannot be read' }; continue; }
-    const value = dr.full != null ? dr.full : applyPatch(f.content, dr.diff || '');
+    const value = dr.full != null ? dr.full
+      : dr.base != null ? merge3(dr.base, applyPatch(dr.base, dr.diff || '') ?? dr.base, f.content)  // three-way, like live edits
+      : applyPatch(f.content, dr.diff || '');  // drafts saved before the base was kept
     if (value == null) { S.stuck[p] = { ...dr, why: 'the file changed too much to re-apply the edits' }; continue; }
     if (value === f.content) { api('POST', '/api/draft-drop', { path: p }).catch(() => {}); continue; }
     S.bufs.set(p, { hash: f.hash, original: f.content, value });

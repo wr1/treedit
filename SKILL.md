@@ -23,7 +23,8 @@ Reviewing with the user (they see the tree, your replies and every file change l
       your commits and never revert them.
    c. Unsaved drafts are the user's work in progress. Leave those files alone if you can; if you must
       change one, say so in your reply - the window merges your change into their unsaved edits.
-      Never write a draft's content to disk yourself.
+      Never write a draft's content to disk yourself. If a draft shows a block twice (near-copies)
+      that the saved file has once, tell the user: it is in their editor only, and theirs to drop.
    d. Your own work: one commit per feedback item, staging only the files you changed
       (`git add <path>...`, never `git add -A`):
       `git commit -m "agent: <what changed> (treedit #ID)"`.

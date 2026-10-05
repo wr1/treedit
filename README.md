@@ -65,8 +65,8 @@ python -m treedit print PATH # without installing the script
   back, re-applied onto a newer file if the agent changed it meanwhile; edits whose file vanished, or
   that no longer apply, are listed under "Unsaved edits that need you" (restore, show, discard).
 - Live merging: when the agent changes a file you have unsaved edits in (open, stacked or in the
-  background), your edits are re-applied onto its new version; only overlapping lines raise the
-  conflict banner. `treedit edits` shows an agent your saved and unsaved edits, so the skill can have
+  background), your edits are merged three-way into its new version (like git): an edit already on disk is
+  kept once, and changes to the same or touching lines raise the conflict banner instead of keeping both. `treedit edits` shows an agent your saved and unsaved edits, so the skill can have
   it commit yours (`user: …`) apart from its own (`agent: … (treedit #ID)`).
 - Change bars: in the editor, a bar on the right marks lines changed recently (green = agent, blue =
   your saves), fading over 30 minutes; a strip at the far right shows where they are in the whole file
