@@ -1,0 +1,17 @@
+[package]
+name = "treedit-app"
+version = "0.1.0"
+description = "treedit in a native window"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/wr1/treedit"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = true

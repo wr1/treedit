@@ -1,0 +1,1892 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>treedit</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<style>
+:root{
+  --bg:#fbfaf8; --panel:#f3f1ed; --line:#e2ded6; --text:#22201c; --dim:#8a857b;
+  --accent:#3f6fb5; --note:#7a5a1f; --note-bg:#fbf1dc; --sel:#e3ebf7; --danger:#b23b2e; --ok:#2f7d4f; --heat:#c27c0e; --heat2:#d42a1e;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --tree-w: 440px;
+  --term-w: 560px;
+  --fb:#b4236e; --agentc:#1f8a70;
+  --t-k:#8a3ab9; --t-s:#2f7d4f; --t-c:#948e83; --t-n:#b35c00; --t-f:#3f6fb5; --t-t:#0f7b85; --t-d:#a0522d;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1b1a18; --panel:#23221f; --line:#38352f; --text:#e8e4dc; --dim:#8f8a80;
+    --accent:#7fa7e0; --note:#e2be7a; --note-bg:#3a3224; --sel:#2c3a50; --danger:#e57262; --ok:#6cc08f; --heat:#f2b84b; --heat2:#ff6b5e;
+    --fb:#f07ab8; --agentc:#4fd1a5;
+    --t-k:#c792ea; --t-s:#9ccc8a; --t-c:#857f75; --t-n:#f0a35e; --t-f:#82aaff; --t-t:#6fc3c9; --t-d:#e2be7a; }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--sans);display:flex;flex-direction:column}
+button{font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{color:var(--danger)}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header strong{font-family:var(--mono);font-size:14px}
+header .path{color:var(--dim);font-family:var(--mono);font-size:12px;max-width:30vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header input[type=search]{flex:1;min-width:160px;max-width:340px;font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
+header label{font-size:13px;color:var(--dim);display:flex;gap:4px;align-items:center;cursor:pointer;user-select:none}
+.spacer{flex:1}
+#live{width:9px;height:9px;border-radius:50%;background:var(--ok);display:inline-block}
+#live.off{background:var(--danger)}
+#live.paused{background:var(--dim)}
+main{flex:1;display:flex;min-height:0}
+aside{width:var(--tree-w);min-width:220px;max-width:75vw;overflow:auto;background:var(--panel);padding:6px 0 24px}
+#divider,#divider2{width:5px;cursor:col-resize;background:var(--line);flex:none}
+#divider:hover,#divider2:hover{background:var(--accent)}
+#divider2[hidden],#termpane[hidden],#b-term[hidden]{display:none}
+#termpane{width:var(--term-w);min-width:280px;max-width:72vw;flex:none;display:flex;flex-direction:column;background:var(--bg)}
+.tbar{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12.5px;flex-wrap:wrap}
+.tbar b{font-family:var(--mono)}
+.tbar button{padding:2px 8px;font-size:12px}
+#t-close{font-size:16px;line-height:1;padding:1px 9px 3px}
+#tstate{width:8px;height:8px;border-radius:50%;background:var(--dim);display:inline-block}
+#tstate.live{background:var(--ok)} #tstate.ended{background:var(--note)}
+#term{flex:1;min-height:0;padding:4px 0 0 8px}
+#b-term.on{border-color:var(--accent);color:var(--accent)}
+.row{user-select:none;display:flex;align-items:baseline;gap:6px;padding:2px 10px 2px 8px;font-family:var(--mono);font-size:13px;white-space:nowrap;cursor:pointer;border-left:3px solid transparent}
+.row{background-image:linear-gradient(var(--mark,transparent),var(--mark,transparent))}
+.row:hover{background-color:color-mix(in srgb,var(--sel) 55%,transparent)}
+.row.sel{background:var(--sel);border-left-color:var(--accent)}
+.row.heat .name,.row.heat .count{color:var(--hc)}
+.row.flash{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:var(--note-bg)}to{}}
+.caret{width:12px;flex:none;color:var(--dim);text-align:center}
+.name.dir{font-weight:600}
+.name.chain .seg{cursor:pointer}
+.name.chain .seg:hover{text-decoration:underline}
+.name.chain .seg.dir{font-weight:600}
+.name.chain .gap{color:var(--dim)}
+.row.broken .name{color:var(--danger);text-decoration:line-through}
+.link{color:var(--dim)}
+.note{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--note);font-family:var(--sans);font-style:italic;font-size:12.5px;padding-left:6px}
+.note.dot{flex:1;font-style:normal}
+.count{color:var(--dim);font-size:11.5px;flex:none}
+.count.tok{font-variant-numeric:tabular-nums}
+#orphans{margin:16px 10px 0;font-size:12.5px}
+#orphans .h{color:var(--dim);font-weight:600;margin-bottom:4px}
+#orphans .o{display:flex;gap:6px;align-items:center;padding:3px 0;border-top:1px dashed var(--line)}
+#orphans .o code{font-family:var(--mono);text-decoration:line-through;color:var(--dim)}
+#orphans .o span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--note);font-style:italic}
+#orphans button{padding:1px 6px;font-size:12px}
+section#detail{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+#findbar{position:absolute;top:6px;right:22px;z-index:6;display:flex;gap:5px;align-items:center;padding:5px 7px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);font-size:12.5px}
+#findbar[hidden]{display:none}
+#findq{width:220px;font:13px var(--mono);padding:3px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--text)}
+#findq.none{border-color:var(--danger)}
+#findn{color:var(--dim);min-width:64px;text-align:center}
+#findbar button{padding:1px 7px;font-size:12px}
+#findbar label{display:flex;gap:3px;align-items:center;color:var(--dim);cursor:pointer}
+#findhl{position:absolute;left:0;top:0;pointer-events:none}
+.found{position:absolute;background:color-mix(in srgb,#f5c518 45%,transparent);outline:1px solid #d4a400;border-radius:2px}
+#ovr i.find{background:#e0b000}
+#empty{margin:auto;color:var(--dim);text-align:center;max-width:420px;padding:20px}
+#pane{flex:1;display:flex;flex-direction:column;min-height:0}
+#pane[hidden]{display:none}
+.bar{display:flex;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line)}
+.bar button{flex:none}
+#crumb{flex:1;min-width:0;font-family:var(--mono);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#linkinfo{color:var(--dim);font-family:var(--mono);font-size:12px}
+#banner{padding:8px 14px;background:color-mix(in srgb,var(--danger) 14%,var(--bg));border-bottom:1px solid var(--danger);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#banner[hidden]{display:none}
+#banner b{color:var(--danger)}
+#editwrap{flex:1;display:flex;min-height:0;position:relative;background:var(--bg);overflow:hidden}
+#marks{position:absolute;left:0;right:0;top:0;pointer-events:none}
+.mark{position:absolute;left:0;right:0;background:color-mix(in srgb,var(--fb) 9%,transparent);border-left:3px solid var(--fb)}
+.chg{position:absolute;width:4px;border-radius:2px;background:var(--agentc)}
+.chg.you{background:var(--accent)} .chg.del{height:3px !important;width:10px;border-radius:0}
+#ovr{position:absolute;top:0;bottom:0;width:7px;pointer-events:none;z-index:2}
+#ovr i{position:absolute;left:0;right:0;min-height:3px;border-radius:2px;background:var(--agentc);pointer-events:auto;cursor:pointer}
+#ovr i.you{background:var(--accent)}
+.smarks{position:absolute;inset:0;pointer-events:none}
+#editwrap[hidden]{display:none}
+body.wrap #editor,body.wrap #hl,body.wrap .sedit textarea,body.wrap .sedit .shl{white-space:pre-wrap;overflow-wrap:anywhere}
+body.wrap #editor{overflow-x:hidden}
+#b-wrap.on{border-color:var(--accent);color:var(--accent)}
+#editor{flex:1;position:relative;border:0;resize:none;padding:12px 16px;font:13.5px/1.55 var(--mono);background:transparent;color:var(--text);tab-size:4;outline:none;white-space:pre;overflow:auto}
+#hl{position:absolute;inset:0;margin:0;padding:12px 56px 56px 16px;font:13.5px/1.55 var(--mono);tab-size:4;white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
+#editwrap:not(.hl) #hl{display:none}
+#editwrap.hl #editor{color:transparent;caret-color:var(--text)}
+#editwrap.hl #editor::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
+#hl.flash{animation:flash 1.2s ease-out}
+.t-k{color:var(--t-k)} .t-s{color:var(--t-s)} .t-c{color:var(--t-c)} .t-n,.t-v{color:var(--t-n)}
+.t-f{color:var(--t-f)} .t-t,.t-b{color:var(--t-t)} .t-d{color:var(--t-d)} .t-h{color:var(--accent)}
+#fbbox{border-bottom:1px solid var(--line);padding:5px 14px;max-height:36vh;overflow:auto}
+.fbhead{display:flex;gap:8px;align-items:center;font-size:12px;font-weight:600;color:var(--fb)}
+.fbhead #fbcount{color:var(--dim);font-weight:400}
+.fbhead button{padding:1px 8px;font-size:12px}
+.fbi{border-left:3px solid var(--fb);background:color-mix(in srgb,var(--fb) 6%,var(--bg));border-radius:0 6px 6px 0;padding:6px 10px;margin:6px 0;font-size:13px}
+.fbi.done{border-left-color:var(--line);background:transparent;color:var(--dim)}
+.fbh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.fbh button{padding:0 7px;font-size:12px}
+.fbh a{color:var(--accent);cursor:pointer;font-family:var(--mono);font-size:12px}
+.pill{font-size:11px;padding:0 7px;border-radius:9px;background:var(--fb);color:#fff}
+.pill.done{background:var(--dim)}
+.fbq{margin:4px 0;padding:4px 8px;font:12px/1.45 var(--mono);background:var(--panel);border-radius:4px;max-height:6em;overflow:auto;white-space:pre}
+.fbt{white-space:pre-wrap}
+.fbr{white-space:pre-wrap;margin-top:4px;padding-left:8px;border-left:2px solid var(--ok)}
+.fbr::before{content:"agent: ";color:var(--ok);font-weight:600}
+.fbadge{color:var(--fb);font-size:11.5px;flex:none;font-family:var(--sans);font-weight:700}
+.compose{border:1px solid var(--fb);border-radius:8px;padding:8px;margin:6px 0;background:var(--bg)}
+.compose .ctitle{font-size:12px;color:var(--fb);font-weight:600;margin-bottom:4px;font-family:var(--mono)}
+.compose textarea{width:100%;font:13.5px/1.45 var(--sans);border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg);color:var(--text);resize:vertical}
+.compose .cbtns{display:flex;gap:8px;margin-top:6px}
+#fball.hot{border-color:var(--fb);color:var(--fb);font-weight:600}
+.fball{padding:4px 14px 12px}
+.fball .msg{color:var(--dim);padding:12px 0}
+.glog{padding:4px 14px 12px;font-size:13px}
+.glog .msg{color:var(--dim);padding:10px 0}
+.glog .gst{font:12px/1.5 var(--mono);color:var(--note);margin:4px 0 8px;white-space:pre}
+.glog .gc{display:flex;gap:10px;align-items:baseline;padding:4px 6px;border-bottom:1px solid var(--line);cursor:pointer}
+.glog .gc:hover{background:color-mix(in srgb,var(--sel) 55%,transparent)}
+.glog .gc.open{background:var(--sel)}
+.glog .gc code{font-family:var(--mono);color:var(--accent);flex:none}
+.glog .gc .when{color:var(--dim);flex:none;width:7.5em;font-size:12px}
+.glog .gc .who{color:var(--dim);flex:none;font-size:12px}
+.glog .gc .subj{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glog .badge{font-size:11px;padding:0 6px;border-radius:8px;color:#fff;flex:none}
+.glog .badge.agent{background:var(--agentc)} .glog .badge.you{background:var(--note)}
+.glog pre.gdiff{margin:0 0 8px;padding:8px 10px;font:12px/1.45 var(--mono);background:var(--panel);border-radius:0 0 6px 6px;overflow-x:auto;white-space:pre;max-height:55vh}
+.gdiff .d-hunk{color:var(--accent)} .gdiff .d-meta{color:var(--dim)}
+#mcompose{padding:0 14px}
+#mcross{padding:2px 14px 4px;border-bottom:3px solid var(--line)}
+#mcross:empty{display:none}
+.mfb{padding:0 14px}
+#multi{flex:1;display:flex;flex-direction:column;min-height:0}
+#multi[hidden]{display:none}
+#mcount{flex:1;color:var(--dim);font-size:12.5px}
+#mlist{flex:1;overflow:auto}
+.mfile+.mfile{border-top:3px solid var(--line)}
+.mfile .mh{position:sticky;top:0;z-index:1;display:flex;gap:10px;align-items:baseline;padding:6px 14px;background:var(--panel);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:13px;cursor:pointer;white-space:nowrap}
+.mfile .mh:hover .name{color:var(--accent)}
+.sedit{position:relative;background:var(--bg)}
+.sedit.flash{animation:flash 1.2s ease-out}
+.sedit .shl{position:absolute;inset:0;margin:0;padding:10px 16px;font:13px/1.5 var(--mono);white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
+.sedit:not(.hl) .shl{display:none}
+.sedit textarea{position:relative;display:block;width:100%;margin:0;border:0;resize:none;padding:10px 16px;font:13px/1.5 var(--mono);white-space:pre;overflow-x:auto;overflow-y:hidden;background:transparent;color:var(--text);outline:none}
+.sedit textarea:focus{box-shadow:inset 3px 0 0 var(--accent)}
+.sedit.hl textarea{color:transparent;caret-color:var(--text)}
+.sedit.hl textarea::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
+.mfile .mh button{padding:1px 8px;font-size:12px;font-family:var(--sans)}
+.mfile .mh button[hidden]{display:none}
+.mfile .mh.dirty .name::after{content:" ●";color:var(--note)}
+.sbanner{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 14px;background:color-mix(in srgb,var(--danger) 14%,var(--bg));border-bottom:1px solid var(--danger);font-size:13px}
+.sbanner b{color:var(--danger)}
+.unsaved,.conflict,.agentmark{font-size:11px;flex:none}
+.unsaved{color:var(--note)} .conflict{color:var(--danger)} .agentmark{color:var(--agentc)}
+#orphans .d span.why{color:var(--dim);font-style:normal}
+.mfile .t-c{font-style:italic} .mfile .t-h{font-weight:600}
+.mfile .msg{padding:10px 16px;color:var(--dim);font-size:13px}
+#editor[readonly]{color:var(--dim)}
+#dirinfo{flex:1;overflow:auto;padding:12px 16px}
+#dirinfo[hidden]{display:none}
+#dirinfo .stats{color:var(--dim);margin-bottom:10px}
+#dirinfo table{border-collapse:collapse;width:100%}
+#dirinfo td{padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+#dirinfo td:first-child{font-family:var(--mono);white-space:nowrap;cursor:pointer;color:var(--accent);width:1%}
+#dirinfo td.n{color:var(--note);font-style:italic;white-space:pre-wrap}
+#dirinfo td.c{color:var(--dim);font-size:12px;white-space:nowrap;width:1%}
+.status{display:flex;gap:12px;align-items:center;padding:6px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
+#filestate.dirty{color:var(--note);font-weight:600}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);width:min(1000px,92vw);max-height:86vh;padding:0}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+.mhead{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.mbody{overflow:auto;max-height:70vh;padding:0}
+.mbody pre{margin:0;padding:12px 16px;font:12.5px/1.5 var(--mono);white-space:pre}
+.d-add{background:color-mix(in srgb,var(--ok) 18%,transparent)}
+.d-del{background:color-mix(in srgb,var(--danger) 18%,transparent)}
+.d-skip{color:var(--dim);font-style:italic}
+#toast{position:fixed;right:16px;bottom:44px;background:var(--text);color:var(--bg);padding:7px 12px;border-radius:7px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:60vw}
+#toast.show{opacity:.95}
+#toast.err{background:var(--danger);color:#fff}
+@media (max-width:700px){ main{flex-direction:column} aside,#termpane{width:auto;max-width:none;max-height:42vh} #divider,#divider2{display:none} }
+</style>
+</head>
+<body>
+<header>
+  <strong id="rootname">…</strong><span class="path" id="rootpath"></span>
+  <input type="search" id="filter" placeholder="Filter by path, annotation or feedback…">
+  <label title="Show your annotations in the tree"><input type="checkbox" id="shownotes" checked> annotations</label>
+  <label><input type="checkbox" id="showcounts" checked> counts</label>
+  <label title="Colour each document by its size in this tree (word count ranked among all files; folders among folders): dim = small, red = largest"><input type="checkbox" id="heat" checked> heat</label>
+  <label title="Show a folder that holds just one file (however deep) on one line"><input type="checkbox" id="compact" checked> compact</label>
+  <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
+  <button id="refresh" title="Re-read the tree from disk">Refresh</button>
+  <button id="fball" title="All feedback for the agent">Feedback</button>
+  <button id="b-log" title="Git history of the selected file or folder">History</button>
+  <button id="export" title="Tree listing with your annotations and open feedback, as plain text">Annotated tree</button>
+  <button id="b-term" hidden title="Terminal / agent pane on the right">Agent</button>
+</header>
+<main>
+  <aside id="treepane"><div id="tree"></div><div id="orphans"></div></aside>
+  <div id="divider"></div>
+  <section id="detail">
+    <div id="empty">Select a file to edit it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds · Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="pane" hidden>
+      <div class="bar">
+        <span id="crumb"></span><span id="linkinfo"></span>
+        <button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
+        <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
+      </div>
+      <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
+      <div id="banner" hidden></div>
+      <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div>
+      <div id="dirinfo" hidden></div>
+      <div class="status"><span id="pos"></span><span id="filestate"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
+    </div>
+    <div id="findbar" hidden><input id="findq" placeholder="Find" spellcheck="false" autocomplete="off"><span id="findn"></span>
+      <button id="find-prev" title="Previous (Shift+Enter, Shift+F3)">↑</button><button id="find-next" title="Next (Enter, F3)">↓</button>
+      <label title="Match case"><input type="checkbox" id="findcase"> Aa</label><button id="find-close" title="Close (Esc)">×</button></div>
+    <div id="multi" hidden>
+      <div class="bar"><span id="mcount"></span><button id="b-msave" class="primary" hidden>Save all</button><button id="b-mfb">+ Feedback on these</button><button id="mclear">Clear selection</button></div>
+      <div id="mcompose"></div>
+      <div id="mlist"></div>
+    </div>
+  </section>
+  <div id="divider2" hidden></div>
+  <aside id="termpane" hidden>
+    <div class="tbar"><span id="tstate"></span><b id="tlabel">shell</b><span class="spacer"></span>
+      <button id="t-sel" title="Type a reference to what you selected in the tree or editor">Selection</button>
+      <button id="t-roll" title="Agent roll: pick up your edits, commit them as yours, tidy up (frontmatter, names, spelling, doubled text), then work through the feedback">Roll</button>
+      <button id="t-fb" title="Ask the agent to work through the open feedback">Open feedback</button>
+      <button id="t-ext" title="Open the agent in a separate Ptyxis window">Ptyxis</button>
+      <button id="t-restart" title="End this session and start a new one">Restart</button>
+      <button id="t-close" title="Hide the pane to the right (the session keeps running)">›</button></div>
+    <div id="term"></div>
+  </aside>
+</main>
+<dialog id="modal"><div class="mhead"><strong id="mtitle"></strong><span class="spacer"></span><span id="mactions"></span><button id="mclose">Close</button></div><div class="mbody" id="mbody"></div></dialog>
+<div id="toast"></div>
+<script>
+"use strict";
+const CFG = /*TREEDIT_CONFIG*/{};
+const plog = msg => fetch('/api/log', { method: 'POST', headers: { 'X-Treedit': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ msg }) }).catch(() => {});
+window.addEventListener('error', e => plog(`${e.message} @ ${e.filename}:${e.lineno}`));
+window.addEventListener('unhandledrejection', e => plog('unhandled: ' + (e.reason && (e.reason.stack || e.reason))));
+const $ = s => document.querySelector(s);
+const editor = $('#editor'), hlEl = $('#hl');
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem('treedit:' + k)); return v ?? d; } catch { return d; } };
+const store = (k, v) => { try { localStorage.setItem('treedit:' + k, JSON.stringify(v)); } catch {} };
+const noteKey = p => p || '.';
+const S = {
+  tree: null, notes: {}, version: null, byPath: new Map(), rootName: '',
+  sel: null, file: null, conflict: null,
+  expanded: new Set(load('expanded', [''])),
+  flashPaths: new Set(),
+  multi: new Set(), anchor: null, order: [], mcache: new Map(), feedback: [], draft: null, modalFb: false, bufs: new Map(), msec: new Map(), lastDirty: false,
+  drafts: {}, draftSent: new Map(), stuck: {}, hydrated: new Set(), changes: {}, dirFresh: new Map(), skew: 0, showDone: load('showdone', false),
+};
+
+async function api(method, url, body) {
+  const opt = { method, headers: { 'X-Treedit': '1' } };
+  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(url, opt);
+  const ct = r.headers.get('Content-Type') || '';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) { const e = new Error((data && data.error) || r.statusText); e.status = r.status; e.data = data; throw e; }
+  return data;
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function btn(label, fn, cls) { const b = el('button', cls, label); b.onclick = fn; return b; }
+let toastT;
+function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : ''); clearTimeout(toastT); toastT = setTimeout(() => t.className = '', err ? 5000 : 1800); }
+const isDirty = () => !!S.file && S.file.kind === 'text' && editor.value !== S.file.original;
+// unsaved edits per file (path -> {hash, original, value}); kept when you switch files or views
+const isDirtyPath = p => S.bufs.has(p) || (!!S.file && S.file.path === p && isDirty()) || !!(S.msec.get(p) && sDirty(S.msec.get(p)));
+const isConflictPath = p => (!!S.file && S.file.path === p && !!S.conflict) || !!(S.msec.get(p) && S.msec.get(p).conflict);
+const FADE = 1800;  // seconds over which an agent change's highlight fades out
+const nowSec = () => Date.now() / 1000 + S.skew;
+const freshness = at => Math.max(0, 1 - (nowSec() - at) / FADE);
+function ago(at) {
+  const m = Math.round((nowSec() - at) / 60);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+function markerSpan(cls, glyph, title) { const sp = el('span', cls, glyph); sp.title = title; return sp; }
+function rowMarks(r, path, isDir) {  // unsaved / conflict / agent-change markers and a mild background
+  let bg = null;
+  if (!isDir) {
+    if (isConflictPath(path)) r.append(markerSpan('conflict', '⚠', 'changed on disk while you were editing'));
+    else if (isDirtyPath(path)) r.append(markerSpan('unsaved', '✎', 'unsaved edits (kept as a draft until you save)'));
+    if (isDirtyPath(path)) bg = 'color-mix(in srgb, var(--note) 13%, transparent)';
+  }
+  const c = !isDir && S.changes[path], at = c && c.by === 'agent' ? c.at : isDir ? S.dirFresh.get(path) : null;
+  const f = at ? freshness(at) * (isDir ? 0.5 : 1) : 0;
+  if (f > 0 && !isDir) {
+    const m = markerSpan('agentmark', '◆', `changed by the agent ${ago(at)}`);
+    m.style.opacity = (0.35 + 0.65 * f).toFixed(2); r.append(m);
+  }
+  if (f > 0 && !bg) bg = `color-mix(in srgb, var(--agentc) ${(3 + 15 * f).toFixed(1)}%, transparent)`;
+  if (bg) r.style.setProperty('--mark', bg);
+}
+function stashSingle() {
+  if (isDirty()) S.bufs.set(S.file.path, { hash: S.file.hash, original: S.file.original, value: editor.value });
+}
+const parentOf = p => p.split('/').slice(0, -1).join('/');
+
+/* ---------- tree ---------- */
+// heat: how big a document is in this tree - its words ranked among all files (folders among all
+// folders), 0 = fewest, 1 = most - shown dim -> text colour -> amber -> red
+function rankBySize(root) {  // n.rank 0..1: files against all files, folders against all folders
+  const groups = { file: [], dir: [] };
+  (function walk(n, d) { if (d && n.w) groups[n.type === 'dir' ? 'dir' : 'file'].push(n); for (const c of n.children || []) walk(c, d + 1); })(root, 0);
+  for (const group of Object.values(groups)) {
+    const ws = group.map(n => n.w).sort((a, b) => a - b), last = ws.length - 1;
+    const bound = (v, strict) => { let lo = 0, hi = ws.length; while (lo < hi) { const m = (lo + hi) >> 1; if (strict ? ws[m] <= v : ws[m] < v) lo = m + 1; else hi = m; } return lo; };
+    const trust = Math.min(1, last / 8);  // two or three documents say little: stay near neutral
+    for (const n of group) n.rank = 0.5 + ((last ? (bound(n.w, false) + bound(n.w, true) - 1) / 2 / last : 1) - 0.5) * trust;
+  }
+}
+const HEAT_STOPS = [[0, '--dim'], [0.5, '--text'], [0.8, '--heat'], [1, '--heat2']];
+function heatColor(rank) {
+  for (let i = 1; i < HEAT_STOPS.length; i++) {
+    const [p0, c0] = HEAT_STOPS[i - 1], [p1, c1] = HEAT_STOPS[i];
+    if (rank <= p1) return `color-mix(in oklab, var(${c1}) ${((rank - p0) / (p1 - p0) * 100).toFixed(0)}%, var(${c0}))`;
+  }
+  return 'var(--heat2)';
+}
+function index(n) {
+  S.byPath.set(n.path, n);
+  n.w = n.type === 'dir' ? (n.children || []).reduce((s, c) => s + index(c), 0) : n.words || 0;
+  return n.w;
+}
+function stats(n) {
+  let files = 0, dirs = 0, lines = 0, words = 0;
+  (function w(x) { for (const c of x.children || []) { if (c.type === 'dir') { dirs++; w(c); } else { files++; lines += c.lines || 0; words += c.words || 0; } } })(n);
+  return { files, dirs, lines, words };
+}
+const pl = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`;
+const fmtTok = n => n < 1000 ? `${n}` : n < 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n / 1000)}k`;
+function tokSpan(n) {  // skill trees: what loading costs, min (no leaf loaded) – max (all leaves)
+  const sp = el('span', 'count tok');
+  if (n.type === 'dir') {
+    sp.textContent = n.tmin === n.tmax ? `~${fmtTok(n.tmax)} tok` : `~${fmtTok(n.tmin)}–${fmtTok(n.tmax)} tok`;
+    sp.title = `Loading cost, estimated at ~${4} characters per token\nmin ${n.tmin.toLocaleString()}: ` +
+      (n.children.some(c => c.name === 'SKILL.md') ? 'its SKILL.md only, no leaf loaded' : 'the entry SKILL.md of each skill inside, no leaf loaded') +
+      `\nmax ${n.tmax.toLocaleString()}: every file underneath loaded`;
+  } else { sp.textContent = `${n.lines} l · ~${fmtTok(n.tok)} tok`; sp.title = `${n.tok.toLocaleString()} tokens (estimated), ${n.words} words`; }
+  return sp;
+}
+function countText(n) {
+  if (n.kind === 'text') return `${n.lines} l · ${n.words} w`;
+  if (n.kind === 'binary') return 'binary';
+  if (n.kind === 'large') return `${(n.size / 1048576).toFixed(1)} MB`;
+  if (n.kind === 'outside') return 'outside root';
+  return '';
+}
+
+function loneChain(n) {  // [n, …, file] when folder n holds just one file, however deeply nested
+  const chain = [n];
+  let c = n;
+  while (c.type === 'dir' && !c.linked && c.children && c.children.length === 1) { c = c.children[0]; chain.push(c); }
+  return chain.length > 1 && c.type === 'file' ? chain : null;
+}
+const GAP = { text: '…/', gap: true };
+function elideChain(segs, max) {  // keep the first folder and as much of the tail as fits; '…/' stands for the rest
+  const len = a => a.reduce((t, x) => t + x.text.length, 0);
+  if (len(segs) <= max || segs.length < 3) return segs;
+  for (let k = 2; k < segs.length; k++) { const out = [segs[0], GAP, ...segs.slice(k)]; if (len(out) <= max) return out; }
+  const last = segs[segs.length - 1], room = max - last.text.length;  // shorten the first folder's name itself
+  return room >= 6 ? [{ ...segs[0], text: segs[0].text.slice(0, room - 2) + '…/' }, last] : [GAP, last];
+}
+function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
+  const n = chain[0], leaf = chain[chain.length - 1], paths = chain.map(x => x.path);
+  const r = el('div', 'row' + (paths.some(picked) ? ' sel' : '') + (leaf.type === 'broken' ? ' broken' : '') + (S.flashPaths.has(leaf.path) ? ' flash' : ''));
+  const indent = 8 + depth * 16;
+  r.style.paddingLeft = indent + 'px';
+  const room = Math.max(16, Math.floor(($('#treepane').clientWidth - indent - 128) / 7.8));  // characters that fit
+  const name = el('span', 'name chain');
+  for (const sg of elideChain(chain.map(x => ({ text: x.name + (x.type === 'dir' ? '/' : ''), node: x })), room)) {
+    if (sg.gap) { name.append(el('span', 'gap', sg.text)); continue; }
+    const sp = el('span', 'seg' + (sg.node.type === 'dir' ? ' dir' : ''), sg.text);
+    sp.title = sg.node.type === 'dir' ? `Select the folder ${sg.node.path}/ (to leave feedback on it)` : sg.node.path;
+    sp.onclick = e => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;  // let the row handle multi-select
+      e.stopPropagation();
+      if (S.multi.size) leaveMulti(sg.node.path); else select(sg.node.path);
+    };
+    name.append(sp);
+  }
+  r.append(el('span', 'caret', ''), name);
+  rowMarks(r, leaf.path, false);
+  const noteAt = [...chain].reverse().find(x => S.notes[noteKey(x.path)]), note = noteAt && S.notes[noteKey(noteAt.path)];
+  if (note && showNotes) {
+    const lines = note.trim().split('\n');
+    r.append(el('span', 'note', (noteAt === leaf ? '' : noteAt.name + '/: ') + lines[0] + (lines.length > 1 ? ` (+${lines.length - 1})` : '')));
+  } else r.append(el('span', 'note dot', note ? '●' : ''));
+  const nfb = paths.reduce((t, p) => t + openFb(p), 0);
+  if (nfb) r.append(el('span', 'fbadge', '● ' + nfb));
+  if (showCounts) r.append(S.skills && leaf.tok != null ? tokSpan(leaf) : el('span', 'count', countText(leaf)));
+  if (heat && n.rank != null) { r.classList.add('heat'); r.style.setProperty('--hc', heatColor(n.rank)); }
+  r.title = paths.join('\n') + (note ? `\n\n${note}` : '');
+  r.onclick = e => {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return multiClick(leaf.path, e.shiftKey, e.ctrlKey || e.metaKey);
+    if (S.multi.size) return leaveMulti(leaf.path);
+    select(leaf.path);
+  };
+  S.order.push(leaf.path);
+  return r;
+}
+function renderTree() {
+  const f = $('#filter').value.trim().toLowerCase();
+  const showNotes = $('#shownotes').checked, showCounts = $('#showcounts').checked, heat = $('#heat').checked, compact = $('#compact').checked;
+  const box = $('#tree'); box.textContent = '';
+  if (!S.tree) return;
+  S.order = [];
+  const picked = p => S.multi.size ? S.multi.has(p) : S.sel === p;
+  const vis = new Map();
+  (function mark(n) {
+    let v = !f || n.path.toLowerCase().includes(f) || (S.notes[noteKey(n.path)] || '').toLowerCase().includes(f)
+      || fbFor(n.path).some(x => (x.text + '\n' + (x.reply || '')).toLowerCase().includes(f));
+    for (const c of n.children || []) v = mark(c) || v;
+    vis.set(n.path, v); return v;
+  })(S.tree);
+  const frag = document.createDocumentFragment();
+  (function row(n, depth) {
+    if (!vis.get(n.path)) return;
+    const chain = compact && n.path !== '' && n.type === 'dir' ? loneChain(n) : null;
+    if (chain) { frag.append(chainRow(chain, depth, picked, showNotes, showCounts, heat)); return; }
+    const isDir = n.type === 'dir', expandable = isDir && !n.linked && n.children.length > 0;
+    const open = expandable && (f ? true : S.expanded.has(n.path));
+    S.order.push(n.path);
+    const r = el('div', 'row' + (picked(n.path) ? ' sel' : '') + (n.type === 'broken' ? ' broken' : '') + (S.flashPaths.has(n.path) ? ' flash' : ''));
+    r.style.paddingLeft = (8 + depth * 16) + 'px';
+    const caret = el('span', 'caret', expandable ? (open ? '▾' : '▸') : (isDir ? '·' : ''));
+    caret.onclick = e => { e.stopPropagation(); if (expandable) toggle(n.path); };
+    r.append(caret, el('span', 'name' + (isDir ? ' dir' : ''), (n.path === '' ? S.rootName : n.name) + (isDir ? '/' : '')));
+    rowMarks(r, n.path, isDir);
+    if (n.link) r.append(el('span', 'link', '→ ' + n.link));
+    const note = S.notes[noteKey(n.path)];
+    if (note && showNotes) {
+      const lines = note.trim().split('\n');
+      r.append(el('span', 'note', lines[0] + (lines.length > 1 ? ` (+${lines.length - 1})` : '')));
+    } else r.append(el('span', 'note dot', note ? '●' : ''));
+    const nfb = openFb(n.path);
+    if (nfb) r.append(el('span', 'fbadge', '● ' + nfb));
+    if (showCounts && S.skills && (n.tok != null || n.tmax)) r.append(tokSpan(n));
+    else if (showCounts && n.type === 'file') r.append(el('span', 'count', countText(n)));
+    else if (showCounts && isDir && n.w) r.append(el('span', 'count', `${n.w.toLocaleString()} w`));
+    if (heat && n.rank != null) { r.classList.add('heat'); r.style.setProperty('--hc', heatColor(n.rank)); }
+    r.title = note ? `${n.path || S.rootName}\n\n${note}` : (n.path || S.rootName);
+    r.onclick = e => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return multiClick(n.path, e.shiftKey, e.ctrlKey || e.metaKey);
+      if (S.multi.size) return leaveMulti(n.path);
+      if (expandable && (S.sel === n.path || !open)) toggle(n.path);
+      select(n.path);
+    };
+    frag.append(r);
+    if (open) for (const c of n.children) row(c, depth + 1);
+  })(S.tree, 0);
+  box.append(frag);
+  S.flashPaths.clear();
+  renderOrphans();
+}
+function multiClick(path, range, additive) {
+  if (!S.multi.size && S.sel !== null && S.byPath.has(S.sel)) S.multi.add(S.sel);
+  const a = S.order.indexOf(S.anchor ?? S.sel), b = S.order.indexOf(path);
+  if (range && a >= 0 && b >= 0) {
+    if (!additive) S.multi.clear();
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) S.multi.add(S.order[i]);
+  } else {
+    S.multi.has(path) ? S.multi.delete(path) : S.multi.add(path);
+    S.anchor = path;
+  }
+  if (S.multi.size > 1) {
+    if (S.file) { stashSingle(); S.file = null; hideBanner(); }  // its edits move into the stacked editor
+    renderTree(); renderDetail(); return;
+  }
+  const only = [...S.multi][0];
+  if (only !== undefined) return leaveMulti(only);
+  dropSections(); renderTree(); renderDetail();
+}
+function dropSections() {
+  if (F.ta && F.ta._st) closeFind(false);
+  for (const st of S.msec.values()) st.sec.remove(); S.msec.clear(); }
+async function leaveMulti(path) {  // back to the single view on PATH (unsaved edits stay in S.bufs)
+  S.multi.clear(); dropSections();
+  if (path !== S.sel) return select(path);
+  renderTree(); renderDetail();
+  const n = S.byPath.get(path);
+  if (n && n.type === 'file' && !S.file) await openFile(path);
+}
+function clearMulti() {
+  if (!S.multi.size) return;
+  if (S.sel === null) { S.multi.clear(); dropSections(); renderTree(); renderDetail(); } else leaveMulti(S.sel);
+}
+function toggle(p) { if (S.expanded.has(p)) S.expanded.delete(p); else unfold(p); store('expanded', [...S.expanded]); renderTree(); }
+function unfold(p, budget = { n: 200 }) {  // open P; while a level holds only folders, open those too
+  const n = S.byPath.get(p);
+  if (!n || budget.n-- <= 0) return;
+  S.expanded.add(p);
+  if ((n.children || []).some(c => c.type !== 'dir')) return;
+  for (const c of n.children || []) if (!c.linked && c.children && c.children.length) unfold(c.path, budget);
+}
+function expandTo(p) { const parts = p.split('/'); for (let i = 0; i < parts.length; i++) S.expanded.add(parts.slice(0, i).join('/')); store('expanded', [...S.expanded]); }
+
+/* ---------- drafts: unsaved edits kept as unified diffs, so nothing is lost on reload/crash ---------- */
+function unifiedDiff(a, b, ctx = 3) {  // '' when equal; null when too large to diff (then the full text is kept)
+  const d = lineDiff(a, b);
+  if (!d) return null;
+  let ai = 0, bi = 0;
+  const rows = d.map(([t, l]) => { const r = { t, l, a: ai, b: bi }; if (t !== '+') ai++; if (t !== '-') bi++; return r; });
+  const out = [];
+  for (let i = 0; i < rows.length;) {
+    if (rows[i].t === ' ') { i++; continue; }
+    let end = i;
+    for (let j = i; j < rows.length; j++) if (rows[j].t !== ' ') { if (j - end > 2 * ctx) break; end = j; }
+    const h = rows.slice(Math.max(0, i - ctx), Math.min(rows.length, end + ctx + 1));
+    const aLen = h.filter(r => r.t !== '+').length, bLen = h.filter(r => r.t !== '-').length;
+    out.push(`@@ -${h[0].a + (aLen ? 1 : 0)},${aLen} +${h[0].b + (bLen ? 1 : 0)},${bLen} @@`, ...h.map(r => r.t + r.l));
+    i = Math.min(rows.length, end + ctx + 1);
+  }
+  return out.length ? out.join('\n') + '\n' : '';
+}
+function applyPatch(text, diff) {  // apply a unifiedDiff, finding each hunk's lines near where they were; null if one is gone
+  const lines = text.split('\n'), hunks = [];
+  let cur = null;
+  for (const l of diff.split('\n')) {
+    const m = l.match(/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/);
+    if (m) { cur = { at: +m[2] ? +m[1] - 1 : +m[1], old: [], neu: [] }; hunks.push(cur); continue; }
+    if (!cur || !l) continue;
+    if (l[0] !== '+') cur.old.push(l.slice(1));
+    if (l[0] !== '-') cur.neu.push(l.slice(1));
+  }
+  let offset = 0;
+  for (const h of hunks) {
+    const want = h.at + offset, fits = i => i >= 0 && i + h.old.length <= lines.length && h.old.every((l, k) => lines[i + k] === l);
+    let pos = -1;
+    for (let dd = 0; dd <= lines.length && pos < 0; dd++) pos = fits(want - dd) ? want - dd : fits(want + dd) ? want + dd : -1;
+    if (pos < 0) return null;
+    lines.splice(pos, h.old.length, ...h.neu);
+    offset += pos - want + h.neu.length - h.old.length;
+  }
+  return lines.join('\n');
+}
+function rebaseEdits(original, mine, theirs) {  // your edits (original -> mine) re-applied onto theirs; null on overlap
+  if (mine === original) return theirs;
+  const d = unifiedDiff(original, mine);
+  return d == null ? null : applyPatch(theirs, d);
+}
+async function rebaseBuffers(paths) {  // background buffers follow the agent's changes to their files
+  for (const p of paths) {
+    const b = S.bufs.get(p);
+    if (!b) continue;
+    let f;
+    try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { continue; }
+    if (f.kind !== 'text' || f.hash === b.hash) continue;
+    const merged = rebaseEdits(b.original, b.value, f.content);
+    if (merged == null) continue;  // overlapping change: the conflict banner shows when the file is opened
+    S.bufs.set(p, { hash: f.hash, original: f.content, value: merged });
+    toast(`${p}: merged the agent's change into your unsaved edits`);
+  }
+}
+function dirtyBuffers() {  // path -> {hash, original, value} for every unsaved edit, in any view
+  const m = new Map(S.bufs);
+  if (isDirty()) m.set(S.file.path, { hash: S.file.hash, original: S.file.original, value: editor.value });
+  for (const st of S.msec.values()) if (sDirty(st)) m.set(st.path, { hash: st.hash, original: st.original, value: st.ta.value });
+  return m;
+}
+let draftBusy = false;
+async function syncDrafts() {  // mirror unsaved edits to the server as diffs (every 1.5 s, and when the page hides)
+  if (!S.tree || draftBusy) return;
+  draftBusy = true;
+  try {
+    const now = dirtyBuffers();
+    for (const [p, b] of now) {
+      if (S.draftSent.get(p) === b.value) continue;
+      const diff = unifiedDiff(b.original, b.value);
+      await api('PUT', '/api/draft', diff == null ? { path: p, base_hash: b.hash, full: b.value } : { path: p, base_hash: b.hash, diff });
+      S.draftSent.set(p, b.value);
+    }
+    for (const p of [...S.draftSent.keys()]) if (!now.has(p)) { await api('POST', '/api/draft-drop', { path: p }); S.draftSent.delete(p); }
+  } catch { /* the server is away; the next tick retries */ } finally { draftBusy = false; }
+}
+setInterval(syncDrafts, 1500);
+document.addEventListener('visibilitychange', () => { if (document.hidden) syncDrafts(); });
+async function hydrateDrafts() {
+  for (const [p, dr] of Object.entries(S.drafts)) {
+    if (S.hydrated.has(p)) continue;
+    S.hydrated.add(p);
+    if (dirtyBuffers().has(p)) continue;  // already being edited here
+    const n = S.byPath.get(p);
+    if (!n || n.type !== 'file' || n.kind !== 'text') { S.stuck[p] = { ...dr, why: 'the file is gone' }; continue; }
+    let f;
+    try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { S.stuck[p] = { ...dr, why: 'the file cannot be read' }; continue; }
+    const value = dr.full != null ? dr.full : applyPatch(f.content, dr.diff || '');
+    if (value == null) { S.stuck[p] = { ...dr, why: 'the file changed too much to re-apply the edits' }; continue; }
+    if (value === f.content) { api('POST', '/api/draft-drop', { path: p }).catch(() => {}); continue; }
+    S.bufs.set(p, { hash: f.hash, original: f.content, value });
+    S.draftSent.set(p, value);
+    if (dr.base_hash && dr.base_hash !== f.hash) toast(`${p}: unsaved edits re-applied on top of a newer version`);
+  }
+}
+function settleLost(p, hash, value) {  // after Restore (hash, value given) or Discard: no view keeps the old state
+  S.bufs.delete(p);
+  if (S.file && S.file.path === p) {
+    if (hash) { S.file.hash = hash; S.file.original = value; hideBanner(); updateFileState(); } else { S.file = null; hideBanner(); }
+  }
+  const st = S.msec.get(p);
+  if (st && st.ta) { if (hash) { st.hash = st.disk = hash; st.original = value; } else st.original = st.ta.value; st.conflict = null; sectionState(st); }
+}
+function renderDrafts(box) {  // edits that cannot simply live in the tree: their file is gone, or they no longer apply
+  const lost = [...dirtyBuffers()].filter(([p]) => !S.byPath.has(p)), stuck = Object.entries(S.stuck);
+  if (!lost.length && !stuck.length) return;
+  box.append(el('div', 'h', `Unsaved edits that need you (${lost.length + stuck.length})`));
+  for (const [p, b] of lost) {
+    const o = el('div', 'o d');
+    o.append(el('code', null, p), el('span', 'why', 'the file is gone'),
+      btn('Restore', async () => {
+        try {
+          const r = await api('PUT', '/api/file', { path: p, content: b.value, base_hash: null });
+          settleLost(p, r.hash, b.value); await loadTree(); toast('Restored ' + p + (r.git ? ' (staged in git)' : ''));
+        } catch (e) { toast(e.message, true); }
+      }),
+      btn('Diff', () => openModal(`Your unsaved edits to ${p}`, el('pre', null, unifiedDiff(b.original, b.value) ?? b.value))),
+      btn('Discard', () => { if (confirm(`Discard your unsaved edits to ${p}?`)) { settleLost(p); renderTree(); renderDetail(); } }));
+    box.append(o);
+  }
+  for (const [p, dr] of stuck) {
+    const o = el('div', 'o d');
+    o.append(el('code', null, p), el('span', 'why', dr.why),
+      btn('Show', () => openModal(`Unsaved edits to ${p} (${dr.why})`, el('pre', null, dr.full != null ? dr.full : dr.diff || ''))),
+      btn('Discard', async () => {
+        if (!confirm(`Discard the unsaved edits to ${p}?`)) return;
+        delete S.stuck[p];
+        try { await api('POST', '/api/draft-drop', { path: p }); } catch {}
+        renderTree();
+      }));
+    box.append(o);
+  }
+}
+function renderOrphans() {
+  const box = $('#orphans'); box.textContent = '';
+  renderDrafts(box);
+  const keys = Object.keys(S.notes).filter(k => !S.byPath.has(k === '.' ? '' : k)).sort();
+  if (!keys.length) return;
+  box.append(el('div', 'h', `Annotations on missing paths (${keys.length})`));
+  for (const k of keys) {
+    const o = el('div', 'o');
+    o.append(el('code', null, k), el('span', null, S.notes[k].split('\n')[0]));
+    o.title = S.notes[k];
+    o.append(btn('Reattach', async () => {
+      const to = prompt(`Move the annotation on "${k}" to which path?`, k); if (!to || to === k) return;
+      try { await api('POST', '/api/note-move', { from: k, to }); await loadTree(); } catch (e) { toast(e.message, true); }
+    }), btn('Drop', async () => {
+      if (!confirm(`Delete the annotation on "${k}"?`)) return;
+      try { await api('PUT', '/api/note', { path: k, note: '' }); await loadTree(); } catch (e) { toast(e.message, true); }
+    }));
+    box.append(o);
+  }
+}
+
+/* ---------- loading & live refresh ---------- */
+async function loadTree() {
+  const d = await api('GET', '/api/tree');
+  const prev = S.byPath, firstLoad = !S.tree;
+  S.tree = d.tree; S.notes = d.notes; S.feedback = d.feedback || []; S.version = d.version; S.rootName = d.root;
+  S.changes = d.changes || {}; S.drafts = d.drafts || {}; S.lines = d.lines || {}; S.skills = !!d.tree.skills; S.skew = (d.now || Date.now() / 1000) - Date.now() / 1000;
+  S.dirFresh = new Map();  // folder -> freshest agent change inside it
+  for (const [p, c] of Object.entries(S.changes)) {
+    if (c.by !== 'agent') continue;
+    const parts = p.split('/');
+    for (let i = 0; i < parts.length; i++) { const k = parts.slice(0, i).join('/'); if (!(S.dirFresh.get(k) >= c.at)) S.dirFresh.set(k, c.at); }
+  }
+  S.byPath = new Map(); index(S.tree); rankBySize(S.tree);
+  for (const p of S.multi) if (!S.byPath.has(p)) S.multi.delete(p);
+  await hydrateDrafts();  // unsaved edits from an earlier session come back as buffers
+  if (!firstLoad) for (const [p, n] of S.byPath) { const o = prev.get(p); if (!o || o.mtime !== n.mtime || o.size !== n.size) S.flashPaths.add(p); }
+  await rebaseBuffers([...S.flashPaths]);
+  $('#rootname').textContent = d.root + '/'; $('#rootpath').textContent = d.rootPath; $('#rootpath').title = 'annotations and feedback: ' + d.notesFile;
+  document.title = d.root + ' — treedit';
+  renderTree();
+  await checkOpenFile();
+  renderDetail();
+  renderMarks(); for (const st of S.msec.values()) if (st.ta) sectionMarks(st);
+  updateFbHeader();
+  if (S.modalFb && $('#modal').open) showAllFb();
+}
+let polling = false;
+async function poll(force) {
+  if (polling) return;
+  polling = true;
+  try {
+    const { version } = await api('GET', '/api/version');
+    setLive('on');
+    if (force || version !== S.version) await loadTree();
+  } catch (e) { setLive('off'); }
+  finally { polling = false; }
+}
+function setLive(s) { const l = $('#live'); l.className = s === 'on' ? '' : s; l.title = s === 'off' ? 'treedit server not reachable' : s === 'paused' ? 'live refresh paused' : 'watching for changes'; }
+setInterval(() => { if (!document.hidden && $('#auto').checked) poll(); }, 1500);
+window.addEventListener('focus', () => { if ($('#auto').checked) poll(); });
+$('#auto').onchange = e => { setLive(e.target.checked ? 'on' : 'paused'); store('auto', e.target.checked); if (e.target.checked) poll(); };
+$('#refresh').onclick = () => poll(true).then(() => toast('Refreshed from disk'));
+
+/* ---------- selection & detail ---------- */
+async function select(path) {
+  if (path === S.sel) return;
+  const n = S.byPath.get(path); if (!n) return;
+  stashSingle();
+  S.sel = path; S.anchor = path; S.file = null; S.conflict = null; hideBanner(); closeFind(false);
+  history.replaceState(null, '', '#' + encodeURIComponent(path));
+  renderTree(); renderDetail();
+  if (n.type === 'file') await openFile(path);
+}
+function renderDetail() {
+  const multi = S.multi.size > 1;
+  $('#multi').hidden = !multi;
+  if (multi) { $('#empty').hidden = $('#pane').hidden = true; renderMulti(); renderDraft(); return; }
+  const n = S.byPath.get(S.sel);
+  const showing = !!n || !!S.file;
+  $('#empty').hidden = showing; $('#pane').hidden = !showing;
+  if (!showing) return;
+  const p = S.sel;
+  $('#crumb').textContent = (p || S.rootName) + (n ? '' : '  (missing on disk)');
+  $('#linkinfo').textContent = n && n.link ? `→ ${n.link}  · edits go to the target` : '';
+  const isFile = n ? n.type === 'file' : true;
+  $('#editwrap').hidden = !isFile; $('#save').hidden = !isFile; $('#pos').hidden = !isFile; $('#filestate').hidden = !isFile;
+  $('#dirinfo').hidden = isFile;
+  $('#b-rename').disabled = $('#b-delete').disabled = !n || p === '';
+  if (!isFile) renderDirInfo(n);
+  updateFileState();
+  renderFb(); renderDraft();
+}
+function renderDirInfo(n) {
+  const box = $('#dirinfo'); box.textContent = '';
+  const s = stats(n);
+  box.append(el('div', 'stats', n.linked ? 'Linked folder (not expanded).' : `${pl(s.dirs, 'folder')}, ${pl(s.files, 'file')} · ${pl(s.lines, 'line')}, ${pl(s.words, 'word')} of text`));
+  const t = el('table');
+  for (const c of n.children || []) {
+    const tr = el('tr');
+    const a = el('td', null, c.name + (c.type === 'dir' ? '/' : '')); a.onclick = () => { expandTo(c.path); select(c.path); };
+    tr.append(a, el('td', 'n', S.notes[c.path] || ''), el('td', 'c', c.type === 'dir' ? pl(stats(c).files, 'file') : countText(c)));
+    t.append(tr);
+  }
+  box.append(t);
+}
+/* ---------- multi-selection view (each text file is an editor) ---------- */
+let mGen = 0;
+const SLH = 19.5;  // .sedit line height: 13px * 1.5
+async function renderMulti() {
+  const gen = ++mGen, paths = [...S.byPath.keys()].filter(p => S.multi.has(p));
+  $('#mcount').textContent = `${paths.length} selected · edit in place, Ctrl/Cmd+S saves the focused file · Ctrl/Cmd/Shift+click to change, Esc clears`;
+  const files = await Promise.all(paths.map(multiFile));
+  if (gen !== mGen || S.multi.size < 2) return;
+  const list = $('#mlist'), keys = paths.map(noteKey);
+  const cross = el('div'); cross.id = 'mcross';
+  for (const f of byStatus(S.feedback.filter(x => x.paths.length > 1 && x.paths.some(k => keys.includes(k))))) cross.append(fbItem(f, true));
+  const old = $('#mcross'); if (old) old.replaceWith(cross); else list.prepend(cross);
+  const secs = paths.map((p, i) => multiSection(S.byPath.get(p), files[i]));
+  for (const [p, st] of [...S.msec]) if (!S.multi.has(p)) { st.sec.remove(); S.msec.delete(p); }
+  let prev = cross;  // put sections in order without moving ones already in place (moving drops focus)
+  for (const sec of secs) { if (prev.nextSibling !== sec) prev.after(sec); prev = sec; }
+  if (document.body.classList.contains('wrap')) for (const st of S.msec.values()) if (st.ta) paintSection(st);  // measure in place
+  updateSaveAll();
+}
+async function multiFile(p) {
+  const n = S.byPath.get(p);
+  if (n.type !== 'file' || n.kind !== 'text') return null;
+  const c = S.mcache.get(p);
+  if (c && c.mtime === n.mtime && c.size === n.size) return c.f;
+  try { const f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); S.mcache.set(p, { mtime: n.mtime, size: n.size, f }); return f; }
+  catch (e) { return { error: e.message }; }
+}
+const sDirty = st => !!st.ta && st.ta.value !== st.original;
+function multiSection(n, f) {
+  let st = S.msec.get(n.path);
+  if (!st) { st = { path: n.path, sec: el('div', 'mfile') }; S.msec.set(n.path, st); }
+  const h = sectionHeader(n, st), own = el('div', 'mfb');
+  for (const x of byStatus(fbFor(n.path).filter(x => x.paths.length === 1))) own.append(fbItem(x, false));
+  if (st.h) st.h.replaceWith(h); else st.sec.append(h);
+  if (st.own) st.own.replaceWith(own); else st.sec.append(own);
+  st.h = h; st.own = own;
+  sectionBody(st, n, f);
+  sectionState(st);
+  return st.sec;
+}
+function sectionHeader(n, st) {
+  const h = el('div', 'mh'), isDir = n.type === 'dir', note = S.notes[noteKey(n.path)];
+  h.append(el('span', 'name' + (isDir ? ' dir' : ''), (n.path || S.rootName) + (isDir ? '/' : '')),
+    el('span', 'note', note ? note.trim().split('\n')[0] : ''));
+  const nfb = openFb(n.path);
+  if (nfb) h.append(el('span', 'fbadge', '● ' + nfb));
+  if (n.type === 'file' && n.kind === 'text') {
+    st.fbBtn = btn('+ Feedback', () => { const sl = selLines(st.ta); startDraft({ paths: [noteKey(n.path)], ...(sl || {}) }); });
+    st.saveBtn = btn('Save', () => saveSection(st, !!st.conflict), 'primary');
+    h.append(st.fbBtn, st.saveBtn);
+  }
+  h.append(el('span', 'count', isDir ? `${pl(stats(n).files, 'file')} · ${n.w.toLocaleString()} w` : countText(n)));
+  h.title = 'Click to open ' + (n.path || S.rootName) + ' on its own' + (note ? '\n\n' + note : '');
+  h.onclick = e => { if (!e.target.closest('button')) leaveMulti(n.path); };
+  return h;
+}
+function sectionBody(st, n, f) {
+  if (!f || f.content == null) {  // folder, binary, error: a one-line summary
+    const kids = (n.children || []).map(c => c.name + (c.type === 'dir' ? '/' : '')).join('   ');
+    const m = el('div', 'msg', f?.error || (n.type === 'dir' ? (n.linked ? 'linked folder' : kids || 'empty folder') : countText(n) || n.type));
+    if (st.body) st.body.replaceWith(m); else st.sec.append(m);
+    st.body = m; st.ta = null; return;
+  }
+  if (!st.ta) {
+    const body = el('div', 'sedit'), b = S.bufs.get(st.path);
+    st.hlp = el('pre', 'shl'); st.ta = el('textarea'); st.ta._st = st;
+    st.ta.spellcheck = false; st.ta.setAttribute('autocomplete', 'off'); st.ta.setAttribute('autocapitalize', 'off');
+    st.ta.style.tabSize = st.hlp.style.tabSize = /\.py$/.test(st.path) ? 4 : 2;
+    st.lang = langOf(st.path);
+    st.hash = b ? b.hash : f.hash; st.original = b ? b.original : f.content; st.disk = f.hash;
+    st.ta.value = b ? b.value : f.content;
+    histSync(st.path, st.ta.value, b ? b.original : null);
+    wireUndo(st.ta, () => st.path);
+    if (b && b.hash !== f.hash) st.conflict = f;
+    st.ta.addEventListener('input', () => { syncBuf(st); paintSection(st); sectionState(st); if (!$('#findbar').hidden && F.ta === st.ta) findSearch(true); });
+    st.ta.addEventListener('scroll', () => { st.hlp.scrollLeft = st.ta.scrollLeft; });
+    st.ta.addEventListener('focus', () => { S.lastSec = st; });
+    ['keyup', 'mouseup'].forEach(ev => st.ta.addEventListener(ev, () => {
+      const sl = selLines(st.ta); if (st.fbBtn) st.fbBtn.textContent = sl ? `+ Feedback on ${linesLabel(sl)}` : '+ Feedback';
+    }));
+    st.ta.addEventListener('keydown', e => {
+      if (findKey(e, st.ta)) return;
+      const ck = commentKey(e);
+      if (ck) { e.preventDefault(); toggleComment(st.ta, st.path, ck === 'block'); return; }
+      if (plainEnter(e)) { e.preventDefault(); autoIndent(st.ta, st.path); return; }
+      if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault(); indentBlock(st.ta, st.path, e.shiftKey);
+    });
+    body.append(st.hlp, st.ta);
+    if (st.body) st.body.replaceWith(body); else st.sec.append(body);
+    st.body = body;
+    paintSection(st);
+  } else if (f.hash !== st.disk) {  // changed on disk since loaded
+    st.disk = f.hash;
+    if (!sDirty(st)) {
+      const a = st.ta.selectionStart, z = st.ta.selectionEnd;
+      st.ta.value = f.content; st.hash = f.hash; st.original = f.content; st.conflict = null;
+      histSync(st.path, f.content);  // the agent's change is one undoable step
+      st.ta.setSelectionRange(Math.min(a, f.content.length), Math.min(z, f.content.length));
+      paintSection(st);
+      st.body.classList.remove('flash'); void st.body.offsetWidth; st.body.classList.add('flash');
+    } else if (f.hash !== st.hash) {  // unsaved edits here: merge when the changes do not overlap
+      const merged = rebaseEdits(st.original, st.ta.value, f.content);
+      if (merged == null) st.conflict = f;
+      else {
+        st.ta.value = merged; st.hash = f.hash; st.original = f.content; st.conflict = null;
+        histSync(st.path, merged); syncBuf(st); paintSection(st);
+        st.body.classList.remove('flash'); void st.body.offsetWidth; st.body.classList.add('flash');
+        toast(`${st.path}: merged the agent's change into your unsaved edits`);
+      }
+    }
+  }
+}
+function sectionMarks(st) {  // change bars in a stacked editor (it does not scroll, so no offset)
+  if (!st.marks) { st.marks = el('div', 'smarks'); st.body.prepend(st.marks); }
+  st.marks.textContent = '';
+  const chg = changeRanges(st.path);
+  if (!chg.length) return;
+  const at = lineBox(st.ta);
+  for (const c of chg) { const [top, height] = at(c.a, c.b); st.marks.append(changeBar(c, top, height, 4)); }
+}
+function paintSection(st) {
+  const v = st.ta.value, on = !!st.lang && v.length <= HL_MAX;
+  st.body.classList.toggle('hl', on);
+  st.hlp.innerHTML = on ? hl(v, st.lang) + '\n' : '';
+  if (document.body.classList.contains('wrap')) {  // wrapped: measure, keeping the list where it was
+    const list = $('#mlist'), top = list.scrollTop;
+    st.ta.style.height = '0px'; st.ta.style.height = (st.ta.scrollHeight + 2) + 'px';
+    list.scrollTop = top;
+  } else st.ta.style.height = (v.split('\n').length * SLH + 20 + 16) + 'px';  // fit the text: the list scrolls, not the editor
+  sectionMarks(st);
+}
+function setWrap(on) {
+  document.body.classList.toggle('wrap', on); store('wrap', on);
+  $('#b-wrap').classList.toggle('on', on);
+  syncHL(); renderMarks();
+  for (const st of S.msec.values()) if (st.ta) paintSection(st);
+}
+$('#b-wrap').onclick = () => setWrap(!document.body.classList.contains('wrap'));
+new ResizeObserver(() => { if (document.body.classList.contains('wrap')) { syncHL(); renderMarks(); } }).observe(editor);
+let mlistW = 0;
+new ResizeObserver(() => {  // wrapped stacked editors change height when the pane changes width
+  const w = $('#mlist').clientWidth;
+  if (w === mlistW) return;
+  mlistW = w;
+  if (document.body.classList.contains('wrap')) for (const st of S.msec.values()) if (st.ta) paintSection(st);
+}).observe($('#mlist'));
+function syncBuf(st) {
+  const had = S.bufs.has(st.path);
+  if (sDirty(st)) S.bufs.set(st.path, { hash: st.hash, original: st.original, value: st.ta.value }); else S.bufs.delete(st.path);
+  if (had !== S.bufs.has(st.path)) renderTree();
+}
+function sectionState(st) {
+  const d = sDirty(st);
+  if (!!st.conflict !== !!st.hadConflict || d !== !!st.wasDirty) { st.hadConflict = !!st.conflict; st.wasDirty = d; setTimeout(renderTree); }
+  st.h.classList.toggle('dirty', d);
+  if (st.saveBtn) st.saveBtn.hidden = !d && !st.conflict;
+  if (st.banner) { st.banner.remove(); st.banner = null; }
+  if (st.conflict && st.ta) {
+    const c = st.conflict, b = el('div', 'sbanner');
+    b.append(el('b', null, 'Changed on disk while you were editing.'), el('span', 'spacer'),
+      btn('Compare', () => showDiff(st.ta.value, c.content)),
+      btn('Load disk version', () => {
+        if (!confirm(`Discard your edits to ${st.path}?`)) return;
+        st.ta.value = c.content; st.hash = st.disk = c.hash; st.original = c.content; st.conflict = null;
+        syncBuf(st); paintSection(st); sectionState(st);
+      }),
+      btn('Overwrite with mine', () => saveSection(st, true), 'danger'));
+    st.body.before(b); st.banner = b;
+  }
+  updateSaveAll();
+}
+function updateSaveAll() { $('#b-msave').hidden = ![...S.msec.values()].some(sDirty); }
+async function saveSection(st, force = false) {
+  if (!st.ta || (!force && !sDirty(st))) return;
+  const content = st.ta.value;
+  try {
+    const r = await api('PUT', '/api/file', { path: st.path, content, base_hash: st.hash, force });
+    st.hash = st.disk = r.hash; st.original = content; st.conflict = null;
+    syncBuf(st); sectionState(st); toast('Saved ' + st.path);
+    poll();
+  } catch (e) {
+    if (e.status === 409 && e.data.disk) { st.conflict = e.data.disk; st.disk = e.data.disk.hash; sectionState(st); }
+    else toast('Save failed: ' + e.message, true);
+  }
+}
+$('#b-msave').onclick = () => { for (const st of S.msec.values()) if (sDirty(st)) saveSection(st); };
+$('#mclear').onclick = clearMulti;
+
+
+/* ---------- files ---------- */
+async function openFile(path) {
+  try {
+    const f = await api('GET', '/api/file?path=' + encodeURIComponent(path));
+    const b = f.kind === 'text' && S.bufs.get(path);
+    if (b) histSync(path, b.value, b.original);  // undo can walk back to the disk version
+    setFile(b ? { ...f, content: b.value } : f);
+    if (b) {  // resume unsaved edits; flag it if the disk moved on meanwhile
+      S.bufs.delete(path); S.file.original = b.original; S.file.hash = b.hash; updateFileState();
+      if (b.hash !== f.hash) showConflict({ type: 'changed', disk: f });
+    }
+  } catch (e) { toast(e.message, true); }
+}
+function setFile(f, keepView) {
+  S.file = { path: f.path, hash: f.hash, kind: f.kind, original: f.kind === 'text' ? f.content : null };
+  const a = editor.selectionStart, b = editor.selectionEnd, top = editor.scrollTop;
+  if (f.kind === 'text') { editor.readOnly = false; editor.value = f.content; }
+  else { editor.readOnly = true; editor.value = f.kind === 'binary' ? '(binary file — not editable here)' : '(file too large to edit here)'; }
+  editor.style.tabSize = hlEl.style.tabSize = /\.py$/.test(f.path) ? 4 : 2;
+  S.file.lang = f.kind === 'text' ? langOf(f.path) : null;
+  if (f.kind === 'text') histSync(f.path, editor.value);  // a disk reload becomes an undoable step
+  updateUndoButtons();
+  renderHL(true);
+  if (keepView) { const L = editor.value.length; editor.setSelectionRange(Math.min(a, L), Math.min(b, L)); editor.scrollTop = top; }
+  else { editor.setSelectionRange(0, 0); editor.scrollTop = 0; }
+  updateFileState(); updatePos(); renderMarks();
+}
+function updateFileState() {
+  const d = isDirty(), fs = $('#filestate');
+  fs.textContent = !S.file ? '' : S.file.kind !== 'text' ? S.file.kind : d ? '● unsaved changes' : 'saved';
+  fs.className = d ? 'dirty' : '';
+  $('#save').disabled = !d && !S.conflict;
+  if (d !== S.lastDirty) { S.lastDirty = d; renderTree(); }
+  document.title = (d ? '● ' : '') + (S.rootName || 'treedit') + ' — treedit';
+}
+function updatePos() {
+  const v = editor.value.slice(0, editor.selectionStart), line = v.split('\n').length, col = v.length - v.lastIndexOf('\n');
+  $('#pos').textContent = S.file && S.file.kind === 'text' ? `Ln ${line}, Col ${col}` : '';
+}
+editor.addEventListener('input', () => { updateFileState(); updatePos(); renderHL(); renderMarks(); });
+editor.addEventListener('scroll', syncHL);
+['keyup', 'click', 'select', 'mouseup'].forEach(ev => editor.addEventListener(ev, () => { updatePos(); updateFbButton(); }));
+/* ---------- undo / redo: one history per file, shared by the single and the stacked editors ---------- */
+// The browser's own undo is wiped whenever a textarea's value is set (switching files or views, disk
+// reloads), so treedit keeps its own. Typing groups by word; deletes, commands and disk reloads are steps.
+const HIST = new Map();  // path -> { stack: [{ v, a, b }], i, t, kind }
+const H = { replaying: false, nextKind: null };
+function histSync(path, value, base) {  // make sure PATH's history ends at VALUE (a load or a disk change)
+  let h = HIST.get(path);
+  if (!h) {
+    h = { stack: base != null && base !== value ? [{ v: base, a: 0, b: 0 }] : [], i: -1, t: 0, kind: 'load' };
+    HIST.set(path, h);
+  }
+  if (h.i < 0 || h.stack[h.i].v !== value) {
+    h.stack.length = h.i + 1;
+    h.stack.push({ v: value, a: 0, b: 0 }); h.i = h.stack.length - 1; h.kind = 'load';
+  }
+}
+function histKind(e) {
+  if (H.nextKind) { const k = H.nextKind; H.nextKind = null; return k; }
+  if (e && e.inputType === 'insertText' && e.data) return /\s/.test(e.data) ? 'space' : 'type';
+  if (e && /^delete(Content|Word)(Backward|Forward)$/.test(e.inputType || '')) return 'del';
+  return 'other';
+}
+function histRecord(path, ta, kind) {
+  const h = HIST.get(path);
+  if (!h) return histSync(path, ta.value);
+  if (h.stack[h.i].v === ta.value) return;
+  // a word and the spaces after it are one step: typing merges until a letter follows a space
+  const now = Date.now(), typing = kind === 'type' || kind === 'space', wasTyping = h.kind === 'type' || h.kind === 'space';
+  const merge = h.i > 0 && now - h.t < 1500 && ((typing && wasTyping && !(kind === 'type' && h.kind === 'space')) || (kind === 'del' && h.kind === 'del'));
+  h.stack.length = h.i + 1;  // a new edit drops the redo branch
+  const entry = { v: ta.value, a: ta.selectionStart, b: ta.selectionEnd };
+  if (merge) h.stack[h.i] = entry;
+  else { h.stack.push(entry); h.i++; if (h.stack.length > 400) { h.stack.shift(); h.i--; } }
+  h.t = now; h.kind = kind;
+  updateUndoButtons();
+}
+function histStep(path, ta, dir) {  // dir -1 undo, +1 redo; false when there is nothing to do
+  const h = HIST.get(path);
+  if (!h) return false;
+  if (h.stack[h.i].v !== ta.value) histRecord(path, ta, 'other');  // never lose an unrecorded change
+  const j = h.i + dir;
+  if (j < 0 || j >= h.stack.length) { toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo'); return false; }
+  const from = h.stack[h.i], to = h.stack[j];
+  h.i = j; h.kind = 'jump';
+  ta.value = to.v;
+  const at = dir < 0 ? Math.min(from.a, to.v.length) : to.a;  // the caret goes to where the change was
+  ta.focus(); ta.setSelectionRange(at, dir < 0 ? at : to.b);
+  H.replaying = true;
+  try { ta.dispatchEvent(new Event('input')); } finally { H.replaying = false; }
+  updateUndoButtons();
+  return true;
+}
+function undoKey(e) {  // -1 undo, +1 redo, 0 neither
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return 0;
+  const k = e.key.toLowerCase();
+  return k === 'z' ? (e.shiftKey ? 1 : -1) : k === 'y' && !e.shiftKey ? 1 : 0;
+}
+function wireUndo(ta, pathOf) {  // keys, the context menu's Undo/Redo, and recording
+  ta.addEventListener('keydown', e => {
+    const d = undoKey(e), path = pathOf();
+    if (!d || !path) return;
+    e.preventDefault(); e.stopImmediatePropagation(); histStep(path, ta, d);
+  });
+  ta.addEventListener('beforeinput', e => {
+    if (e.inputType !== 'historyUndo' && e.inputType !== 'historyRedo') return;
+    const path = pathOf(); if (!path) return;
+    e.preventDefault(); histStep(path, ta, e.inputType === 'historyUndo' ? -1 : 1);
+  });
+  ta.addEventListener('input', e => { const path = pathOf(); if (!H.replaying && path) histRecord(path, ta, histKind(e)); });
+}
+function updateUndoButtons() {
+  const h = S.file && S.file.kind === 'text' ? HIST.get(S.file.path) : null;
+  $('#b-undo').disabled = !h || h.i <= 0;
+  $('#b-redo').disabled = !h || h.i >= h.stack.length - 1;
+}
+wireUndo(editor, () => (S.file && S.file.kind === 'text' && !editor.readOnly ? S.file.path : null));
+$('#b-undo').onclick = () => S.file && histStep(S.file.path, editor, -1);
+$('#b-redo').onclick = () => S.file && histStep(S.file.path, editor, 1);
+
+/* ---------- comment toggling: Ctrl+/ (line), Shift+Alt+A (block) ---------- */
+const C_HASH = ['#', null], C_SLASH = ['//', ['/*', '*/']], C_XML = [null, ['<!--', '-->']];
+const COMMENT_BY_EXT = Object.assign({},
+  ...'py pyi sh bash zsh fish toml yaml yml cfg conf r rb pl pm nix ps1 d2 tf mk cmake awk tcl coffee'.split(' ').map(x => ({ [x]: C_HASH })),
+  ...'js mjs cjs jsx ts tsx jsonc c h cc cpp cxx hpp java cs kt kts swift scala dart rs go php groovy gradle proto zig typ scss less sass glsl wgsl'.split(' ').map(x => ({ [x]: C_SLASH })),
+  ...'html htm xml svg vue xhtml md markdown'.split(' ').map(x => ({ [x]: C_XML })),
+  { css: [null, ['/*', '*/']], sql: ['--', ['/*', '*/']], lua: ['--', ['--[[', ']]']], hs: ['--', ['{-', '-}']], elm: ['--', ['{-', '-}']],
+    jl: ['#', ['#=', '=#']], tex: ['%', null], sty: ['%', null], bib: ['%', null], m: ['%', ['%{', '%}']], erl: ['%', null],
+    ini: [';', null], lisp: [';', null], clj: [';', null], el: [';', null], scm: [';', null], vim: ['"', null], f90: ['!', null],
+    ml: [null, ['(*', '*)']], json: false });
+const COMMENT_BY_NAME = { makefile: C_HASH, dockerfile: C_HASH, justfile: C_HASH, '.gitignore': C_HASH, '.env': C_HASH, '.bashrc': C_HASH, '.zshrc': C_HASH };
+function commentSyntax(path) {
+  const name = path.split('/').pop().toLowerCase(), ext = name.includes('.') ? name.split('.').pop() : '';
+  if (COMMENT_BY_NAME[name]) return COMMENT_BY_NAME[name];
+  return ext in COMMENT_BY_EXT ? COMMENT_BY_EXT[ext] : undefined;  // false = the format has no comments
+}
+function replaceRange(ta, a, b, text) {  // one undo step (comment toggles, indents, ...)
+  H.nextKind = 'cmd';
+  ta.focus(); ta.setSelectionRange(a, b);
+  if (!document.execCommand('insertText', false, text)) { ta.setRangeText(text, a, b, 'end'); ta.dispatchEvent(new Event('input')); }
+}
+function toggleComment(ta, path, block) {
+  let cm = commentSyntax(path);
+  if (cm === false) return toast(`.${path.split('.').pop()} files have no comment syntax`, true);
+  if (!cm) { cm = C_HASH; toast('Unknown file type: used #'); }
+  const [line, pair] = cm, v = ta.value, s0 = ta.selectionStart;
+  let e0 = ta.selectionEnd;
+  if (e0 > s0 && v[e0 - 1] === '\n') e0--;  // a selection ending at a line start excludes that line
+  const ls = v.lastIndexOf('\n', s0 - 1) + 1, le0 = v.indexOf('\n', e0), le = le0 < 0 ? v.length : le0;
+  if ((block || !line) && pair) {  // wrap the selection (or the whole lines) in a block comment
+    const [open, close] = pair, a = block && ta.selectionStart !== ta.selectionEnd ? ta.selectionStart : ls, b = block && ta.selectionStart !== ta.selectionEnd ? ta.selectionEnd : le;
+    const text = v.slice(a, b), lead = text.match(/^\s*/)[0], trail = text.match(/\s*$/)[0], core = text.slice(lead.length, text.length - trail.length);
+    let out;
+    if (core.startsWith(open) && core.endsWith(close) && core.length >= open.length + close.length) {
+      out = lead + core.slice(open.length, core.length - close.length).replace(/^ /, '').replace(/ $/, '') + trail;
+    } else out = lead + open + ' ' + core + ' ' + close + trail;
+    replaceRange(ta, a, b, out); ta.setSelectionRange(a, a + out.length);
+    return;
+  }
+  const tok = line || pair[0], lines = v.slice(ls, le).split('\n'), used = lines.filter(l => l.trim());
+  if (!used.length) return;
+  const indent = Math.min(...used.map(l => l.match(/^\s*/)[0].length));
+  const commented = used.every(l => l.trimStart().startsWith(tok));
+  const out = lines.map(l => {
+    if (!l.trim()) return l;
+    if (commented) { const i = l.indexOf(tok); return l.slice(0, i) + l.slice(i + tok.length).replace(/^ /, ''); }
+    return l.slice(0, indent) + tok + ' ' + l.slice(indent);
+  }).join('\n');
+  replaceRange(ta, ls, le, out); ta.setSelectionRange(ls, ls + out.length);
+}
+function indentUnit(ta, path) {  // tabs if the file indents with tabs, else 4 spaces (Python) or 2
+  return /^\t/m.test(ta.value) && !/^ {2}/m.test(ta.value) ? '\t' : langOf(path) === 'py' ? '    ' : '  ';
+}
+function indentBlock(ta, path, out) {  // Tab: indent the selected lines (or insert one); Shift+Tab: outdent them
+  const v = ta.value, s0 = ta.selectionStart, e1 = ta.selectionEnd, unit = indentUnit(ta, path);
+  const block = v.slice(s0, e1).includes('\n');
+  if (!out && !block) return replaceRange(ta, s0, e1, unit);
+  const e0 = e1 > s0 && v[e1 - 1] === '\n' ? e1 - 1 : e1;  // a selection ending at a line start leaves that line
+  const ls = v.lastIndexOf('\n', s0 - 1) + 1, le0 = v.indexOf('\n', e0), le = le0 < 0 ? v.length : le0;
+  const width = unit === '\t' ? 4 : unit.length, lines = v.slice(ls, le).split('\n');
+  const text = lines.map(l => {
+    if (!out) return l.trim() ? unit + l : l;
+    if (l.startsWith('\t')) return l.slice(1);
+    return l.slice(Math.min(width, l.match(/^ */)[0].length));
+  }).join('\n');
+  if (text === v.slice(ls, le)) return;
+  replaceRange(ta, ls, le, text);
+  if (block) ta.setSelectionRange(ls, ls + text.length);  // keep the block selected, so Tab can repeat
+  else { const at = Math.max(ls, s0 - (le - ls - text.length)); ta.setSelectionRange(at, at); }
+}
+function autoIndent(ta, path) {  // Enter keeps the line's indent, one level more after an opening ':' / bracket
+  const v = ta.value, at = ta.selectionStart, line = v.slice(v.lastIndexOf('\n', at - 1) + 1, at);
+  let ind = line.match(/^[ \t]*/)[0];
+  const lang = langOf(path), tail = line.trimEnd();
+  if ((lang === 'py' && tail.endsWith(':')) || (['js', 'c', 'json', 'css'].includes(lang) && /[{[(]$/.test(tail)))
+    ind += ind.includes('\t') ? '\t' : lang === 'py' ? '    ' : '  ';
+  replaceRange(ta, at, ta.selectionEnd, '\n' + ind);
+}
+const plainEnter = e => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !e.isComposing;
+function commentKey(e) {  // 'line' (Ctrl+/) | 'block' (Ctrl+Shift+/ or Shift+Alt+A) | null
+  if (!(e.ctrlKey || e.metaKey)) return e.altKey && e.shiftKey && e.code === 'KeyA' ? 'block' : null;
+  if (e.key === '/') return 'line';
+  if (e.key === '?' && e.code === 'Slash') return 'block';  // US Ctrl+Shift+/
+  return null;
+}
+
+/* ---------- find (Ctrl+F): in the main editor or a stacked one ---------- */
+const F = { ta: null, hits: [], i: -1, len: 0 };
+let mirror2 = null;
+function textRect(ta, at, len) {  // where characters at..at+len sit in the text box's content (wrapped or not)
+  const cs = getComputedStyle(ta), wrap = document.body.classList.contains('wrap');
+  if (!mirror2) { mirror2 = el('div'); mirror2.setAttribute('aria-hidden', 'true'); document.body.append(mirror2); }
+  Object.assign(mirror2.style, { position: 'absolute', visibility: 'hidden', left: '-99999px', top: '0', boxSizing: 'border-box',
+    whiteSpace: wrap ? 'pre-wrap' : 'pre', overflowWrap: wrap ? 'anywhere' : 'normal', width: ta.clientWidth + 'px', padding: cs.padding,
+    fontFamily: cs.fontFamily, fontSize: cs.fontSize, lineHeight: cs.lineHeight, tabSize: cs.tabSize });
+  const v = ta.value, mark = el('span', null, v.slice(at, at + len) || ' ');
+  mirror2.textContent = ''; mirror2.append(v.slice(0, at), mark, v.slice(at + len) || ' ');
+  return { top: mark.offsetTop, left: mark.offsetLeft, width: mark.offsetWidth, height: mark.offsetHeight };
+}
+function findSearch(keepIndex) {
+  const ta = F.ta, q = $('#findq').value;
+  F.hits = []; F.len = q.length;
+  if (ta && q) {
+    const cs = $('#findcase').checked, hay = cs ? ta.value : ta.value.toLowerCase(), needle = cs ? q : q.toLowerCase();
+    for (let i = hay.indexOf(needle); i >= 0 && F.hits.length < 20000; i = hay.indexOf(needle, i + Math.max(1, needle.length))) F.hits.push(i);
+  }
+  if (!keepIndex || F.i >= F.hits.length) {  // the first match at or after the caret
+    const from = ta ? ta.selectionStart : 0, k = F.hits.findIndex(h => h >= from);
+    F.i = F.hits.length ? (k < 0 ? 0 : k) : -1;
+  }
+  $('#findq').classList.toggle('none', !!q && !F.hits.length);
+  $('#findn').textContent = !q ? '' : F.hits.length ? `${F.i + 1} of ${F.hits.length}${F.hits.length >= 20000 ? '+' : ''}` : 'no matches';
+  findShow(false);
+}
+function findShow(select) {  // highlight the current match, scroll to it; select it in the text box when asked
+  const ta = F.ta, layer = ta === editor ? $('#findhl') : ta && ta._st && ta._st.marks;
+  $('#findhl').textContent = '';
+  for (const st of S.msec.values()) if (st.marks) st.marks.querySelectorAll('.found').forEach(x => x.remove());
+  findTicks();
+  if (!ta || F.i < 0) return;
+  const at = F.hits[F.i], r = textRect(ta, at, F.len);
+  if (layer) { const m = el('div', 'found'); Object.assign(m.style, { top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' }); layer.append(m); }
+  if (select) ta.setSelectionRange(at, at + F.len);
+  if (ta === editor) {
+    if (r.top < editor.scrollTop || r.top + r.height > editor.scrollTop + editor.clientHeight) editor.scrollTop = Math.max(0, r.top - editor.clientHeight / 3);
+    if (!document.body.classList.contains('wrap') && (r.left < editor.scrollLeft || r.left + r.width > editor.scrollLeft + editor.clientWidth)) editor.scrollLeft = Math.max(0, r.left - 40);
+    syncHL();
+  } else {  // a stacked editor: scroll the list
+    const list = $('#mlist'), y = ta.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop + r.top;
+    if (y < list.scrollTop + 40 || y > list.scrollTop + list.clientHeight - 40) list.scrollTop = Math.max(0, y - list.clientHeight / 3);
+  }
+}
+function findTicks() {  // every match as a tick in the overview strip (main editor)
+  const ovr = $('#ovr');
+  ovr.querySelectorAll('i.find').forEach(x => x.remove());
+  if ($('#findbar').hidden || F.ta !== editor || !F.hits.length || F.hits.length > 2000) return;
+  const total = Math.max(editor.scrollHeight, 1), h = editor.clientHeight, at = lineBox(editor), v = editor.value;
+  ovr.style.right = (editor.offsetWidth - editor.clientWidth) + 'px';
+  let line = 1, pos = 0;
+  for (const hit of F.hits) {  // walk forward once to number the lines
+    for (let j = v.indexOf('\n', pos); j >= 0 && j < hit; j = v.indexOf('\n', j + 1)) { line++; pos = j + 1; }
+    const [top] = at(line, line), t = el('i', 'find');
+    Object.assign(t.style, { top: (top / total * h) + 'px', height: '3px' });
+    t.onclick = () => { F.i = F.hits.indexOf(hit); findSearch(true); findShow(true); };
+    ovr.append(t);
+  }
+}
+function findStep(dir) {
+  if (!F.hits.length) return;
+  F.i = (F.i + dir + F.hits.length) % F.hits.length;
+  $('#findn').textContent = `${F.i + 1} of ${F.hits.length}`;
+  findShow(true);
+}
+function openFind(ta) {
+  F.ta = ta;
+  const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+  if (sel && !sel.includes('\n')) $('#findq').value = sel;
+  $('#findbar').hidden = false;
+  $('#findq').focus(); $('#findq').select();
+  findSearch(false);
+}
+function closeFind(focusText) {
+  $('#findbar').hidden = true;
+  $('#findhl').textContent = '';
+  for (const st of S.msec.values()) if (st.marks) st.marks.querySelectorAll('.found').forEach(x => x.remove());
+  findTicks();
+  if (focusText && F.ta) { F.ta.focus(); if (F.i >= 0) F.ta.setSelectionRange(F.hits[F.i], F.hits[F.i] + F.len); }
+}
+function findKey(e, ta) {  // Ctrl+F opens, F3 / Shift+F3 step; true when handled
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); openFind(ta); return true; }
+  if (e.key === 'F3' && !$('#findbar').hidden) { e.preventDefault(); F.ta = ta; findStep(e.shiftKey ? -1 : 1); return true; }
+  return false;
+}
+$('#findq').addEventListener('input', () => findSearch(false));
+$('#findcase').addEventListener('input', () => findSearch(false));
+$('#findq').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === 'F3') { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(true); }
+});
+$('#find-next').onclick = () => findStep(1);
+$('#find-prev').onclick = () => findStep(-1);
+$('#find-close').onclick = () => closeFind(true);
+editor.addEventListener('input', () => { if (!$('#findbar').hidden && F.ta === editor) findSearch(true); });
+
+editor.addEventListener('keydown', e => {
+  if (S.file && S.file.kind === 'text' && findKey(e, editor)) return;
+  const ck = commentKey(e);
+  if (ck && S.file && S.file.kind === 'text' && !editor.readOnly) { e.preventDefault(); toggleComment(editor, S.file.path, ck === 'block'); return; }
+  if (plainEnter(e) && S.file && S.file.kind === 'text' && !editor.readOnly) { e.preventDefault(); autoIndent(editor, S.file.path); return; }
+  if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !editor.readOnly && S.file) {
+    e.preventDefault(); indentBlock(editor, S.file.path, e.shiftKey);
+  }
+});
+async function checkOpenFile() {
+  if (!S.file) return;
+  const path = S.file.path;
+  let f;
+  try { f = await api('GET', '/api/file?path=' + encodeURIComponent(path)); }
+  catch (e) { if (e.status === 404 && S.file && S.file.path === path && S.conflict?.type !== 'deleted') showConflict({ type: 'deleted' }); return; }
+  if (!S.file || S.file.path !== path) return;
+  if (f.hash === S.file.hash) { if (S.conflict?.type === 'deleted') hideBanner(); return; }
+  if (!isDirty()) {
+    setFile(f, true); hideBanner();
+    hlEl.classList.remove('flash'); void hlEl.offsetWidth; hlEl.classList.add('flash');
+    toast('Reloaded — file changed on disk');
+  } else {  // unsaved edits: merge the disk change in when the two touch different lines
+    const merged = f.kind === 'text' ? rebaseEdits(S.file.original, editor.value, f.content) : null;
+    if (merged == null) { if (S.conflict?.disk?.hash !== f.hash) showConflict({ type: 'changed', disk: f }); return; }
+    const a = editor.selectionStart, z = editor.selectionEnd, top = editor.scrollTop, shift = merged.length - editor.value.length;
+    const before = editor.value.slice(0, a) === merged.slice(0, a);  // the change was after the caret
+    editor.value = merged; S.file.original = f.content; S.file.hash = f.hash;
+    editor.setSelectionRange(before ? a : a + shift, before ? z : z + shift); editor.scrollTop = top;
+    histSync(path, merged); hideBanner(); renderHL(true); renderMarks(); updateFileState(); updatePos();
+    hlEl.classList.remove('flash'); void hlEl.offsetWidth; hlEl.classList.add('flash');
+    toast("Merged the agent's change into your unsaved edits");
+  }
+}
+async function save(force = false) {
+  if (!S.file || S.file.kind !== 'text') return;
+  if (!force && !isDirty()) return;
+  const content = editor.value;
+  try {
+    const r = await api('PUT', '/api/file', { path: S.file.path, content, base_hash: S.file.hash, force });
+    S.file.hash = r.hash; S.file.original = content; hideBanner(); updateFileState(); toast('Saved');
+    poll();
+  } catch (e) {
+    if (e.status === 409) showConflict(e.data.disk ? { type: 'changed', disk: e.data.disk } : { type: 'deleted' });
+    else toast('Save failed: ' + e.message, true);
+  }
+}
+$('#save').onclick = () => save(!!S.conflict);
+
+function showConflict(c) {
+  S.conflict = c; setTimeout(renderTree);
+  const b = $('#banner'); b.hidden = false; b.textContent = '';
+  if (c.type === 'deleted') {
+    b.append(el('b', null, 'Deleted or moved on disk.'), el('span', null, 'Your text is still here.'), el('span', 'spacer'),
+      btn('Recreate with my text', () => save(true)), btn('Close file', () => { S.file = null; S.sel = null; hideBanner(); renderTree(); renderDetail(); }));
+  } else {
+    b.append(el('b', null, 'Changed on disk while you were editing.'), el('span', 'spacer'));
+    if (c.disk.kind === 'text') b.append(btn('Compare', () => showDiff(editor.value, c.disk.content)));
+    b.append(btn('Load disk version', () => { if (confirm('Discard your edits and load the version on disk?')) { setFile(c.disk); hideBanner(); } }),
+      btn('Overwrite with mine', () => save(true), 'danger'));
+  }
+  updateFileState();
+}
+function hideBanner() { S.conflict = null; $('#banner').hidden = true; updateFileState(); }
+
+/* ---------- syntax highlighting ---------- */
+// One regex per language, alternatives tried left to right; a rule may hand its match to a sub-language.
+const HL_MAX = 200000;
+const kw = words => new RegExp('\\b(?:' + words.trim().split(/\s+/).join('|') + ')\\b');
+const DQ = /"(?:[^"\\\n]|\\.)*"/, SQ = /'(?:[^'\\\n]|\\.)*'/, NUM = /\b(?:0[xXoObB][\da-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/;
+const any = (...rs) => new RegExp(rs.map(r => r.source).join('|'));
+const LANGS = {
+  py: [['c', /#.*/], ['s', /[rbfuRBFU]{0,2}(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')/], ['d', /@[\w.]+/],
+    ['k', kw('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case self cls')],
+    ['f', /(?<=\b(?:def|class)\s+)\w+/], ['b', kw('print len range str int float list dict set tuple bool open super isinstance getattr setattr hasattr type object enumerate zip map filter sorted min max sum any all Exception ValueError TypeError KeyError OSError')], ['n', NUM]],
+  js: [['c', /\/\/.*|\/\*[\s\S]*?\*\//], ['s', any(DQ, SQ, /`(?:[^`\\]|\\.)*`/)],
+    ['k', kw('break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield async await of static get set null undefined true false interface type enum implements private public protected readonly from as')],
+    ['f', /\b[A-Za-z_$][\w$]*(?=\s*\()/], ['n', NUM]],
+  c: [['c', /\/\/.*|\/\*[\s\S]*?\*\//], ['d', /^\s*#\s*\w+/], ['s', any(DQ, SQ)],
+    ['k', kw('auto break case catch char class const continue default delete do double else enum extern false float for goto if inline int long namespace new nullptr private protected public return short signed sizeof static struct switch template this throw true try typedef typename union unsigned using virtual void volatile while bool import package final abstract extends implements interface boolean null var val fun let mut fn impl pub trait mod match loop where use crate self Self func go defer chan map range select type')],
+    ['f', /\b[A-Za-z_]\w*(?=\s*\()/], ['n', NUM]],
+  json: [['t', /"(?:[^"\\\n]|\\.)*"(?=\s*:)/], ['s', DQ], ['k', kw('true false null')], ['n', NUM]],
+  sh: [['v', /\$\{[^}\n]*\}|\$\w+|\$[@*#?$!]/], ['c', /(?:^|(?<=\s))#.*/], ['s', any(DQ, SQ)],
+    ['k', kw('if then else elif fi for while until do done case esac in function return local export set end begin switch not and or source alias unset')], ['n', NUM]],
+  toml: [['c', /(?:^|(?<=\s))[#;].*/], ['h', /^\s*\[[^\]\n]*\]+/], ['t', /^\s*[\w.\-"]+(?=\s*=)/], ['s', any(/"""[\s\S]*?"""/, DQ, SQ)], ['k', kw('true false')], ['n', NUM]],
+  yaml: [['c', /(?:^|(?<=\s))#.*/], ['t', /^\s*(?:-\s+)?[\w.\-"' ]+?(?=\s*:(?:\s|$))/], ['s', any(DQ, SQ)], ['k', kw('true false null yes no on off')], ['n', NUM]],
+  md: [['c', /<!--[\s\S]*?-->/], ['s', /^```[\s\S]*?^```|`[^`\n]+`/], ['h', /^#{1,6} .*/], ['k', /\*\*[^*\n]+\*\*|__[^_\n]+__/],
+    ['f', /!?\[[^\]\n]*\]\([^)\n]*\)/], ['d', /^\s*(?:[-*+]|\d+\.)(?= )/]],
+  tag: [['t', /^<\/?[\w:.-]+|\/?>$/], ['f', /[\w:.@-]+(?=\s*=)/], ['s', any(/"[^"]*"/, /'[^']*'/)]],
+  html: [['c', /<!--[\s\S]*?-->/], ['x', /<script\b[^>]*>[\s\S]*?(?=<\/script>)/, t => embed(t, 'js')], ['x', /<style\b[^>]*>[\s\S]*?(?=<\/style>)/, t => embed(t, 'css')],
+    ['x', /<\/?[\w:.-]+(?:[^>"']|"[^"]*"|'[^']*')*\/?>/, 'tag'], ['n', /&#?\w+;/]],
+  css: [['c', /\/\*[\s\S]*?\*\//], ['s', any(DQ, SQ)], ['k', /@[\w-]+|!important/], ['t', /(?<=[{;]\s*)-{0,2}[\w-]+(?=\s*:)/],
+    ['f', /[\w-]+(?=\()/], ['n', /#[\da-fA-F]{3,8}\b|-?\b\d+\.?\d*(?:px|em|rem|vh|vw|ms|s|deg|fr|%)?/]],
+  typ: [['c', /\/\/.*|\/\*[\s\S]*?\*\//], ['h', /^=+ .*/], ['s', DQ], ['f', /#[\w.-]+/], ['d', /<[\w.:-]+>|@[\w.:-]+/], ['n', /\$[^$\n]*\$/]],
+  jl: [['c', /#=[\s\S]*?=#|#.*/], ['s', /"""[\s\S]*?"""|"(?:[^"\\\n]|\\.)*"/], ['d', /@\w+/],
+    ['k', kw('function end if else elseif for while return module using import export struct mutable begin let do try catch finally abstract type macro quote const local global true false nothing in isa where break continue')],
+    ['f', /\b\w+!?(?=\()/], ['n', NUM]],
+};
+const EXT = { py: 'py', pyi: 'py', js: 'js', mjs: 'js', cjs: 'js', jsx: 'js', ts: 'js', tsx: 'js', jsonc: 'js', json: 'json',
+  c: 'c', h: 'c', cc: 'c', cpp: 'c', cxx: 'c', hpp: 'c', java: 'c', cs: 'c', kt: 'c', swift: 'c', scala: 'c', dart: 'c', rs: 'c', go: 'c',
+  sh: 'sh', bash: 'sh', zsh: 'sh', fish: 'sh', conf: 'sh', d2: 'sh', toml: 'toml', ini: 'toml', cfg: 'toml', yaml: 'yaml', yml: 'yaml',
+  md: 'md', markdown: 'md', html: 'html', htm: 'html', xml: 'html', svg: 'html', vue: 'html', css: 'css', scss: 'css', less: 'css', typ: 'typ', jl: 'jl' };
+const NAMES = { makefile: 'sh', dockerfile: 'sh', justfile: 'sh', '.gitignore': 'sh', '.env': 'sh', '.bashrc': 'sh', '.zshrc': 'sh' };
+function langOf(path) {
+  const name = path.split('/').pop().toLowerCase();
+  return NAMES[name] || EXT[name.includes('.') ? name.split('.').pop() : ''] || null;
+}
+const escH = s => s.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
+const HLC = {};
+function hl(text, lang) {
+  const rules = LANGS[lang]; if (!rules) return escH(text);
+  const re = HLC[lang] || (HLC[lang] = new RegExp(rules.map(r => '(' + r[1].source + ')').join('|'), 'gm'));
+  let out = '', last = 0, m;
+  re.lastIndex = 0;
+  while ((m = re.exec(text))) {
+    if (!m[0]) { re.lastIndex++; continue; }
+    let i = 1; while (m[i] === undefined) i++;
+    const [cls, , sub] = rules[i - 1], at = re.lastIndex;
+    out += escH(text.slice(last, m.index)) + (!sub ? `<span class="t-${cls}">${escH(m[0])}</span>` : typeof sub === 'function' ? sub(m[0]) : hl(m[0], sub));
+    last = re.lastIndex = at;
+  }
+  return out + escH(text.slice(last));
+}
+function embed(t, lang) { const i = t.indexOf('>') + 1; return hl(t.slice(0, i), 'tag') + hl(t.slice(i), lang); }
+let hlRaf = 0;
+function renderHL(now) {
+  cancelAnimationFrame(hlRaf);
+  const go = () => {
+    const on = !!(S.file && S.file.lang && S.file.kind === 'text' && editor.value.length <= HL_MAX);
+    $('#editwrap').classList.toggle('hl', on);
+    hlEl.innerHTML = on ? hl(editor.value, S.file.lang) + '\n' : '';
+    syncHL();
+  };
+  if (now) go(); else hlRaf = requestAnimationFrame(go);
+}
+function syncHL() {
+  $('#findhl').style.transform = `translate(${-editor.scrollLeft}px, ${-editor.scrollTop}px)`;
+  // wrapped, the copy must wrap at the text box's width: its padding makes room for the box's scrollbar
+  hlEl.style.paddingRight = document.body.classList.contains('wrap') ? (16 + editor.offsetWidth - editor.clientWidth) + 'px' : '';
+  hlEl.scrollTop = editor.scrollTop; hlEl.scrollLeft = editor.scrollLeft;
+  $('#marks').style.transform = `translateY(${-editor.scrollTop}px)`;
+}
+
+/* ---------- feedback for the agent ---------- */
+const QUOTE_LINES = 12;
+const fbFor = p => S.feedback.filter(f => f.paths.includes(noteKey(p)));
+const openFb = p => fbFor(p).filter(f => f.status !== 'done').length;
+const shown = p => p === '.' ? S.rootName + '/' : p;
+const linesLabel = f => f.lines ? `L${f.lines[0]}${f.lines[1] !== f.lines[0] ? '–' + f.lines[1] : ''}` : '';
+function locate([a, b], quote, text) {  // same rule as the server: stay, else nearest move, else stale
+  const have = text.split('\n'), q = quote.split('\n');
+  const at = i => q.every((l, k) => have[i + k] === l);
+  if (at(a - 1)) return [a, b, false];
+  let best = -1;
+  for (let i = 0; i + q.length <= have.length; i++) if (at(i) && (best < 0 || Math.abs(i + 1 - a) < Math.abs(best + 1 - a))) best = i;
+  return best < 0 ? [a, b, true] : [best + 1, best + 1 + (b - a), false];
+}
+function selLines(ta = editor) {
+  if (ta === editor && (!S.file || S.file.kind !== 'text' || S.multi.size > 1)) return null;
+  if (!ta || ta.selectionStart === ta.selectionEnd) return null;
+  const v = ta.value, s = ta.selectionStart; let e = ta.selectionEnd;
+  if (e > s && v[e - 1] === '\n') e--;
+  const a = v.slice(0, s).split('\n').length, b = v.slice(0, e).split('\n').length;
+  return { lines: [a, b], quote: v.split('\n').slice(a - 1, Math.min(b, a + QUOTE_LINES - 1)).join('\n') };
+}
+function fbItem(f, showPaths) {
+  const d = el('div', 'fbi' + (f.status === 'done' ? ' done' : '')), h = el('div', 'fbh');
+  h.append(el('b', null, '#' + f.id), el('span', 'pill ' + (f.status || 'open'), f.status || 'open'));
+  if (f.lines) { const a = el('a', 'lines', linesLabel(f) + (f.stale ? ' (moved?)' : '')); a.onclick = () => jumpTo(f.paths[0], f.lines); h.append(a); }
+  if (showPaths) for (const p of f.paths) { const a = el('a', null, shown(p)); a.onclick = () => goTo(p); h.append(a); }
+  h.append(el('span', 'spacer'),
+    btn(f.status === 'done' ? 'Reopen' : 'Done', () => setFb(f.id, { status: f.status === 'done' ? 'open' : 'done' })),
+    ...(CFG.term && f.status !== 'done' ? [btn('→ Agent', () => sendToAgent(
+      `Please address treedit feedback #${f.id} (see \`treedit fb ls\`), then answer with \`treedit fb reply ${f.id} "…" --done\`.`, true))] : []),
+    btn('Edit', () => startDraft({ id: f.id, paths: f.paths, lines: f.lines, text: f.text })),
+    btn('×', () => delFb(f), 'danger'));
+  d.append(h);
+  if (f.quote) { const q = el('pre', 'fbq'), lang = langOf(f.paths[0]); if (lang) q.innerHTML = hl(f.quote, lang); else q.textContent = f.quote; d.append(q); }
+  d.append(el('div', 'fbt', f.text));
+  if (f.reply) d.append(el('div', 'fbr', f.reply));
+  return d;
+}
+const byStatus = items => [...items].sort((a, b) => (a.status === 'done') - (b.status === 'done') || a.id - b.id);
+function renderFb() {
+  const items = byStatus(fbFor(S.sel ?? '')), open = items.filter(f => f.status !== 'done').length;
+  const done = items.length - open, c = $('#fbcount');
+  c.textContent = items.length ? `${open} open` + (done ? ` · ${done} done ${S.showDone ? '(hide)' : '(show)'}` : '') : '';
+  c.style.cursor = done ? 'pointer' : '';
+  c.onclick = done ? () => { S.showDone = !S.showDone; store('showdone', S.showDone); renderFb(); } : null;
+  const box = $('#fblist'); box.textContent = '';
+  for (const f of items) if (S.showDone || f.status !== 'done') box.append(fbItem(f, f.paths.length > 1));
+  updateFbButton(); renderMarks();
+}
+function updateFbButton() { const sl = selLines(); $('#b-fb').textContent = sl ? `+ Feedback on ${linesLabel(sl)}` : '+ Feedback'; }
+function updateFbHeader() {
+  const n = S.feedback.filter(f => f.status !== 'done').length;
+  $('#fball').textContent = n ? `Feedback · ${n} open` : 'Feedback';
+  $('#fball').classList.toggle('hot', n > 0);
+}
+let mirror = null;
+function lineBox(ta) {  // (a, b) -> [top, height] of lines a..b in the text box's content, wrapped or not
+  const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight), pad = parseFloat(cs.paddingTop);
+  if (!document.body.classList.contains('wrap')) return (a, b) => [pad + (a - 1) * lh, (b - a + 1) * lh];
+  if (!mirror) { mirror = el('div'); mirror.setAttribute('aria-hidden', 'true'); document.body.append(mirror); }
+  Object.assign(mirror.style, { position: 'absolute', visibility: 'hidden', left: '-99999px', top: '0', boxSizing: 'border-box',
+    whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', width: ta.clientWidth + 'px', padding: cs.padding,
+    fontFamily: cs.fontFamily, fontSize: cs.fontSize, lineHeight: cs.lineHeight, tabSize: cs.tabSize });
+  mirror.textContent = '';
+  for (const line of ta.value.split('\n')) mirror.append(el('div', null, line || '\u200b'));
+  return (a, b) => {
+    const A = mirror.children[a - 1], B = mirror.children[Math.min(b, mirror.children.length) - 1];
+    return A && B ? [A.offsetTop, B.offsetTop + B.offsetHeight - A.offsetTop] : [pad + (a - 1) * lh, (b - a + 1) * lh];
+  };
+}
+function changeRanges(path) {  // [{a, b, kind, by, f}] for recent line changes still visible (f = freshness)
+  const out = [];
+  for (const ev of (S.lines && S.lines[path]) || []) {
+    const f = freshness(ev.at);
+    if (f > 0) for (const [a, b, kind] of ev.ranges) out.push({ a, b, kind, by: ev.by, f, at: ev.at });
+  }
+  return out;
+}
+function changeBar(c, top, height, right) {
+  const m = el('div', `chg ${c.by}${c.kind === 'del' ? ' del' : ''}`);
+  Object.assign(m.style, { top: top + 'px', height: height + 'px', right: right + 'px', opacity: (0.3 + 0.7 * c.f).toFixed(2) });
+  m.title = `${c.kind === 'del' ? 'lines deleted' : c.kind === 'add' ? 'added' : 'changed'} by ${c.by === 'you' ? 'you' : 'the agent'} ${ago(c.at || 0)}`;
+  return m;
+}
+function renderMarks() {
+  const box = $('#marks'), ovr = $('#ovr'); box.textContent = ''; ovr.textContent = '';
+  if (!S.file || S.file.kind !== 'text') return;
+  setTimeout(findTicks);
+  const spans = fbFor(S.file.path).filter(f => f.lines && f.status !== 'done'), chg = changeRanges(S.file.path);
+  if (!spans.length && !chg.length) return;
+  const at = lineBox(editor), sb = editor.offsetWidth - editor.clientWidth;
+  ovr.style.right = sb + 'px';
+  for (const c of chg) {  // a bar beside the changed lines, and a tick in the overview strip
+    const [top, height] = at(c.a, c.b);
+    box.append(changeBar(c, top, height, sb + 11));  // just left of the overview strip
+    const t = el('i', c.by); t.title = `line ${c.a}${c.b > c.a ? '–' + c.b : ''}: ${c.kind === 'del' ? 'deleted' : 'changed'} by ${c.by === 'you' ? 'you' : 'the agent'}`;
+    const total = Math.max(editor.scrollHeight, 1), h = editor.clientHeight;
+    Object.assign(t.style, { top: (top / total * h) + 'px', height: Math.max(3, height / total * h) + 'px', opacity: (0.35 + 0.65 * c.f).toFixed(2) });
+    t.onclick = () => { editor.scrollTop = Math.max(0, top - editor.clientHeight / 3); syncHL(); };
+    ovr.append(t);
+  }
+  for (const f of spans) {
+    const [a, b] = f.quote ? locate(f.lines, f.quote, editor.value) : f.lines, [top, height] = at(a, b);
+    const m = el('div', 'mark'); m.style.top = top + 'px'; m.style.height = height + 'px';
+    box.append(m);
+  }
+  box.style.transform = `translateY(${-editor.scrollTop}px)`;
+}
+async function goTo(p) {
+  const key = p === '.' ? '' : p;
+  if ($('#modal').open) $('#modal').close();
+  expandTo(key);
+  if (S.multi.size) await leaveMulti(key);
+  else if (S.sel === key) { renderTree(); renderDetail(); } else await select(key);
+}
+async function jumpTo(p, [a, b]) {
+  await goTo(p);
+  if (!S.file || S.file.path !== p || S.file.kind !== 'text') return;
+  const L = editor.value.split('\n'); let s = 0;
+  for (let i = 0; i < a - 1 && i < L.length; i++) s += L[i].length + 1;
+  let e = s; for (let i = a - 1; i < b && i < L.length; i++) e += L[i].length + 1;
+  editor.focus(); editor.setSelectionRange(s, Math.max(s, e - 1));
+  editor.scrollTop = Math.max(0, lineBox(editor)(a, b)[0] - editor.clientHeight / 3);
+  updatePos(); updateFbButton();
+}
+async function setFb(id, patch) { try { await api('PUT', '/api/feedback', { id, ...patch }); await loadTree(); } catch (e) { toast(e.message, true); } }
+async function delFb(f) {
+  if (!confirm(`Delete feedback #${f.id}?`)) return;
+  try { await api('POST', '/api/feedback-delete', { id: f.id }); await loadTree(); } catch (e) { toast(e.message, true); }
+}
+// one composer, moved into whichever view is showing; the draft survives live refreshes
+const comp = el('div', 'compose');
+comp.append(el('div', 'ctitle'), el('textarea'), el('div', 'cbtns'));
+const compText = comp.querySelector('textarea');
+compText.rows = 3; compText.placeholder = 'What should the agent change, and why?  (Ctrl/Cmd+Enter adds · Esc cancels)';
+comp.querySelector('.cbtns').append(el('span', 'spacer'), btn('Cancel', () => { S.draft = null; renderDraft(); }), btn('Add', () => submitDraft(), 'primary'));
+function startDraft(d) { S.draft = d; compText.value = d.text || ''; renderDraft(); compText.focus(); }
+function renderDraft() {
+  const d = S.draft; comp.hidden = !d;
+  if (!d) return;
+  const host = S.multi.size > 1 ? $('#mcompose') : $('#fbcompose');
+  if (comp.parentNode !== host) host.append(comp);
+  comp.querySelector('.ctitle').textContent = `${d.id ? 'Edit #' + d.id : 'New feedback'} on ${d.paths.map(shown).join(', ')}${d.lines ? ' ' + linesLabel(d) : ''}`;
+  comp.querySelector('.primary').textContent = d.id ? 'Save' : 'Add';
+}
+async function submitDraft() {
+  const d = S.draft, text = compText.value.trim();
+  if (!d || !text) return;
+  try {
+    if (d.id) await api('PUT', '/api/feedback', { id: d.id, text });
+    else await api('POST', '/api/feedback', { paths: d.paths, text, lines: d.lines, quote: d.quote });
+    S.draft = null; compText.value = ''; renderDraft();
+    toast(d.id ? 'Feedback updated' : 'Feedback added');
+    await loadTree();
+  } catch (e) { toast(e.message, true); }
+}
+compText.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); submitDraft(); }
+  if (e.key === 'Escape') { e.stopPropagation(); S.draft = null; renderDraft(); }
+});
+$('#b-fb').onclick = () => { const sl = selLines(); startDraft({ paths: [noteKey(S.sel)], ...(sl || {}) }); };
+$('#b-mfb').onclick = () => startDraft({ paths: [...S.byPath.keys()].filter(p => S.multi.has(p)).map(noteKey) });
+function showAllFb() {
+  const box = el('div', 'fball');
+  const items = byStatus(S.feedback);
+  if (!items.length) box.append(el('div', 'msg', 'No feedback yet. Select a file or folder and use “+ Feedback”; select lines first to comment on them.'));
+  for (const f of items) box.append(fbItem(f, true));
+  S.modalFb = true;
+  if ($('#modal').open) { $('#mbody').textContent = ''; $('#mbody').append(box); }
+  else openModal('Feedback for the agent', box);
+}
+$('#fball').onclick = showAllFb;
+
+/* ---------- git history ---------- */
+function relTime(at) {
+  const s = Date.now() / 1000 - at, m = Math.round(s / 60), h = Math.round(s / 3600), d = Math.round(s / 86400);
+  return s < 60 ? 'just now' : m < 60 ? `${m} min ago` : h < 36 ? `${h} h ago` : d < 60 ? `${d} days ago` : new Date(at * 1000).toISOString().slice(0, 10);
+}
+function diffPre(text) {  // a `git show` with + / - / @@ lines coloured
+  const pre = el('pre', 'gdiff');
+  for (const l of text.split('\n')) {
+    const cls = /^\+(?!\+\+)/.test(l) ? 'd-add' : /^-(?!--)/.test(l) ? 'd-del' : l.startsWith('@@') ? 'd-hunk'
+      : /^(diff --git|index |--- |\+\+\+ |commit |Author|AuthorDate|Commit|CommitDate|Merge)/.test(l) ? 'd-meta' : null;
+    pre.append(el('div', cls, l || ' '));
+  }
+  return pre;
+}
+async function showLog(whole) {
+  const path = S.sel ?? '', box = el('div', 'glog'), q = `path=${encodeURIComponent(path)}&whole=${whole ? 1 : 0}`;
+  const scopeBtn = btn(whole ? 'This item only' : 'Whole repository', () => showLog(!whole));
+  const title = `History · ${whole ? 'whole repository' : (path || S.rootName) + (S.byPath.get(path)?.type === 'dir' ? '/' : '')}`;
+  let data;
+  try { data = await api('GET', '/api/git/log?' + q); }
+  catch (e) { box.append(el('div', 'msg', e.status === 404 ? 'Not in a git repository.' : e.message)); putModal(title, box, [scopeBtn]); return; }
+  box.append(el('div', 'msg', `${data.repo} · ${data.commits.length} commit${data.commits.length === 1 ? '' : 's'}`
+    + (data.commits.length >= 150 ? ' (newest 150)' : '')));
+  if (data.status.length) box.append(el('div', 'msg', `Uncommitted (${data.status.length}):`), el('div', 'gst', data.status.join('\n')));
+  if (!data.commits.length) box.append(el('div', 'msg', 'No commits touch this yet.'));
+  for (const c of data.commits) {
+    const row = el('div', 'gc'), kind = /^agent\b/i.test(c.subject) ? 'agent' : /^user\b/i.test(c.subject) ? 'you' : null;
+    row.append(el('code', null, c.short), el('span', 'when', relTime(c.at)));
+    if (kind) row.append(el('span', 'badge ' + kind, kind));
+    row.append(el('span', 'subj', c.subject.replace(/^(agent|user):\s*/i, '')), el('span', 'who', c.author));
+    row.title = `${c.hash}\n${new Date(c.at * 1000).toLocaleString()}\n${c.author}\n\n${c.subject}`;
+    let diff = null;
+    row.onclick = async () => {
+      if (diff) { diff.remove(); diff = null; row.classList.remove('open'); return; }
+      row.classList.add('open');
+      try { diff = diffPre(await api('GET', `/api/git/show?${q}&commit=${c.hash}`)); } catch (e) { diff = el('div', 'msg', e.message); }
+      row.after(diff);
+    };
+    box.append(row);
+  }
+  putModal(title, box, [scopeBtn]);
+}
+function putModal(title, content, actions) {  // like openModal, but fine when it is already open
+  if (!$('#modal').open) return openModal(title, content, actions);
+  $('#mtitle').textContent = title; $('#mbody').textContent = ''; $('#mbody').append(content);
+  $('#mactions').textContent = ''; actions.forEach(a => $('#mactions').append(a));
+}
+$('#b-log').onclick = () => showLog(false);
+$('#modal').addEventListener('close', () => { S.modalFb = false; });
+
+/* ---------- agent terminal (right pane) ---------- */
+const T = { term: null, fit: null, ws: null, open: false, retry: 0, queue: [] };
+const LIGHT_ANSI = { black: '#2e2b26', red: '#b23b2e', green: '#2f7d4f', yellow: '#946400', blue: '#3f6fb5', magenta: '#8a3ab9',
+  cyan: '#0f7b85', white: '#8a857b', brightBlack: '#6b665d', brightRed: '#cf4436', brightGreen: '#38945c', brightYellow: '#b07a00',
+  brightBlue: '#4f82cc', brightMagenta: '#a050d0', brightCyan: '#14909e', brightWhite: '#a9a397' };
+const darkMode = () => matchMedia('(prefers-color-scheme: dark)').matches;
+function termTheme() {
+  const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
+  return { background: v('--bg'), foreground: v('--text'), cursor: v('--accent'), cursorAccent: v('--bg'),
+    selectionBackground: darkMode() ? 'rgba(127,167,224,.35)' : 'rgba(63,111,181,.25)', ...(darkMode() ? {} : LIGHT_ANSI) };
+}
+function termEnsure() {
+  if (T.term) return;
+  T.term = new Terminal({ fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--mono'), fontSize: 13,
+    lineHeight: 1.15, cursorBlink: true, scrollback: 5000, theme: termTheme() });
+  T.fit = new FitAddon.FitAddon(); T.term.loadAddon(T.fit);
+  T.term.open($('#term'));
+  T.term.onData(d => termSend({ t: 'in', d }));
+  T.term.attachCustomKeyEventHandler(e => {  // Ctrl+Shift+C / V copy and paste, as in Ptyxis
+    if (CFG.app && e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyQ') return false;  // quit, handled above
+    if (e.type !== 'keydown' || !e.ctrlKey || !e.shiftKey) return true;
+    if (e.code === 'KeyC') { const t = T.term.getSelection(); if (t) navigator.clipboard?.writeText(t).catch(() => {}); return false; }
+    if (e.code === 'KeyV') { navigator.clipboard?.readText().then(t => T.term.paste(t)).catch(() => toast('Paste blocked — try middle-click', true)); return false; }
+    return true;
+  });
+  new ResizeObserver(() => termFit()).observe($('#term'));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { T.term.options.theme = termTheme(); });
+}
+function termFit() {
+  if (!T.term || !T.open) return;
+  try { T.fit.fit(); } catch { return; }
+  termSend({ t: 'resize', rows: T.term.rows, cols: T.term.cols });
+}
+function termSend(m) { if (T.ws && T.ws.readyState === 1) { T.ws.send(JSON.stringify(m)); return true; } return false; }
+function setTermState(st) { $('#tstate').className = st; $('#tstate').title = { live: 'connected', ended: 'session ended', off: 'disconnected' }[st] || ''; }
+function termConnect() {
+  if (T.ws && T.ws.readyState <= 1) return;
+  const ws = new WebSocket(`ws://${location.host}/api/term?token=${encodeURIComponent(CFG.token)}`);
+  ws.binaryType = 'arraybuffer'; T.ws = ws;
+  ws.onopen = () => { T.retry = 0; setTermState('live'); termFit(); const q = T.queue; T.queue = []; q.forEach(f => f()); };
+  ws.onmessage = ev => {
+    if (typeof ev.data !== 'string') { T.term.write(new Uint8Array(ev.data)); return; }
+    const m = JSON.parse(ev.data);
+    if (m.t === 'hello') { T.term.reset(); $('#tlabel').textContent = m.label; }
+    else if (m.t === 'reset') { T.term.reset(); setTermState('live'); }
+    else if (m.t === 'exit') setTermState('ended');
+  };
+  ws.onclose = ev => {
+    plog(`terminal socket closed (code ${ev.code})`);
+    if (T.ws !== ws) return;
+    T.ws = null; setTermState('off');
+    if (T.open) setTimeout(termConnect, Math.min(5000, 400 * 2 ** T.retry++));
+  };
+}
+function openTerm(open) {
+  T.open = open; store('term', open);
+  $('#termpane').hidden = $('#divider2').hidden = !open;
+  $('#b-term').classList.toggle('on', open);
+  if (!open) return;
+  termEnsure(); termConnect();
+  requestAnimationFrame(() => { termFit(); T.term.focus(); });
+}
+function sendToAgent(text, enter) {  // type into the session (Enter separately, so TUIs don't take it as pasted)
+  const go = () => {
+    termSend({ t: 'in', d: text });
+    if (enter) setTimeout(() => termSend({ t: 'in', d: '\r' }), 200);
+    T.term.focus();
+  };
+  if (!T.open) openTerm(true);
+  if (!termSend({ t: 'resize', rows: T.term.rows, cols: T.term.cols })) T.queue.push(go); else go();
+}
+function currentContext() {
+  if (S.multi.size > 1) {
+    const paths = [...S.byPath.keys()].filter(p => S.multi.has(p)).map(noteKey);
+    const st = S.lastSec && S.msec.get(S.lastSec.path) === S.lastSec ? S.lastSec : null, sl = st ? selLines(st.ta) : null;
+    return { paths, ...(st && sl ? { focus: noteKey(st.path), ...sl } : {}) };
+  }
+  if (S.sel === null || !S.byPath.has(S.sel)) return { paths: [] };
+  return { paths: [noteKey(S.sel)], ...(selLines() || {}) };
+}
+let ctxLast = '';
+setInterval(() => {  // tell the server what is selected, for `treedit context`
+  const c = currentContext(), j = JSON.stringify(c);
+  if (j !== ctxLast) { ctxLast = j; api('POST', '/api/context', c).catch(() => {}); }
+}, 800);
+function contextText() {
+  const c = currentContext();
+  if (!c.paths.length) return '';
+  const where = c.lines ? ' ' + linesLabel(c) : '';
+  return c.paths.map(p => shown(p) + (p === (c.focus || c.paths[0]) ? where : '')).join(', ');
+}
+if (CFG.term) {
+  $('#b-term').hidden = false;
+  $('#b-term').onclick = () => openTerm(!T.open);
+  $('#t-close').onclick = () => openTerm(false);
+  $('#t-restart').onclick = () => { if (confirm('End this session and start a new one?')) termSend({ t: 'restart' }); };
+  $('#t-sel').onclick = () => { const t = contextText(); if (!t) return toast('Select something in the tree first', true); sendToAgent(`In treedit I selected ${t} (see \`treedit context\`). `, false); };
+  $('#t-roll').onclick = () => sendToAgent('Do a treedit agent roll: pick up my edits (`treedit edits`), commit them as mine, do the housekeeping, then work through the open feedback.', true);
+  $('#t-fb').onclick = () => sendToAgent('Work through the open treedit feedback (`treedit fb ls`) and answer each item with `treedit fb reply ID "…" --done`.', true);
+  $('#t-ext').hidden = !CFG.ptyxis;
+  $('#t-ext').onclick = async () => { try { await api('POST', '/api/term/external', {}); toast('Opened in a new terminal window'); } catch (e) { toast(e.message, true); } };
+  $('#tlabel').textContent = CFG.agent || 'shell';
+  (() => {  // resizable from its left edge
+    const d = $('#divider2'), w = load('termw', null);
+    if (w) document.documentElement.style.setProperty('--term-w', w + 'px');
+    d.onmousedown = e => {
+      const x0 = e.clientX, w0 = $('#termpane').offsetWidth; document.body.style.userSelect = 'none';
+      const mv = ev => { const nw = Math.max(280, w0 - (ev.clientX - x0)); document.documentElement.style.setProperty('--term-w', nw + 'px'); store('termw', nw); };
+      const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.style.userSelect = ''; };
+      document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+    };
+  })();
+  if (load('term', !!CFG.agent) || CFG.agent) openTerm(true);
+}
+
+/* ---------- diff & modal ---------- */
+function lineDiff(a, b) {
+  const A = a.split('\n'), B = b.split('\n'), n = A.length, m = B.length;
+  if (n * m > 6e6) return null;
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) { if (A[i] === B[j]) { out.push([' ', A[i++]]); j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) out.push(['-', A[i++]]); else out.push(['+', B[j++]]); }
+  while (i < n) out.push(['-', A[i++]]); while (j < m) out.push(['+', B[j++]]);
+  return out;
+}
+function openModal(title, content, actions = []) {
+  $('#mtitle').textContent = title; $('#mbody').textContent = ''; $('#mbody').append(content);
+  $('#mactions').textContent = ''; actions.forEach(a => $('#mactions').append(a));
+  $('#modal').showModal();
+}
+$('#mclose').onclick = () => $('#modal').close();
+function showDiff(mine, disk) {
+  const d = lineDiff(mine, disk), pre = el('pre');
+  if (!d) pre.textContent = 'Files too large to compare here.';
+  else {
+    const ctx = 3, keep = d.map((x, i) => x[0] !== ' ' || d.slice(Math.max(0, i - ctx), i + ctx + 1).some(y => y[0] !== ' '));
+    let skipped = 0;
+    const flush = () => { if (skipped) { pre.append(el('div', 'd-skip', `   … ${skipped} unchanged line${skipped > 1 ? 's' : ''}`)); skipped = 0; } };
+    d.forEach(([t, l], i) => {
+      if (!keep[i]) { skipped++; return; }
+      flush(); pre.append(el('div', t === '+' ? 'd-add' : t === '-' ? 'd-del' : '', `${t === '+' ? '+' : t === '-' ? '−' : ' '} ${l}`));
+    });
+    flush();
+    if (!d.some(x => x[0] !== ' ')) pre.textContent = 'No differences.';
+  }
+  openModal('− your editor   + on disk', pre);
+}
+$('#export').onclick = async () => {
+  try {
+    const counts = $('#showcounts').checked;
+    const text = await api('GET', '/api/export?counts=' + (counts ? 1 : 0));
+    const pre = el('pre', null, text);
+    const copy = btn('Copy', async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast('Copy failed — select the text instead', true); } });
+    const dl = btn('Download', () => { const a = el('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'TREE.md'; a.click(); });
+    openModal('Annotated tree', pre, [copy, dl]);
+  } catch (e) { toast(e.message, true); }
+};
+
+/* ---------- structure edits ---------- */
+function baseDir() { const n = S.byPath.get(S.sel ?? ''); if (!n) return ''; return n.type === 'dir' && !n.linked ? n.path : parentOf(n.path); }
+async function newEntry(kind) {
+  const base = baseDir();
+  const name = prompt(`New ${kind === 'dir' ? 'folder' : 'file'} in ${base || S.rootName}/\nName (may include subfolders, e.g. scripts/run.py):`);
+  if (!name || !name.trim()) return;
+  const path = (base ? base + '/' : '') + name.trim().replace(/^\/+|\/+$/g, '');
+  try { const r = await api('POST', '/api/new', { path, kind }); if (r.git) toast(`Created ${path} (staged in git)`); expandTo(path); if (kind === 'dir') S.expanded.add(path); await loadTree(); await select(path); if (kind === 'file') editor.focus(); }
+  catch (e) { toast(e.message, true); }
+}
+async function renameSel() {
+  const p = S.sel; if (!p) return;
+  const to = prompt('Rename / move to (path relative to the root):', p);
+  if (!to || to.trim() === p) return;
+  const dest = to.trim().replace(/^\/+|\/+$/g, '');
+  try {
+      await api('POST', '/api/rename', { from: p, to: dest });
+    if (S.file && (S.file.path === p || S.file.path.startsWith(p + '/'))) S.file.path = dest + S.file.path.slice(p.length);
+    for (const [k, b] of [...S.bufs]) if (k === p || k.startsWith(p + '/')) { S.bufs.delete(k); S.bufs.set(dest + k.slice(p.length), b); }
+    for (const [k, v] of [...S.draftSent]) if (k === p || k.startsWith(p + '/')) { S.draftSent.delete(k); S.draftSent.set(dest + k.slice(p.length), v); }
+    if (S.expanded.has(p)) S.expanded.add(dest);
+    S.sel = dest; expandTo(dest); history.replaceState(null, '', '#' + encodeURIComponent(dest));
+    await loadTree();
+  } catch (e) { toast(e.message, true); }
+}
+async function deleteSel() {
+  const n = S.byPath.get(S.sel); if (!n || n.path === '') return;
+  let what = n.path;
+  if (n.link) what = `the link ${n.path} (its target is kept)`;
+  else if (n.type === 'dir') { const s = stats(n); what = `the folder ${n.path} and everything in it (${pl(s.files, 'file')}, ${pl(s.dirs, 'folder')})`; }
+  if (!confirm(`Delete ${what}?\nThis cannot be undone. Annotations on it are removed too.`)) return;
+  try {
+    await api('POST', '/api/delete', { path: n.path });
+    if (S.file && (S.file.path === n.path || S.file.path.startsWith(n.path + '/'))) S.file = null;
+    for (const k of [...S.bufs.keys()]) if (k === n.path || k.startsWith(n.path + '/')) S.bufs.delete(k);
+    for (const k of [...S.draftSent.keys()]) if (k === n.path || k.startsWith(n.path + '/')) S.draftSent.delete(k);
+    S.sel = parentOf(n.path); hideBanner();
+    await loadTree();
+  } catch (e) { toast(e.message, true); }
+}
+$('#b-newfile').onclick = () => newEntry('file');
+$('#b-newdir').onclick = () => newEntry('dir');
+$('#b-rename').onclick = renameSel;
+$('#b-delete').onclick = deleteSel;
+
+/* ---------- misc ui ---------- */
+async function quitApp() {  // Ctrl+W / Ctrl+Q in the app window
+  const unsaved = isDirty() || S.bufs.size > 0 || [...S.msec.values()].some(sDirty);
+  if (unsaved && !confirm('Quit with unsaved changes? They will be lost.')) return;
+  try { await api('POST', '/api/quit', {}); } catch {}
+}
+document.addEventListener('keydown', e => {
+  const inTerm = !!(e.target.closest && e.target.closest('#termpane'));
+  if (CFG.app && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();  // in the terminal Ctrl+W stays the shell's delete-word
+    if (k === 'q' || (k === 'w' && !inTerm)) { e.preventDefault(); quitApp(); return; }
+  }
+  if (inTerm) return;  // keys belong to the shell / agent
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    const st = document.activeElement && document.activeElement._st;
+    if (st) saveSection(st, !!st.conflict); else save(!!S.conflict);
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement?.tagName || '')) {
+    const ta = S.multi.size > 1 ? (S.lastSec && S.lastSec.ta) : (S.file && S.file.kind === 'text' ? editor : null);
+    if (ta) { e.preventDefault(); openFind(ta); return; }
+  }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyZ') { e.preventDefault(); setWrap(!document.body.classList.contains('wrap')); return; }
+  if (e.key === 'Escape' && S.multi.size && !$('#modal').open) clearMulti();
+  if (e.key === 'F2' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement?.tagName || '')) renameSel();
+});
+window.addEventListener('beforeunload', e => {
+  if (isDirty() || S.bufs.size || [...S.msec.values()].some(sDirty)) { e.preventDefault(); e.returnValue = ''; }
+});
+['filter', 'shownotes', 'showcounts', 'heat', 'compact'].forEach(id => $('#' + id).addEventListener('input', () => { if (id !== 'filter') store(id, $('#' + id).checked); renderTree(); }));
+$('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = load('showcounts', true); $('#heat').checked = load('heat', true); $('#compact').checked = load('compact', true); setWrap(load('wrap', true)); $('#auto').checked = load('auto', true);
+if (!$('#auto').checked) setLive('paused');
+(() => {
+  const d = $('#divider'); let x0, w0;
+  const w = load('treew', null); if (w) document.documentElement.style.setProperty('--tree-w', w + 'px');
+  d.onmousedown = e => { x0 = e.clientX; w0 = $('#treepane').offsetWidth; document.body.style.userSelect = 'none';
+    const mv = ev => { const nw = Math.max(220, w0 + ev.clientX - x0); document.documentElement.style.setProperty('--tree-w', nw + 'px'); store('treew', nw); };
+    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.style.userSelect = ''; renderTree(); };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); };
+})();
+setInterval(() => {  // let highlights and change bars fade
+  if (!Object.keys(S.changes).length) return;
+  renderTree(); renderMarks(); for (const st of S.msec.values()) if (st.ta) sectionMarks(st);
+}, 30000);
+loadTree().then(() => {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h && S.byPath.has(h)) { expandTo(h); renderTree(); select(h); }
+}).catch(e => { setLive('off'); toast('Could not load tree: ' + e.message, true); });
+</script>
+</body>
+</html>
