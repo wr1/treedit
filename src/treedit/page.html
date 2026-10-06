@@ -228,7 +228,6 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
   <button id="fball" title="All feedback for the agent">Feedback</button>
   <button id="b-log" title="Git history of the selected file or folder">History</button>
-  <button id="export" title="Tree listing with your annotations and open feedback, as plain text">Annotated tree</button>
   <button id="b-term" hidden title="Terminal / agent pane on the right">Agent</button>
 </header>
 <main>
@@ -1839,17 +1838,6 @@ function showDiff(mine, disk) {
   }
   openModal('− your editor   + on disk', pre);
 }
-$('#export').onclick = async () => {
-  try {
-    const counts = $('#showcounts').checked;
-    const text = await api('GET', '/api/export?counts=' + (counts ? 1 : 0));
-    const pre = el('pre', null, text);
-    const copy = btn('Copy', async () => { try { await navigator.clipboard.writeText(text); toast('Copied'); } catch { toast('Copy failed — select the text instead', true); } });
-    const dl = btn('Download', () => { const a = el('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'TREE.md'; a.click(); });
-    openModal('Annotated tree', pre, [copy, dl]);
-  } catch (e) { toast(e.message, true); }
-};
-
 /* ---------- structure edits ---------- */
 function baseDir() { const n = S.byPath.get(S.sel ?? ''); if (!n) return ''; return n.type === 'dir' && !n.linked ? n.path : parentOf(n.path); }
 async function newEntry(kind) {

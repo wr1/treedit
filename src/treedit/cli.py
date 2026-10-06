@@ -1257,8 +1257,6 @@ class Handler(BaseHTTPRequestHandler):
                                         "drafts": ws.read_drafts(), "lines": ws.line_changes, "now": time.time()})
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
-        if method == "GET" and path == "/api/export":
-            return self.send(200, ws.export(q.get("counts", "1") != "0").encode("utf-8"), "text/plain; charset=utf-8")
         b = self.body()
         if method == "PUT" and path == "/api/draft":
             draft = {k: b[k] for k in ("base_hash", "diff", "full", "base") if b.get(k) is not None}

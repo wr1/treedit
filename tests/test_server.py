@@ -57,8 +57,6 @@ def test_tree_and_files(server, tree):
     assert status == 409 and out["disk"]["content"] == "x = 2\n"
     assert call(server, "GET", "/api/file?path=nope")[0] == 404
     assert call(server, "GET", "/api/file?path=../x")[0] == 400
-    assert "proj/" in call(server, "GET", "/api/export")[1]
-    assert "lines" not in call(server, "GET", "/api/export?counts=0")[1]
     assert call(server, "GET", "/api/changes")[1]["root"] == str(tree)
 
 
