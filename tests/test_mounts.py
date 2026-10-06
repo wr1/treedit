@@ -55,8 +55,6 @@ def test_notes_and_feedback_stay_per_folder(two, tree, tmp_path):
     assert two.add_feedback(["proj"], "tidy")["id"] == "proj:1"
     assert two.update_feedback("other:1", status="done")["status"] == "done"
     with pytest.raises(HTTPError):
-        two.add_feedback(["proj/pkg", "other/docs"], "mixed")
-    with pytest.raises(HTTPError):
         two.add_feedback([], "none")
     for bad in ("x:1", "proj:x", "7"):
         with pytest.raises(HTTPError):
@@ -104,7 +102,12 @@ def test_server_with_two_folders(two, monkeypatch, tmp_path, capsys):
         fb = call(base, "POST", "/api/feedback", {"paths": ["other/docs"], "text": "why"})[1]
         assert call(base, "PUT", "/api/feedback", {"id": fb["id"], "status": "done"})[1]["status"] == "done"
         assert call(base, "POST", "/api/feedback-delete", {"id": fb["id"]})[0] == 200
-        assert call(base, "PUT", "/api/note", {"path": "", "note": "x"})[0] == 400
+        assert call(base, "PUT", "/api/note", {"path": "", "note": "x"})[0] == 200
+        top = call(base, "POST", "/api/feedback", {"paths": [""], "text": "load all skills"})[1]
+        assert top["id"] == "*:1" and top["paths"] == [""]
+        t = call(base, "GET", "/api/tree")[1]
+        assert t["notes"]["."] == "x" and [f["id"] for f in t["feedback"]] == ["*:1"]
+        assert call(base, "PUT", "/api/feedback", {"id": "*:1", "reply": "ok", "status": "done"})[1]["status"] == "done"
         main(["edits", "-C", str(tmp_path / "other"), "--url", base])
         assert "saved in the editor: none recently" in capsys.readouterr().out
     finally:
@@ -121,3 +124,33 @@ def test_print_and_open_several(capsys, tree, tmp_path):
     assert out.startswith("proj/") and "\nother/\n" in out
     with pytest.raises(SystemExit, match="--notes works with one folder"):
         main(["open", str(tree), str(other), "--notes", str(tmp_path / "n.json"), "--headless"])
+
+
+def test_top_level_and_cross_folder(two, tree, tmp_path, capsys):
+    v = two.version()
+    two.set_note("", "both projects")
+    assert two.version() != v
+    assert two.read_notes()["."] == "both projects"
+    assert (tmp_path / ".treenotes.json").exists()
+    top = two.add_feedback([""], "load every skill")
+    assert top["id"] == "*:1" and top["paths"] == [""] and top["root"] == str(tmp_path)
+    cross = two.add_feedback(["proj/pkg", "other/docs"], "merge these")
+    assert cross["id"] == "*:2" and cross["paths"] == ["other/docs", "proj/pkg"]
+    assert two.update_feedback("*:1", reply="done", status="done")["id"] == "*:1"
+    assert [f["id"] for f in two.refresh_anchors()] == ["*:1", "*:2"]
+    out = two.export()
+    assert "# on the opened folders together" in out and "! #2 other/docs, proj/pkg: merge these" in out
+    assert "load every skill" not in out
+    main(["fb", "-C", str(tmp_path), "ls"])  # the agent pane starts in the common parent
+    assert "#2  open  other/docs, proj/pkg" in capsys.readouterr().out
+    two.delete_feedback("*:2")
+    with pytest.raises(HTTPError):
+        two.delete_feedback("*:2")
+
+
+def test_parent_opened_with_child_shares_notes(tree):
+    nested = Mounts([_ws(str(tree), "", [], False), _ws(str(tree / "pkg"), "", [], False)])
+    assert not nested.own_top
+    f = nested.add_feedback([""], "top")
+    assert f["id"] == "proj:1" and f["paths"] == ["proj"]
+    assert nested.update_feedback("proj:1", status="done")["status"] == "done"

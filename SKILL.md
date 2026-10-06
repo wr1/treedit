@@ -16,6 +16,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
    `$TREEDIT_ROOTS` lists them (separated by `:`); each keeps its own annotations and feedback, so run
    `fb ls`, `edits` and `annotation ls` in each (`-C <folder>`). In the window and in `treedit context`
    their paths start with the folder's name, and feedback ids read `name:N` (`N` for the CLI).
+   Feedback on the top level or on paths in several folders, and the annotation on the top level,
+   live in the folders' common parent (where the pane starts): plain `treedit fb ls` there, with
+   paths relative to it (ids `*:N` in the window).
 2. `treedit context` - what the user has selected in the window right now (paths, lines).
 3. Git keeps every diff attributable - the user's or yours - whether the user saved it or not:
    a. Before you start, and again before each commit: `git status` and `treedit edits`.

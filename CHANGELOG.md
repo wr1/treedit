@@ -4,6 +4,8 @@
 
 - `treedit open A B` (and `print`): several folders in one tree, each with its own notes, feedback,
   gitignore, drafts and history; feedback ids read `name:N`, and `$TREEDIT_ROOTS` lists the folders.
+  Feedback on the top level or across folders, and the top-level annotation, go to the folders'
+  common parent's `.treenotes.json` (ids `*:N`).
 - The editor merges your unsaved edits three-way with changes on disk, so text is never doubled.
 
 ## 0.1.0 - 2026-10-05

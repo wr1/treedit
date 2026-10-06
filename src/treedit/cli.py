@@ -940,13 +940,22 @@ def mount_names(roots: list) -> list:
 class Mounts:
     """Several roots shown as one tree, each as a top-level folder named by mount_names(). Paths are
     "name/path/in/root"; every call goes to that root's Workspace, so each keeps its own notes file,
-    gitignore, drafts and change tracking. Feedback ids become "name:N"."""
+    gitignore, drafts and change tracking. Feedback ids become "name:N".
+    The top level, and feedback on paths in several folders, go to the notes file of the folders'
+    common parent (where the agent pane starts), with paths relative to it and ids "*:N"."""
+
+    TOP = "*"
 
     def __init__(self, workspaces: list):
         self.mounts = dict(zip(mount_names([w.root for w in workspaces]), workspaces, strict=True))
         self.root = Path(os.path.commonpath([str(w.root) for w in workspaces]))  # where the terminal starts
         self.label = " + ".join(self.mounts)
-        self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces)
+        w0 = workspaces[0]
+        same = [w for w in workspaces if w.root == self.root]  # a folder holding the others: share its notes
+        self.top = same[0] if same else Workspace(self.root, self.root / NOTES_NAME, w0.ignore, w0.follow_outside,
+                                                  w0.gitignore, w0.show)
+        self.own_top = not same
+        self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces + ([self.top] if self.own_top else []))
 
     @staticmethod
     def _pre(name: str, rel: str) -> str:
@@ -966,11 +975,35 @@ class Mounts:
         name = hits.pop()
         return name, self.mounts[name], [self.split(r)[2] for r in rels]
 
+    def _to_top(self, rel: str) -> str:
+        """REL in the tree as a path in the common parent's notes file ('.' = the parent itself)."""
+        if not Workspace.parts(rel):
+            return "."
+        _, w, sub = self.split(rel)
+        return w.root.joinpath(*Workspace.parts(sub)).relative_to(self.root).as_posix()
+
+    def _from_top(self, key: str) -> str:
+        if key in ("", "."):
+            return ""
+        p = self.root / key
+        for name, w in self.mounts.items():
+            if p == w.root or w.root in p.parents:
+                return self._pre(name, p.relative_to(w.root).as_posix())
+        return key
+
+    def _top_out(self, f: dict) -> dict:
+        if not self.own_top:
+            return self._fb_out(next(n for n, w in self.mounts.items() if w is self.top), f)
+        return {**f, "id": f"{self.TOP}:{f['id']}", "num": f["id"], "root": str(self.root),
+                "paths": [self._from_top(p) for p in f["paths"]]}
+
     def _prefix_map(self, get) -> dict:
         return {self._pre(name, k): v for name, w in self.mounts.items() for k, v in get(w).items()}
 
     def _fid(self, fid):
         name, _, num = str(fid).rpartition(":")
+        if name == self.TOP and self.own_top and num.isdigit():
+            return self.top, int(num)
         if name not in self.mounts or not num.isdigit():
             raise HTTPError(404, f"no feedback #{fid}")
         return self.mounts[name], int(num)
@@ -996,7 +1029,14 @@ class Mounts:
         return {"name": self.label, "path": "", "type": "dir", "multi": True, "children": kids}
 
     def version(self) -> str:
-        return sha1("|".join(w.version() for w in self.mounts.values()).encode())[:16]
+        sig = [w.version() for w in self.mounts.values()]
+        if self.own_top:  # only the notes file: the parent may hold far more than the opened folders
+            try:
+                st = self.top.notes_path.stat()
+                sig.append(f"{st.st_mtime_ns}|{st.st_size}")
+            except OSError:
+                pass
+        return sha1("|".join(sig).encode())[:16]
 
     @property
     def changes(self) -> dict:
@@ -1016,13 +1056,25 @@ class Mounts:
         w.mark_ui(sub)
 
     def export(self, counts: bool = True, color: bool = False) -> str:
-        return "\n".join(w.export(counts, color) for w in self.mounts.values())
+        out = "\n".join(w.export(counts, color) for w in self.mounts.values())
+        if not self.own_top:
+            return out
+        note = self.top.read_notes().get(".")
+        fb = [f for f in self.top.refresh_anchors() if f.get("status") != "done"]
+        if note or fb:
+            out += f"\n# on the opened folders together ({self.top.notes_path}):\n"
+            out += "".join(f"#   {ln}\n" for ln in (note or "").strip().splitlines())
+            out += "".join(f"#   {fb_label(f)} {', '.join(f['paths'])}: {first_line(f['text'])}\n" for f in fb)
+        return out
 
     # ---------- notes & feedback ----------
     def read_notes(self) -> dict:
-        return self._prefix_map(lambda w: w.read_notes())
+        top = {self._from_top(k) or ".": v for k, v in self.top.read_notes().items()} if self.own_top else {}
+        return {**top, **self._prefix_map(lambda w: w.read_notes())}
 
     def set_note(self, rel: str, text: str) -> None:
+        if not Workspace.parts(rel):
+            return self.top.set_note(".", text)
         _, w, sub = self.split(rel)
         w.set_note(sub, text)
 
@@ -1031,16 +1083,21 @@ class Mounts:
         w.move_notes(s, d)
 
     def refresh_anchors(self) -> list:
-        return [self._fb_out(name, f) for name, w in self.mounts.items() for f in w.refresh_anchors()]
+        out = [self._fb_out(name, f) for name, w in self.mounts.items() for f in w.refresh_anchors()]
+        return out + ([self._top_out(f) for f in self.top.refresh_anchors()] if self.own_top else [])
 
     def add_feedback(self, paths: list, text: str, lines=None, quote: str = "") -> dict:
         if not paths:
             raise HTTPError(400, "feedback needs at least one path")
+        if any(not Workspace.parts(p) for p in paths) or len({self.split(p)[0] for p in paths}) > 1:
+            return self._top_out(self.top.add_feedback([self._to_top(p) for p in paths], text, lines, quote))
         name, w, subs = self._one(paths)
         return self._fb_out(name, w.add_feedback(subs, text, lines, quote))
 
     def update_feedback(self, fid, **changes) -> dict:
         w, num = self._fid(fid)
+        if w is self.top and str(fid).startswith(self.TOP + ":"):
+            return self._top_out(w.update_feedback(num, **changes))
         name = next(n for n, x in self.mounts.items() if x is w)
         return self._fb_out(name, w.update_feedback(num, **changes))
 
@@ -1566,6 +1623,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
    `$TREEDIT_ROOTS` lists them (separated by `:`); each keeps its own annotations and feedback, so run
    `fb ls`, `edits` and `annotation ls` in each (`-C <folder>`). In the window and in `treedit context`
    their paths start with the folder's name, and feedback ids read `name:N` (`N` for the CLI).
+   Feedback on the top level or on paths in several folders, and the annotation on the top level,
+   live in the folders' common parent (where the pane starts): plain `treedit fb ls` there, with
+   paths relative to it (ids `*:N` in the window).
 2. `treedit context` - what the user has selected in the window right now (paths, lines).
 3. Git keeps every diff attributable - the user's or yours - whether the user saved it or not:
    a. Before you start, and again before each commit: `git status` and `treedit edits`.
