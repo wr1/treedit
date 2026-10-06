@@ -55,7 +55,7 @@ from urllib.request import urlopen
 from treeparse import argument, cli, command, group, option
 
 from . import __version__
-from .term import Terminal, ws_accept
+from .term import Sessions, ws_accept
 
 DEFAULT_IGNORE = [".git", ".hg", ".svn", "__pycache__", "node_modules", ".venv",
                   ".DS_Store", "*.pyc", ".treedit-*", ".ruff_cache", "target"]
@@ -1158,7 +1158,7 @@ class Handler(BaseHTTPRequestHandler):
     loopback = True
     server_version = "treedit"
     token = secrets.token_urlsafe(18)  # proves a terminal connection comes from the page we served
-    term = None  # Terminal, when the agent pane is available (loopback only)
+    terms = None  # Sessions: the agent pane's terminals, when it is available (loopback only)
     agent = ""
     context: ClassVar[dict] = {}  # what the user has selected in the window, for `treedit context`
     window = None  # the treedit-app process we launched; Ctrl+W / Ctrl+Q in the page close it
@@ -1222,7 +1222,7 @@ class Handler(BaseHTTPRequestHandler):
     def route(self, method: str, path: str, q: dict):
         ws = self.ws
         if method == "GET" and path in ("/", "/index.html"):
-            cfg = json.dumps({"token": self.token, "agent": self.agent, "term": self.term is not None, "app": self.app,
+            cfg = json.dumps({"token": self.token, "agent": self.agent, "term": self.terms is not None, "app": self.app,
                               "ptyxis": bool(shutil.which("ptyxis") or shutil.which("gnome-terminal"))})
             page = PAGE.replace("/*TREEDIT_CONFIG*/{}", cfg.replace("</", "<\\/"))
             return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -1235,6 +1235,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (resources.files(__package__) / "vendor" / name).read_bytes(), VENDOR[name])
         if method == "GET" and path == "/api/term":
             return self.terminal(q)
+        if method == "GET" and path == "/api/terms":
+            return self.send_json(200, {"terms": self.sessions().list()})
         if method == "GET" and path == "/api/git/log":
             return self.send_json(200, ws.git_log(q.get("path", ""), q.get("whole") == "1", int(q.get("n", "150"))))
         if method == "GET" and path == "/api/git/show":
@@ -1285,8 +1287,15 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/context":
             Handler.context = {k: b[k] for k in ("paths", "lines", "quote", "focus") if b.get(k)}
             return self.send_json(200, {"ok": True})
+        if method == "POST" and path == "/api/term/new":
+            sid = self.sessions().add(str(b.get("agent") or ""))
+            return self.send_json(200, {"id": sid, "terms": self.sessions().list()})
+        if method == "POST" and path == "/api/term/close":
+            if not self.sessions().close(str(b.get("id", ""))):
+                raise HTTPError(404, "no such terminal")
+            return self.send_json(200, {"terms": self.sessions().list()})
         if method == "POST" and path == "/api/term/external":
-            return self.send_json(200, {"ok": True, "cmd": external_terminal(ws.root, self.term.env if self.term else
+            return self.send_json(200, {"ok": True, "cmd": external_terminal(ws.root, self.terms.env if self.terms else
                                                                              dict(os.environ), self.agent)})
         if method == "POST" and path == "/api/feedback":
             return self.send_json(200, ws.add_feedback(list(b.get("paths") or []), str(b.get("text", "")),
@@ -1315,10 +1324,17 @@ class Handler(BaseHTTPRequestHandler):
         """A feedback id from a request: N, or "name:N" when several folders are open."""
         return str(b.get("id", "")) if isinstance(self.ws, Mounts) else int(b.get("id", 0))
 
-    def terminal(self, q: dict):
-        """Upgrade to a WebSocket onto the shared agent terminal."""
-        if self.term is None:
+    def sessions(self) -> Sessions:
+        if self.terms is None:
             raise HTTPError(404, "the agent terminal is off (it needs a loopback --host)")
+        return self.terms
+
+    def terminal(self, q: dict):
+        """Upgrade to a WebSocket onto one of the agent pane's terminals (?id=, default the first)."""
+        terms = self.sessions()
+        term = terms.get(q.get("id") or next(iter(terms.terms), ""))
+        if term is None:
+            raise HTTPError(404, "no such terminal")
         if not secrets.compare_digest(q.get("token", ""), self.token):
             raise HTTPError(403, "bad terminal token")
         if self.headers.get("Origin") != f"http://{self.headers.get('Host')}":
@@ -1335,7 +1351,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
         self.close_connection = True
         try:
-            self.term.serve(self.connection, self.rfile)
+            term.serve(self.connection, self.rfile)
         except OSError:
             pass  # the page went away; never answer an upgraded socket with HTTP
 
@@ -1430,7 +1446,7 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
         env = {**{k: v for k, v in os.environ.items() if k != "TREEDIT_IN_APP"}, "TERM": "xterm-256color", "COLORTERM": "truecolor", "TREEDIT_ROOT": str(roots[0].root),
                "TREEDIT_ROOTS": os.pathsep.join(str(w.root) for w in roots),
                "TREEDIT_NOTES": str(ws.notes_path), "TREEDIT_URL": url}
-        Handler.term = Terminal(str(ws.root), env, agent)
+        Handler.terms = Sessions(str(ws.root), env, agent)
         print(f"  agent  {agent or 'shell'} (right pane)")
     exe = None if headless or browser else find_app()
     Handler.app = bool(exe) or os.environ.get("TREEDIT_IN_APP") == "1"
@@ -1443,8 +1459,8 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
             win.terminate()
             win.wait()
         finally:
-            if Handler.term:
-                Handler.term.stop()
+            if Handler.terms:
+                Handler.terms.stop()
             srv.shutdown()
             srv.server_close()
         return
@@ -1458,8 +1474,8 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
     except KeyboardInterrupt:
         print()
     finally:
-        if Handler.term:
-            Handler.term.stop()
+        if Handler.terms:
+            Handler.terms.stop()
         srv.server_close()
 
 

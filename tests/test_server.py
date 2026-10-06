@@ -10,13 +10,13 @@ from urllib.request import Request, urlopen
 import pytest
 
 from treedit.cli import Handler, Server, _ws, main
-from treedit.term import Terminal, ws_frame
+from treedit.term import Sessions, ws_frame
 
 
 @pytest.fixture
 def server(tree, monkeypatch):
     monkeypatch.setattr(Handler, "ws", _ws(str(tree), "", [], False), raising=False)
-    monkeypatch.setattr(Handler, "term", None)
+    monkeypatch.setattr(Handler, "terms", None)
     monkeypatch.setattr(Handler, "window", None)
     monkeypatch.setattr(Handler, "context", {})
     srv = Server(("127.0.0.1", 0), Handler)
@@ -128,8 +128,9 @@ def test_quit(server):
 
 
 def test_terminal(server, monkeypatch, tree):
-    term = Terminal(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "PS1": "$ "}, "echo hi-there")
-    monkeypatch.setattr(Handler, "term", term)
+    terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "PS1": "$ "}, "echo hi-there")
+    term = terms.get("1")
+    monkeypatch.setattr(Handler, "terms", terms)
     host, port = server.removeprefix("http://").split(":")
     token = Handler.token
 
@@ -180,7 +181,7 @@ def test_open_headless(tree, monkeypatch, capsys):
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     monkeypatch.setattr(Handler, "window", None)
-    monkeypatch.setattr(Handler, "term", None)
+    monkeypatch.setattr(Handler, "terms", None)
     t = threading.Thread(target=open_editor, args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False,
                                                    False, ["notes"]), daemon=True)
     t.start()
@@ -191,9 +192,38 @@ def test_open_headless(tree, monkeypatch, capsys):
             break
         except OSError:
             time.sleep(0.05)
-    assert Handler.term is not None and Handler.agent == ""
+    assert Handler.terms is not None and Handler.agent == ""
     assert call(base, "POST", "/api/quit", {})[1] == {"ok": True}
     t.join(5)
     assert not t.is_alive()
     out = capsys.readouterr().out
     assert f"open   {base}/" in out and "agent  shell" in out
+
+
+def test_terminal_sessions(server, monkeypatch, tree):
+    terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "PS1": "$ "}, "")
+    monkeypatch.setattr(Handler, "terms", terms)
+    assert call(server, "GET", "/api/terms")[1]["terms"] == [{"id": "1", "label": "sh", "agent": "", "alive": False}]
+    status, out = call(server, "POST", "/api/term/new", {"agent": "echo second-pane"})
+    assert status == 200 and out["id"] == "2" and [t["label"] for t in out["terms"]] == ["sh", "echo second-pane"]
+    host, port = server.removeprefix("http://").split(":")
+    s = socket.create_connection((host, int(port)), timeout=5)
+    s.sendall((f"GET /api/term?token={Handler.token}&id=2 HTTP/1.1\r\nHost: {host}:{port}\r\n"
+               f"Origin: http://{host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").encode())
+    data, deadline = b"", time.time() + 10
+    while b"second-pane" not in data.split(b"echo second-pane")[-1] and time.time() < deadline:
+        data += s.recv(65536)
+    assert b'"label": "echo second-pane"' in data and terms.get("2").alive and not terms.get("1").alive
+    assert [t["id"] for t in call(server, "POST", "/api/term/close", {"id": "2"})[1]["terms"]] == ["1"]
+    data, deadline = b"", time.time() + 5
+    while b'"closed"' not in data and time.time() < deadline:
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        data += chunk
+    assert b'"closed"' in data
+    s.close()
+    assert call(server, "POST", "/api/term/close", {"id": "2"})[0] == 404
+    assert call(server, "GET", "/api/term?id=9&token=" + Handler.token)[0] == 404
+    terms.stop()

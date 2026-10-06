@@ -226,3 +226,44 @@ class Terminal:
                     self.restart()
         finally:
             self.clients.discard(client)
+
+
+# ---------- the sessions of the pane ----------
+class Sessions:
+    """The terminals of the agent pane, in the order they were added: each its own shell or agent preset
+    on a pseudo-terminal, started in CWD with ENV. The first runs AGENT; more are added from the page."""
+
+    def __init__(self, cwd: str, env: dict, agent: str = ""):
+        self.cwd, self.env = cwd, env
+        self.lock = threading.Lock()
+        self.terms: dict = {}
+        self.next = 1
+        self.add(agent)
+
+    def add(self, agent: str = "") -> str:
+        with self.lock:
+            sid = str(self.next)
+            self.next += 1
+            self.terms[sid] = Terminal(self.cwd, self.env, agent.strip())
+            return sid
+
+    def get(self, sid: str):
+        return self.terms.get(sid)
+
+    def close(self, sid: str) -> bool:
+        with self.lock:
+            t = self.terms.pop(sid, None)
+        if t is None:
+            return False
+        t.stop()
+        for c in list(t.clients):  # tell its pages the pane is gone
+            c.send(1, json.dumps({"t": "closed"}).encode())
+            c.send(8, b"")
+        return True
+
+    def list(self) -> list:
+        return [{"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive} for sid, t in list(self.terms.items())]
+
+    def stop(self) -> None:
+        for t in list(self.terms.values()):
+            t.stop()

@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
+Editor and annotator aimed at agent assisted editing of skill trees. 
 Review a directory tree with an agent collaborator: annotate files and folders, leave feedback on
 files, lines or the structure, and let the agent answer it from the CLI.
 A [treeparse](https://github.com/wr1/treeparse) toolbox with a native (Tauri) window.
@@ -83,7 +84,8 @@ python -m treedit print PATH # without installing the script
   WebSocket) running a shell or an agent preset, started in the tree root with `$TREEDIT_ROOT`,
   `$TREEDIT_NOTES` and `$TREEDIT_URL` set:
   `treedit open . --agent claude` (or `'hermes --skills treedit'`; default `$TREEDIT_AGENT`, else a shell;
-  `make open AGENT=claude`). The session survives reloads and keeps running when the pane is hidden.
+  `make open AGENT=claude`). **+** adds more terminals - another agent (harness) or a plain shell - stacked
+  vertically; the buttons type into the one you last clicked. Sessions survive reloads and keep running when the pane is hidden.
   Buttons type into it: **→ Agent** on a feedback item, **Selection**, **Roll** (an agent roll: pick up
   your edits or new files, commit them as yours, tidy up frontmatter/names/spelling/doubled text, then the feedback), **Loop roll** (the same every 3 minutes; `/loop 3m` in Claude Code), **Open feedback**; **Ptyxis** opens
   the same session setup in a separate window. Ctrl+Shift+C/V copy and paste.

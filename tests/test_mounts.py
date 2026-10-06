@@ -92,7 +92,7 @@ def test_git_per_folder(two, repo):
 
 def test_server_with_two_folders(two, monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(Handler, "ws", two, raising=False)
-    monkeypatch.setattr(Handler, "term", None)
+    monkeypatch.setattr(Handler, "terms", None)
     srv = Server(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_port}"
