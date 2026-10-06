@@ -25,6 +25,7 @@ Without the `treedit-app` window, `treedit open` uses your web browser.
 ```sh
 make open ROOT=PATH          # build the app window if needed and open PATH (make web: browser)
 treedit open PATH            # app window if built, else the browser (--browser, --headless)
+treedit open A B C           # several folders in one tree, each with its own notes
 treedit print PATH           # print the annotated tree, coloured by word count
 treedit annotation ls        # your comments on files/folders (also: get, set, mv)
 treedit fb ls                # open feedback for the agent (also: add, reply, done, reopen, rm)
@@ -59,6 +60,9 @@ python -m treedit print PATH # without installing the script
   at once (structure feedback such as “merge these”). Items are open or done; the agent answers
   with `treedit fb reply ID TEXT --done` and the reply appears live. Open items show as ● in the
   tree, in the **Feedback** overview, and as `! #N` lines in `treedit print`.
+- Several folders at once (`treedit open A B`, `make open ROOT="A B"`): each is a top-level folder of the
+  tree and keeps its own `.treenotes.json`, gitignore, drafts and history; feedback ids read `name:N`.
+  The agent pane starts in their common parent, with `$TREEDIT_ROOTS` listing them.
 - Live refresh when agents or other editors change the tree.
 - Unsaved edits are never dropped: every 1.5 s they are kept as a unified diff against the version
   they started from, in `~/.local/state/treedit/` (outside the project). Reopen treedit and they come

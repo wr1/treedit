@@ -12,7 +12,10 @@ full schema on demand:
 
 Reviewing with the user (they see the tree, your replies and every file change live in the treedit window):
 1. `treedit fb ls` - open feedback: id, path(s), line span with the quoted code, and the request.
-   Run it in the tree root, or add `-C "$TREEDIT_ROOT"`.
+   Run it in the tree root, or add `-C "$TREEDIT_ROOT"`. Several folders open in one window:
+   `$TREEDIT_ROOTS` lists them (separated by `:`); each keeps its own annotations and feedback, so run
+   `fb ls`, `edits` and `annotation ls` in each (`-C <folder>`). In the window and in `treedit context`
+   their paths start with the folder's name, and feedback ids read `name:N` (`N` for the CLI).
 2. `treedit context` - what the user has selected in the window right now (paths, lines).
 3. Git keeps every diff attributable - the user's or yours - whether the user saved it or not:
    a. Before you start, and again before each commit: `git status` and `treedit edits`.

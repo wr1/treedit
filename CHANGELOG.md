@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `treedit open A B` (and `print`): several folders in one tree, each with its own notes, feedback,
+  gitignore, drafts and history; feedback ids read `name:N`, and `$TREEDIT_ROOTS` lists the folders.
+- The editor merges your unsaved edits three-way with changes on disk, so text is never doubled.
+
 ## 0.1.0 - 2026-10-05
 
 First release.

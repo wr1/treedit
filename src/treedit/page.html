@@ -477,7 +477,8 @@ function renderTree() {
     else if (showCounts && n.type === 'file') r.append(el('span', 'count', countText(n)));
     else if (showCounts && isDir && n.w) r.append(el('span', 'count', `${n.w.toLocaleString()} w`));
     if (heat && n.rank != null) { r.classList.add('heat'); r.style.setProperty('--hc', heatColor(n.rank)); }
-    r.title = note ? `${n.path || S.rootName}\n\n${note}` : (n.path || S.rootName);
+    const where = n.mount || n.path || S.rootName;  // an opened folder shows its full path
+    r.title = note ? `${where}\n\n${note}` : where;
     r.onclick = e => {
       if (e.ctrlKey || e.metaKey || e.shiftKey) return multiClick(n.path, e.shiftKey, e.ctrlKey || e.metaKey);
       if (S.multi.size) return leaveMulti(n.path);
@@ -736,6 +737,7 @@ async function loadTree() {
     for (let i = 0; i < parts.length; i++) { const k = parts.slice(0, i).join('/'); if (!(S.dirFresh.get(k) >= c.at)) S.dirFresh.set(k, c.at); }
   }
   S.byPath = new Map(); index(S.tree); rankBySize(S.tree);
+  if (firstLoad && d.tree.multi) for (const m of d.tree.children) S.expanded.add(m.path);  // several folders: show each
   for (const p of S.multi) if (!S.byPath.has(p)) S.multi.delete(p);
   await hydrateDrafts();  // unsaved edits from an earlier session come back as buffers
   if (!firstLoad) for (const [p, n] of S.byPath) { const o = prev.get(p); if (!o || o.mtime !== n.mtime || o.size !== n.size) S.flashPaths.add(p); }
@@ -1474,8 +1476,10 @@ function fbItem(f, showPaths) {
   if (showPaths) for (const p of f.paths) { const a = el('a', null, shown(p)); a.onclick = () => goTo(p); h.append(a); }
   h.append(el('span', 'spacer'),
     btn(f.status === 'done' ? 'Reopen' : 'Done', () => setFb(f.id, { status: f.status === 'done' ? 'open' : 'done' })),
-    ...(CFG.term && f.status !== 'done' ? [btn('→ Agent', () => sendToAgent(
-      `Please address treedit feedback #${f.id} (see \`treedit fb ls\`), then answer with \`treedit fb reply ${f.id} "…" --done\`.`, true))] : []),
+    ...(CFG.term && f.status !== 'done' ? [btn('→ Agent', () => {
+      const n = f.num ?? f.id, c = f.root ? ` -C "${f.root}"` : '';  // several folders open: feedback lives in f.root
+      sendToAgent(`Please address treedit feedback #${n} (see \`treedit fb${c} ls\`), then answer with \`treedit fb${c} reply ${n} "…" --done\`.`, true);
+    })] : []),
     btn('Edit', () => startDraft({ id: f.id, paths: f.paths, lines: f.lines, text: f.text })),
     btn('×', () => delFb(f), 'danger'));
   d.append(h);

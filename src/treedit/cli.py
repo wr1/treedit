@@ -49,7 +49,7 @@ from importlib import resources
 from pathlib import Path
 from typing import ClassVar, List, Optional
 from urllib.error import URLError
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import urlopen
 
 from treeparse import argument, cli, command, group, option
@@ -923,6 +923,179 @@ class Workspace:
         return "\n".join(out) + "\n"
 
 
+def mount_names(roots: list) -> list:
+    """A unique top-level name per root: its folder name, then parent/name, then a -2, -3 suffix."""
+    out: list = []
+    for r in roots:
+        name = r.name or "root"
+        if name in out:
+            name = f"{r.parent.name}/{name}".replace("/", "-")
+        base, i = name, 2
+        while name in out:
+            name, i = f"{base}-{i}", i + 1
+        out.append(name)
+    return out
+
+
+class Mounts:
+    """Several roots shown as one tree, each as a top-level folder named by mount_names(). Paths are
+    "name/path/in/root"; every call goes to that root's Workspace, so each keeps its own notes file,
+    gitignore, drafts and change tracking. Feedback ids become "name:N"."""
+
+    def __init__(self, workspaces: list):
+        self.mounts = dict(zip(mount_names([w.root for w in workspaces]), workspaces, strict=True))
+        self.root = Path(os.path.commonpath([str(w.root) for w in workspaces]))  # where the terminal starts
+        self.label = " + ".join(self.mounts)
+        self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces)
+
+    @staticmethod
+    def _pre(name: str, rel: str) -> str:
+        return name if rel in ("", ".") else f"{name}/{rel}"
+
+    def split(self, rel: str):
+        """(name, workspace, path inside it) for REL; a 400 for the shared top level."""
+        parts = Workspace.parts(rel)
+        if not parts or parts[0] not in self.mounts:
+            raise HTTPError(400, "pick a path inside one of the opened folders")
+        return parts[0], self.mounts[parts[0]], "/".join(parts[1:])
+
+    def _one(self, rels: list):
+        hits = {self.split(r)[0] for r in rels}
+        if len(hits) != 1:
+            raise HTTPError(400, "paths must be inside one opened folder")
+        name = hits.pop()
+        return name, self.mounts[name], [self.split(r)[2] for r in rels]
+
+    def _prefix_map(self, get) -> dict:
+        return {self._pre(name, k): v for name, w in self.mounts.items() for k, v in get(w).items()}
+
+    def _fid(self, fid):
+        name, _, num = str(fid).rpartition(":")
+        if name not in self.mounts or not num.isdigit():
+            raise HTTPError(404, f"no feedback #{fid}")
+        return self.mounts[name], int(num)
+
+    def _fb_out(self, name: str, f: dict) -> dict:
+        return {**f, "id": f"{name}:{f['id']}", "num": f["id"], "root": str(self.mounts[name].root),
+                "paths": [self._pre(name, p) for p in f["paths"]]}
+
+    # ---------- the tree ----------
+    def scan(self) -> dict:
+        kids = []
+        for name, w in self.mounts.items():
+            t = w.scan()
+
+            def walk(n: dict, name=name) -> None:
+                n["path"] = self._pre(name, n["path"])
+                for c in n.get("children") or []:
+                    walk(c)
+
+            walk(t)
+            t["name"], t["mount"] = name, str(w.root)
+            kids.append(t)
+        return {"name": self.label, "path": "", "type": "dir", "multi": True, "children": kids}
+
+    def version(self) -> str:
+        return sha1("|".join(w.version() for w in self.mounts.values()).encode())[:16]
+
+    @property
+    def changes(self) -> dict:
+        return self._prefix_map(lambda w: w.changes)
+
+    @property
+    def line_changes(self) -> dict:
+        return self._prefix_map(lambda w: w.line_changes)
+
+    def changes_for(self, root: str):
+        """(root, changes) of the opened folder at ROOT, for `treedit edits` in that folder."""
+        w = next((w for w in self.mounts.values() if str(w.root) == root), None)
+        return (str(w.root), w.changes) if w else (self.label, {})
+
+    def mark_ui(self, rel: str) -> None:
+        _, w, sub = self.split(rel)
+        w.mark_ui(sub)
+
+    def export(self, counts: bool = True, color: bool = False) -> str:
+        return "\n".join(w.export(counts, color) for w in self.mounts.values())
+
+    # ---------- notes & feedback ----------
+    def read_notes(self) -> dict:
+        return self._prefix_map(lambda w: w.read_notes())
+
+    def set_note(self, rel: str, text: str) -> None:
+        _, w, sub = self.split(rel)
+        w.set_note(sub, text)
+
+    def move_notes(self, src: str, dst: str) -> None:
+        _, w, (s, d) = self._one([src, dst])
+        w.move_notes(s, d)
+
+    def refresh_anchors(self) -> list:
+        return [self._fb_out(name, f) for name, w in self.mounts.items() for f in w.refresh_anchors()]
+
+    def add_feedback(self, paths: list, text: str, lines=None, quote: str = "") -> dict:
+        if not paths:
+            raise HTTPError(400, "feedback needs at least one path")
+        name, w, subs = self._one(paths)
+        return self._fb_out(name, w.add_feedback(subs, text, lines, quote))
+
+    def update_feedback(self, fid, **changes) -> dict:
+        w, num = self._fid(fid)
+        name = next(n for n, x in self.mounts.items() if x is w)
+        return self._fb_out(name, w.update_feedback(num, **changes))
+
+    def delete_feedback(self, fid) -> None:
+        w, num = self._fid(fid)
+        w.delete_feedback(num)
+
+    # ---------- drafts ----------
+    def read_drafts(self) -> dict:
+        return self._prefix_map(lambda w: w.read_drafts())
+
+    def set_draft(self, rel: str, draft) -> None:
+        _, w, sub = self.split(rel)
+        w.set_draft(sub, draft)
+
+    # ---------- files ----------
+    def read_file(self, rel: str) -> dict:
+        name, w, sub = self.split(rel)
+        return {**w.read_file(sub), "path": self._pre(name, w.norm(sub))}
+
+    def write_file(self, rel: str, content: str, base_hash, force: bool) -> dict:
+        name, w, sub = self.split(rel)
+        try:
+            return w.write_file(sub, content, base_hash, force)
+        except HTTPError as e:
+            if e.extra.get("disk"):
+                e.extra["disk"]["path"] = self._pre(name, e.extra["disk"]["path"])
+            raise
+
+    def git_log(self, rel: str, whole: bool, n: int) -> dict:
+        name, w, sub = self.split(rel)
+        out = w.git_log(sub, whole, n)
+        return {**out, "scope": out["scope"] if whole else self._pre(name, sub)}
+
+    def git_show(self, rel: str, whole: bool, commit: str) -> str:
+        _, w, sub = self.split(rel)
+        return w.git_show(sub, whole, commit)
+
+    def create(self, rel: str, kind: str) -> bool:
+        _, w, sub = self.split(rel)
+        return w.create(sub, kind)
+
+    def rename(self, src: str, dst: str) -> None:
+        _, w, (s, d) = self._one([src, dst])
+        if not s:
+            raise HTTPError(400, "an opened folder cannot be moved from treedit")
+        w.rename(s, d)
+
+    def delete(self, rel: str) -> None:
+        _, w, sub = self.split(rel)
+        if not sub:
+            raise HTTPError(400, "an opened folder cannot be deleted from treedit")
+        w.delete(sub)
+
+
 class Handler(BaseHTTPRequestHandler):
     ws: Workspace
     loopback = True
@@ -1009,14 +1182,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, ws.git_show(q.get("path", ""), q.get("whole") == "1", q.get("commit", "")).encode("utf-8"),
                              "text/plain; charset=utf-8")
         if method == "GET" and path == "/api/changes":
-            return self.send_json(200, {"root": str(ws.root), "changes": ws.changes, "now": time.time()})
+            root, changes = ws.changes_for(q.get("root", "")) if isinstance(ws, Mounts) else (str(ws.root), ws.changes)
+            return self.send_json(200, {"root": root, "changes": changes, "now": time.time()})
         if method == "GET" and path == "/api/context":
             return self.send_json(200, Handler.context)
         if method == "GET" and path == "/api/version":
             return self.send_json(200, {"version": ws.version()})
         if method == "GET" and path == "/api/tree":
             v = ws.version()
-            return self.send_json(200, {"root": ws.root.name, "rootPath": str(ws.root),
+            multi = isinstance(ws, Mounts)
+            return self.send_json(200, {"root": ws.label if multi else ws.root.name, "rootPath": str(ws.root),
                                         "notesFile": str(ws.notes_path), "version": v,
                                         "tree": ws.scan(), "notes": ws.read_notes(),
                                         "feedback": ws.refresh_anchors(), "changes": ws.changes,
@@ -1060,10 +1235,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, ws.add_feedback(list(b.get("paths") or []), str(b.get("text", "")),
                                                        b.get("lines"), str(b.get("quote") or "")))
         if method == "PUT" and path == "/api/feedback":
-            return self.send_json(200, ws.update_feedback(int(b.get("id", 0)), text=b.get("text"),
+            return self.send_json(200, ws.update_feedback(self.fid(b), text=b.get("text"),
                                                           status=b.get("status"), reply=b.get("reply")))
         if method == "POST" and path == "/api/feedback-delete":
-            ws.delete_feedback(int(b.get("id", 0)))
+            ws.delete_feedback(self.fid(b))
             return self.send_json(200, {"ok": True})
         if method == "POST" and path == "/api/note-move":
             ws.move_notes(b.get("from", ""), b.get("to", ""))
@@ -1078,6 +1253,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True})
         raise HTTPError(404, "no such endpoint")
 
+
+    def fid(self, b: dict):
+        """A feedback id from a request: N, or "name:N" when several folders are open."""
+        return str(b.get("id", "")) if isinstance(self.ws, Mounts) else int(b.get("id", 0))
 
     def terminal(self, q: dict):
         """Upgrade to a WebSocket onto the shared agent terminal."""
@@ -1137,6 +1316,11 @@ def _ws(root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitig
                      DEFAULT_SHOW if show is None else show)
 
 
+def roots_of(root) -> list:
+    """The folders to open, once each (a single path is fine too)."""
+    return list(dict.fromkeys([root] if isinstance(root, str) else root or ["."]))
+
+
 class Server(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
         if not isinstance(sys.exc_info()[1], ConnectionError):  # a closed tab is not an error
@@ -1157,11 +1341,15 @@ def find_app():
     return str(max(builds, key=lambda b: b.stat().st_mtime)) if builds else None
 
 
-def open_editor(root: str, port: int, host: str, browser: bool, headless: bool, agent: str,
+def open_editor(root: List[str], port: int, host: str, browser: bool, headless: bool, agent: str,
                 notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
     """Serve the editor on HOST:PORT (next free port if taken) and show it in the treedit-app window.
-    Closing the window stops the server. Falls back to the browser when the app is not built."""
-    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    Closing the window stops the server. Falls back to the browser when the app is not built.
+    Several ROOTs open side by side, each a top-level folder of the tree with its own notes file."""
+    roots = [_ws(r, notes, ignore, follow_outside, no_gitignore, show) for r in roots_of(root)]
+    if notes and len(roots) > 1:
+        sys.exit("treedit: --notes works with one folder; each opened folder keeps its own notes file")
+    ws = roots[0] if len(roots) == 1 else Mounts(roots)
     Handler.ws = ws
     Handler.loopback = host in ("127.0.0.1", "localhost", "::1")
     srv = None
@@ -1175,12 +1363,15 @@ def open_editor(root: str, port: int, host: str, browser: bool, headless: bool, 
         sys.exit(f"treedit: no free port in {port}-{port + 19}")
     shown = "127.0.0.1" if host in ("0.0.0.0", "", "::") else host
     url = f"http://{shown}:{srv.server_port}/"
-    print(f"treedit  {ws.root}\n  notes  {ws.notes_path}\n  open   {url}")
+    for w in roots:
+        print(f"treedit  {w.root}\n  notes  {w.notes_path}")
+    print(f"  open   {url}")
     ws.scan()  # baseline for change tracking
     agent = agent or os.environ.get("TREEDIT_AGENT", "")
     Handler.agent = agent
     if Handler.loopback:
-        env = {**{k: v for k, v in os.environ.items() if k != "TREEDIT_IN_APP"}, "TERM": "xterm-256color", "COLORTERM": "truecolor", "TREEDIT_ROOT": str(ws.root),
+        env = {**{k: v for k, v in os.environ.items() if k != "TREEDIT_IN_APP"}, "TERM": "xterm-256color", "COLORTERM": "truecolor", "TREEDIT_ROOT": str(roots[0].root),
+               "TREEDIT_ROOTS": os.pathsep.join(str(w.root) for w in roots),
                "TREEDIT_NOTES": str(ws.notes_path), "TREEDIT_URL": url}
         Handler.term = Terminal(str(ws.root), env, agent)
         print(f"  agent  {agent or 'shell'} (right pane)")
@@ -1215,13 +1406,14 @@ def open_editor(root: str, port: int, host: str, browser: bool, headless: bool, 
         srv.server_close()
 
 
-def print_tree(root: str, no_counts: bool, no_color: bool, color: bool,
+def print_tree(root: List[str], no_counts: bool, no_color: bool, color: bool,
                notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
     """Print the tree with annotations and open feedback as '# ...' comments. On a terminal rows are
     coloured by document size in the tree (dim, default, amber, red; dark grey = no words)."""
-    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
     use = not no_color and (color or (sys.stdout.isatty() and not os.environ.get("NO_COLOR")))
-    sys.stdout.write(ws.export(counts=not no_counts, color=use))
+    for i, r in enumerate(roots_of(root)):
+        sys.stdout.write(("\n" if i else "") + _ws(r, notes, ignore, follow_outside, no_gitignore, show)
+                         .export(counts=not no_counts, color=use))
 
 
 def note_get(path: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
@@ -1348,7 +1540,7 @@ def show_edits(url: str, root: str, notes: str, ignore: List[str], follow_outsid
         print("saved in the editor: unknown (no treedit window; set $TREEDIT_URL or --url)")
         return
     try:
-        with urlopen(base + "/api/changes", timeout=3) as r:
+        with urlopen(f"{base}/api/changes?{urlencode({'root': str(ws.root)})}", timeout=3) as r:
             data = json.loads(r.read())
     except (URLError, OSError, ValueError):
         print(f"saved in the editor: unknown (no treedit window at {base})")
@@ -1370,7 +1562,10 @@ description: Use when working in a project the user reviews with treedit (a .tre
 SKILL_WORKFLOW = """
 Reviewing with the user (they see the tree, your replies and every file change live in the treedit window):
 1. `treedit fb ls` - open feedback: id, path(s), line span with the quoted code, and the request.
-   Run it in the tree root, or add `-C "$TREEDIT_ROOT"`.
+   Run it in the tree root, or add `-C "$TREEDIT_ROOT"`. Several folders open in one window:
+   `$TREEDIT_ROOTS` lists them (separated by `:`); each keeps its own annotations and feedback, so run
+   `fb ls`, `edits` and `annotation ls` in each (`-C <folder>`). In the window and in `treedit context`
+   their paths start with the folder's name, and feedback ids read `name:N` (`N` for the CLI).
 2. `treedit context` - what the user has selected in the window right now (paths, lines).
 3. Git keeps every diff attributable - the user's or yours - whether the user saved it or not:
    a. Before you start, and again before each commit: `git status` and `treedit edits`.
@@ -1447,7 +1642,7 @@ def skill_install(claude: bool, hermes: bool, dir: str) -> None:
         print(t / "treedit" / "SKILL.md")
 
 
-ROOT = argument(name="root", arg_type=str, nargs="?", default=".", help="folder to open")
+ROOT = argument(name="root", arg_type=str, nargs="*", default=["."], help="folder(s) to open")
 NOTE_ROOT = option(flags=["--root", "-C"], arg_type=str, default=".", help="tree root")
 SHARED = [
     option(flags=["--show"], arg_type=str, nargs="*", default=DEFAULT_SHOW,
