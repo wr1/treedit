@@ -84,7 +84,7 @@ python -m treedit print PATH # without installing the script
   `treedit open . --agent claude` (or `'hermes --skills treedit'`; default `$TREEDIT_AGENT`, else a shell;
   `make open AGENT=claude`). The session survives reloads and keeps running when the pane is hidden.
   Buttons type into it: **→ Agent** on a feedback item, **Selection**, **Roll** (an agent roll: pick up
-  your edits or new files, commit them as yours, tidy up frontmatter/names/spelling/doubled text, then the feedback), **Open feedback**; **Ptyxis** opens
+  your edits or new files, commit them as yours, tidy up frontmatter/names/spelling/doubled text, then the feedback), **Loop roll** (the same every 3 minutes; `/loop 3m` in Claude Code), **Open feedback**; **Ptyxis** opens
   the same session setup in a separate window. Ctrl+Shift+C/V copy and paste.
 - `treedit context` (inside the pane) prints what you have selected: paths, lines and their text.
 - `treedit skill install` writes the agent skill to `~/.claude/skills/treedit/` and `~/.hermes/skills/treedit/`

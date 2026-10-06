@@ -1674,6 +1674,10 @@ Agent roll - when the user asks you to "roll" (pick up their manual edits and ac
      paragraph pasted twice, a repeated heading, list item or frontmatter key. When two near-copies
      differ, keep the fuller one and say in your summary what you dropped.
 3. Then work through `treedit fb ls` as above, and end with a short summary of what you did.
+
+Loop roll - the same roll repeated every few minutes (in Claude Code: `/loop 3m ...`), while the user
+keeps editing. Each tick picks up what changed since the last one; a quiet tick (no new edits, no open
+feedback) makes no commits and answers in one line. The user ends the loop when they are done.
 """
 
 

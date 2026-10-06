@@ -259,6 +259,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <div class="tbar"><span id="tstate"></span><b id="tlabel">shell</b><span class="spacer"></span>
       <button id="t-sel" title="Type a reference to what you selected in the tree or editor">Selection</button>
       <button id="t-roll" title="Agent roll: pick up your edits, commit them as yours, tidy up (frontmatter, names, spelling, doubled text), then work through the feedback">Roll</button>
+      <button id="t-loop" title="Loop roll: an agent roll every 3 minutes, picking up and tidying your changes and answering feedback as it comes (Claude Code: /loop 3m)">Loop roll</button>
       <button id="t-fb" title="Ask the agent to work through the open feedback">Open feedback</button>
       <button id="t-ext" title="Open the agent in a separate Ptyxis window">Ptyxis</button>
       <button id="t-restart" title="End this session and start a new one">Restart</button>
@@ -1779,7 +1780,12 @@ if (CFG.term) {
   $('#t-close').onclick = () => openTerm(false);
   $('#t-restart').onclick = () => { if (confirm('End this session and start a new one?')) termSend({ t: 'restart' }); };
   $('#t-sel').onclick = () => { const t = contextText(); if (!t) return toast('Select something in the tree first', true); sendToAgent(`In treedit I selected ${t} (see \`treedit context\`). `, false); };
-  $('#t-roll').onclick = () => sendToAgent('Do a treedit agent roll: pick up my edits (`treedit edits`), commit them as mine, do the housekeeping, then work through the open feedback.', true);
+  const ROLL = 'Do a treedit agent roll: pick up my edits (`treedit edits`), commit them as mine, do the housekeeping, then work through the open feedback.';
+  $('#t-roll').onclick = () => sendToAgent(ROLL, true);
+  $('#t-loop').onclick = () => {  // Claude Code repeats it with /loop; other agents get the schedule in words
+    const quiet = ' If nothing changed since the last roll and no feedback is open, say so in one line and do nothing else.';
+    sendToAgent(/^claude\b/.test(CFG.agent || '') ? `/loop 3m ${ROLL}${quiet}` : `Every 3 minutes until I say stop: ${ROLL.replace('Do a', 'do a')}${quiet}`, true);
+  };
   $('#t-fb').onclick = () => sendToAgent('Work through the open treedit feedback (`treedit fb ls`) and answer each item with `treedit fb reply ID "…" --done`.', true);
   $('#t-ext').hidden = !CFG.ptyxis;
   $('#t-ext').onclick = async () => { try { await api('POST', '/api/term/external', {}); toast('Opened in a new terminal window'); } catch (e) { toast(e.message, true); } };
