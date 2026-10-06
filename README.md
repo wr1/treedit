@@ -42,6 +42,8 @@ python -m treedit print PATH # without installing the script
   switching files and views; word-sized steps; a disk reload (an agent edit) is one step, so you can undo it.
 - Find: Ctrl+F (pre-filled from a one-line selection); Enter / Shift+Enter or F3 / Shift+F3 cycle, "n of m",
   Aa for case; matches tick the overview strip; Esc leaves the match selected. Main and stacked editors.
+- Text size: Ctrl+scroll over the editor (or Ctrl+= / Ctrl+- / Ctrl+0) zooms the main and the stacked editors;
+  remembered across sessions.
 - Line wrapping (on by default; **Wrap** in the status bar or Alt+Z), in the main and the stacked editors.
 - Tab / Shift+Tab indent / outdent the selected lines (Shift+Tab alone: the current line); 4 spaces in
   Python, 2 elsewhere, tabs in tab-indented files.

@@ -125,8 +125,8 @@ section#detail{flex:1;min-width:0;display:flex;flex-direction:column;position:re
 body.wrap #editor,body.wrap #hl,body.wrap .sedit textarea,body.wrap .sedit .shl{white-space:pre-wrap;overflow-wrap:anywhere}
 body.wrap #editor{overflow-x:hidden}
 #b-wrap.on{border-color:var(--accent);color:var(--accent)}
-#editor{flex:1;position:relative;border:0;resize:none;padding:12px 16px;font:13.5px/1.55 var(--mono);background:transparent;color:var(--text);tab-size:4;outline:none;white-space:pre;overflow:auto}
-#hl{position:absolute;inset:0;margin:0;padding:12px 56px 56px 16px;font:13.5px/1.55 var(--mono);tab-size:4;white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
+#editor{flex:1;position:relative;border:0;resize:none;padding:12px 16px;font:calc(13.5px * var(--ez, 1))/1.55 var(--mono);background:transparent;color:var(--text);tab-size:4;outline:none;white-space:pre;overflow:auto}
+#hl{position:absolute;inset:0;margin:0;padding:12px 56px 56px 16px;font:calc(13.5px * var(--ez, 1))/1.55 var(--mono);tab-size:4;white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
 #editwrap:not(.hl) #hl{display:none}
 #editwrap.hl #editor{color:transparent;caret-color:var(--text)}
 #editwrap.hl #editor::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
@@ -183,9 +183,9 @@ body.wrap #editor{overflow-x:hidden}
 .mfile .mh:hover .name{color:var(--accent)}
 .sedit{position:relative;background:var(--bg)}
 .sedit.flash{animation:flash 1.2s ease-out}
-.sedit .shl{position:absolute;inset:0;margin:0;padding:10px 16px;font:13px/1.5 var(--mono);white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
+.sedit .shl{position:absolute;inset:0;margin:0;padding:10px 16px;font:calc(13px * var(--ez, 1))/1.5 var(--mono);white-space:pre;overflow:hidden;pointer-events:none;color:var(--text)}
 .sedit:not(.hl) .shl{display:none}
-.sedit textarea{position:relative;display:block;width:100%;margin:0;border:0;resize:none;padding:10px 16px;font:13px/1.5 var(--mono);white-space:pre;overflow-x:auto;overflow-y:hidden;background:transparent;color:var(--text);outline:none}
+.sedit textarea{position:relative;display:block;width:100%;margin:0;border:0;resize:none;padding:10px 16px;font:calc(13px * var(--ez, 1))/1.5 var(--mono);white-space:pre;overflow-x:auto;overflow-y:hidden;background:transparent;color:var(--text);outline:none}
 .sedit textarea:focus{box-shadow:inset 3px 0 0 var(--accent)}
 .sedit.hl textarea{color:transparent;caret-color:var(--text)}
 .sedit.hl textarea::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
@@ -824,7 +824,8 @@ function renderDirInfo(n) {
 }
 /* ---------- multi-selection view (each text file is an editor) ---------- */
 let mGen = 0;
-const SLH = 19.5;  // .sedit line height: 13px * 1.5
+let EZ = 1;  // text size of the editors (setZoom)
+const SLH = () => 19.5 * EZ;  // .sedit line height: 13px * 1.5, times the text size
 async function renderMulti() {
   const gen = ++mGen, paths = [...S.byPath.keys()].filter(p => S.multi.has(p));
   $('#mcount').textContent = `${paths.length} selected · edit in place, Ctrl/Cmd+S saves the focused file · Ctrl/Cmd/Shift+click to change, Esc clears`;
@@ -951,7 +952,7 @@ function paintSection(st) {
     const list = $('#mlist'), top = list.scrollTop;
     st.ta.style.height = '0px'; st.ta.style.height = (st.ta.scrollHeight + 2) + 'px';
     list.scrollTop = top;
-  } else st.ta.style.height = (v.split('\n').length * SLH + 20 + 16) + 'px';  // fit the text: the list scrolls, not the editor
+  } else st.ta.style.height = (v.split('\n').length * SLH() + 20 + 16) + 'px';  // fit the text: the list scrolls, not the editor
   sectionMarks(st);
 }
 function setWrap(on) {
@@ -961,6 +962,33 @@ function setWrap(on) {
   for (const st of S.msec.values()) if (st.ta) paintSection(st);
 }
 $('#b-wrap').onclick = () => setWrap(!document.body.classList.contains('wrap'));
+/* text size of the editors: Ctrl+scroll, or Ctrl+= / Ctrl+- / Ctrl+0, over the main or the stacked editors */
+function setZoom(z, quiet) {
+  const old = EZ;
+  EZ = Math.min(3, Math.max(0.6, Math.round(z * 10) / 10));
+  document.documentElement.style.setProperty('--ez', EZ); store('ezoom', EZ);
+  if (EZ === old) return;
+  editor.scrollTop *= EZ / old; editor.scrollLeft *= EZ / old;  // keep the same lines in view
+  syncHL(); renderMarks();
+  for (const st of S.msec.values()) if (st.ta) paintSection(st);
+  if (!quiet) toast(`Text size ${Math.round(EZ * 100)}%`);
+}
+const zoomArea = t => !!(t && t.closest && t.closest('#editwrap, #mlist'));
+let zoomAcc = 0;
+document.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey) || !zoomArea(e.target)) return;
+  e.preventDefault();  // not the page zoom
+  zoomAcc += e.deltaY;  // touchpad pinches send many small steps: one size step per mouse-wheel notch
+  if (Math.abs(zoomAcc) < 50) return;
+  setZoom(EZ + (zoomAcc < 0 ? 0.1 : -0.1)); zoomAcc = 0;
+}, { passive: false });
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !zoomArea(document.activeElement)) return;
+  const step = { '=': 0.1, '+': 0.1, '-': -0.1, '_': -0.1 }[e.key];
+  if (step === undefined && e.key !== '0') return;
+  e.preventDefault(); setZoom(step === undefined ? 1 : EZ + step);
+});
+setZoom(load('ezoom', 1), true);
 new ResizeObserver(() => { if (document.body.classList.contains('wrap')) { syncHL(); renderMarks(); } }).observe(editor);
 let mlistW = 0;
 new ResizeObserver(() => {  // wrapped stacked editors change height when the pane changes width
