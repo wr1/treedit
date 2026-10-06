@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=treedit
+Comment=Review a directory tree with an agent
+Exec=treedit-app %f
+Icon=treedit
+Terminal=false
+Categories=Development;TextEditor;
+StartupWMClass=treedit-app
+NoDisplay=true

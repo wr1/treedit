@@ -43,7 +43,8 @@ packages = ["src/treedit"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/treedit", "tests", "README.md", "LICENSE", "CHANGELOG.md", "SKILL.md", "Makefile", "app/src", "app/build.rs",
-           "app/Cargo.toml", "app/Cargo.lock", "app/tauri.conf.json", "app/icons", "app/dist"]
+           "app/Cargo.toml", "app/Cargo.lock", "app/tauri.conf.json", "app/icons", "app/dist",
+           "app/treedit-app.desktop"]
 
 [tool.ruff]
 line-length = 120

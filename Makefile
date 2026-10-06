@@ -8,7 +8,7 @@ APP_PC := webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 gtk+-3.0 dbus-1
 APP_DEPS := libdbus-1-dev libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libssl-dev build-essential pkg-config
 
 .DEFAULT_GOAL := help
-.PHONY: help install open web print lint test build skill tool app app-build app-deps app-check clean
+.PHONY: help install open web print lint test build skill tool icons desktop app app-build app-deps app-check clean
 
 help: ## Show this help (override ROOT=path PORT=n AGENT=claude)
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -48,8 +48,25 @@ tool: ## Install treedit + the treedit-app window globally (uv tool bin dir)
 	@if pkg-config --exists $(APP_PC); then \
 		cargo build --release -q --manifest-path app/Cargo.toml && \
 		install -m755 app/target/release/treedit-app "$$(uv tool dir --bin)/treedit-app" && \
+		$(MAKE) -s desktop && \
 		echo "installed $$(uv tool dir --bin)/treedit-app - treedit open uses the app window"; \
 	else echo "Tauri libraries missing (make app-deps) - installed the CLI only; treedit open uses the browser"; fi
+
+ICON_DIR := $(HOME)/.local/share/icons/hicolor
+icons: ## Re-render app/icons/*.png from src/treedit/logo.svg (needs inkscape)
+	cp src/treedit/logo.svg app/icons/icon.svg
+	inkscape app/icons/icon.svg -w 512 -h 512 -o app/icons/icon.png
+	inkscape app/icons/icon.svg -w 128 -h 128 -o app/icons/128x128.png
+	inkscape app/icons/icon.svg -w 32 -h 32 -o app/icons/32x32.png
+
+desktop: ## Install the icon + a hidden desktop entry, so window switchers show the treedit logo
+	install -Dm644 app/icons/icon.svg $(ICON_DIR)/scalable/apps/treedit.svg
+	install -Dm644 app/icons/icon.png $(ICON_DIR)/512x512/apps/treedit.png
+	install -Dm644 app/icons/128x128.png $(ICON_DIR)/128x128/apps/treedit.png
+	install -Dm644 app/icons/32x32.png $(ICON_DIR)/32x32/apps/treedit.png
+	install -Dm644 app/treedit-app.desktop $(HOME)/.local/share/applications/treedit-app.desktop
+	-gtk-update-icon-cache -q -t $(ICON_DIR) 2>/dev/null
+	-update-desktop-database -q $(HOME)/.local/share/applications 2>/dev/null
 
 app-check:
 	@pkg-config --exists $(APP_PC) || { echo "missing system libraries:$$(for m in $(APP_PC); do pkg-config --exists $$m || printf ' %s' $$m; done)"; echo "run: make app-deps"; exit 1; }

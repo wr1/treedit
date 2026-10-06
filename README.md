@@ -16,6 +16,7 @@ A [treeparse](https://github.com/wr1/treeparse) toolbox with a native (Tauri) wi
 ```sh
 uv tool install treedit      # or: pipx install treedit (Python 3.12+, Linux/macOS)
 make tool                    # from a checkout: the CLI plus the native window (needs Rust; make app-deps)
+make desktop                 # the logo in window switchers (icon + hidden treedit-app.desktop; make tool does it)
 ```
 
 Without the `treedit-app` window, `treedit open` uses your web browser.

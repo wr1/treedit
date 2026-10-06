@@ -42,6 +42,7 @@ def test_page_and_vendor(server):
     status, page = call(server, "GET", "/")
     assert status == 200 and '"token"' in page and "/*TREEDIT_CONFIG*/" not in page
     assert call(server, "GET", "/vendor/xterm.js")[0] == 200
+    assert call(server, "GET", "/logo.svg")[1].startswith("<svg")
     assert call(server, "GET", "/vendor/nope.js")[0] == 404
 
 

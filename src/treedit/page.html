@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>treedit</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="stylesheet" href="/vendor/xterm.css">
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
@@ -34,6 +35,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button.danger{color:var(--danger)}
 header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 header strong{font-family:var(--mono);font-size:14px}
+#logo{width:22px;height:22px;flex:none;margin-right:-4px}
 header .path{color:var(--dim);font-family:var(--mono);font-size:12px;max-width:30vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header input[type=search]{flex:1;min-width:160px;max-width:340px;font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
 header label{font-size:13px;color:var(--dim);display:flex;gap:4px;align-items:center;cursor:pointer;user-select:none}
@@ -215,6 +217,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </head>
 <body>
 <header>
+  <img id="logo" src="/logo.svg" alt="treedit" title="treedit">
   <strong id="rootname">…</strong><span class="path" id="rootpath"></span>
   <input type="search" id="filter" placeholder="Filter by path, annotation or feedback…">
   <label title="Show your annotations in the tree"><input type="checkbox" id="shownotes" checked> annotations</label>

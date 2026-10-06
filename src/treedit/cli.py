@@ -1226,6 +1226,8 @@ class Handler(BaseHTTPRequestHandler):
                               "ptyxis": bool(shutil.which("ptyxis") or shutil.which("gnome-terminal"))})
             page = PAGE.replace("/*TREEDIT_CONFIG*/{}", cfg.replace("</", "<\\/"))
             return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+        if method == "GET" and path == "/logo.svg":
+            return self.send(200, (resources.files(__package__) / "logo.svg").read_bytes(), "image/svg+xml")
         if method == "GET" and path.startswith("/vendor/"):
             name = path[len("/vendor/"):]
             if name not in VENDOR:

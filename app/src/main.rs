@@ -69,6 +69,7 @@ fn main() {
         .setup(move |app| {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("treedit")
+                .icon(tauri::include_image!("icons/icon.png"))?
                 .inner_size(1400.0, 900.0)
                 .build()?;
             // when the server we started exits (Ctrl+W / Ctrl+Q in the page), close the window too
