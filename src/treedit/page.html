@@ -552,7 +552,7 @@ function unifiedDiff(a, b, ctx = 3) {  // '' when equal; null when too large to 
   }
   return out.length ? out.join('\n') + '\n' : '';
 }
-function applyPatch(text, diff) {  // apply a unifiedDiff, finding each hunk's lines near where they were; null if one is gone
+function applyPatch(text, diff) {  // apply a unifiedDiff to the text it was made from; null if a hunk does not fit exactly
   const lines = text.split('\n'), hunks = [];
   let cur = null;
   for (const l of diff.split('\n')) {
@@ -562,14 +562,12 @@ function applyPatch(text, diff) {  // apply a unifiedDiff, finding each hunk's l
     if (l[0] !== '+') cur.old.push(l.slice(1));
     if (l[0] !== '-') cur.neu.push(l.slice(1));
   }
-  let offset = 0;
+  let offset = 0;  // no searching for a near place: a hunk found elsewhere would add its text a second time
   for (const h of hunks) {
-    const want = h.at + offset, fits = i => i >= 0 && i + h.old.length <= lines.length && h.old.every((l, k) => lines[i + k] === l);
-    let pos = -1;
-    for (let dd = 0; dd <= lines.length && pos < 0; dd++) pos = fits(want - dd) ? want - dd : fits(want + dd) ? want + dd : -1;
-    if (pos < 0) return null;
-    lines.splice(pos, h.old.length, ...h.neu);
-    offset += pos - want + h.neu.length - h.old.length;
+    const at = h.at + offset;
+    if (at < 0 || at + h.old.length > lines.length || !h.old.every((l, k) => lines[at + k] === l)) return null;
+    lines.splice(at, h.old.length, ...h.neu);
+    offset += h.neu.length - h.old.length;
   }
   return lines.join('\n');
 }
@@ -618,6 +616,7 @@ async function rebaseBuffers(paths) {  // background buffers follow the agent's 
     if (f.kind !== 'text' || f.hash === b.hash) continue;
     const merged = rebaseEdits(b.original, b.value, f.content);
     if (merged == null) continue;  // overlapping change: the conflict banner shows when the file is opened
+    if (merged === f.content) { S.bufs.delete(p); continue; }  // the disk now holds your edits: nothing unsaved
     S.bufs.set(p, { hash: f.hash, original: f.content, value: merged });
     toast(`${p}: merged the agent's change into your unsaved edits`);
   }
@@ -655,10 +654,11 @@ async function hydrateDrafts() {
     if (!n || n.type !== 'file' || n.kind !== 'text') { S.stuck[p] = { ...dr, why: 'the file is gone' }; continue; }
     let f;
     try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { S.stuck[p] = { ...dr, why: 'the file cannot be read' }; continue; }
-    const value = dr.full != null ? dr.full
-      : dr.base != null ? merge3(dr.base, applyPatch(dr.base, dr.diff || '') ?? dr.base, f.content)  // three-way, like live edits
-      : applyPatch(f.content, dr.diff || '');  // drafts saved before the base was kept
-    if (value == null) { S.stuck[p] = { ...dr, why: 'the file changed too much to re-apply the edits' }; continue; }
+    const same = !dr.base_hash || dr.base_hash === f.hash, mine = dr.base != null ? applyPatch(dr.base, dr.diff || '') : null;
+    const value = dr.base != null && mine != null ? merge3(dr.base, mine, f.content)  // three-way, like live edits
+      : dr.full != null ? (same || dr.full === f.content ? dr.full : null)
+      : same ? applyPatch(f.content, dr.diff || '') : null;  // an old draft without its base: only onto that same version
+    if (value == null) { S.stuck[p] = { ...dr, why: 'the file changed on disk since; compare before restoring' }; continue; }
     if (value === f.content) { api('POST', '/api/draft-drop', { path: p }).catch(() => {}); continue; }
     S.bufs.set(p, { hash: f.hash, original: f.content, value });
     S.draftSent.set(p, value);
@@ -874,7 +874,7 @@ function sectionBody(st, n, f) {
     st.body = m; st.ta = null; return;
   }
   if (!st.ta) {
-    const body = el('div', 'sedit'), b = S.bufs.get(st.path);
+    const body = el('div', 'sedit'), b = resumeBuf(st.path, f);
     st.hlp = el('pre', 'shl'); st.ta = el('textarea'); st.ta._st = st;
     st.ta.spellcheck = false; st.ta.setAttribute('autocomplete', 'off'); st.ta.setAttribute('autocapitalize', 'off');
     st.ta.style.tabSize = st.hlp.style.tabSize = /\.py$/.test(st.path) ? 4 : 2;
@@ -1001,13 +1001,22 @@ $('#mclear').onclick = clearMulti;
 
 
 /* ---------- files ---------- */
+function resumeBuf(path, f) {  // your unsaved edits to PATH, merged onto the disk version F if it moved on; null if none left
+  const b = f.kind === 'text' && S.bufs.get(path);
+  if (!b) return null;
+  const merged = b.hash !== f.hash ? rebaseEdits(b.original, b.value, f.content) : null;
+  const r = merged != null ? { hash: f.hash, original: f.content, value: merged } : b;
+  if (r.value === f.content) { S.bufs.delete(path); return null; }  // the disk already holds these edits
+  S.bufs.set(path, r);
+  return r;
+}
 async function openFile(path) {
   try {
     const f = await api('GET', '/api/file?path=' + encodeURIComponent(path));
-    const b = f.kind === 'text' && S.bufs.get(path);
+    const b = resumeBuf(path, f);
     if (b) histSync(path, b.value, b.original);  // undo can walk back to the disk version
     setFile(b ? { ...f, content: b.value } : f);
-    if (b) {  // resume unsaved edits; flag it if the disk moved on meanwhile
+    if (b) {  // resume unsaved edits; the conflict banner only when they could not be merged
       S.bufs.delete(path); S.file.original = b.original; S.file.hash = b.hash; updateFileState();
       if (b.hash !== f.hash) showConflict({ type: 'changed', disk: f });
     }

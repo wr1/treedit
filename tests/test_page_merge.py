@@ -22,15 +22,19 @@ def js_function(src: str, name: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def merge3():
+def page_lib():
     src = (resources.files("treedit") / "page.html").read_text("utf-8")
-    lib = "\n".join(js_function(src, n) for n in FUNCS)
+    return "\n".join(js_function(src, n) for n in FUNCS)
 
-    def run(original, mine, theirs):
-        prog = lib + f"\nprocess.stdout.write(JSON.stringify(merge3(...{json.dumps([original, mine, theirs])})));"
-        return json.loads(subprocess.run([NODE, "-e", prog], capture_output=True, text=True, check=True).stdout)
 
-    return run
+@pytest.fixture(scope="module")
+def merge3(page_lib):
+    return lambda original, mine, theirs: js(page_lib, "merge3", original, mine, theirs)
+
+
+def js(lib: str, fn: str, *args):
+    prog = lib + f"\nprocess.stdout.write(JSON.stringify({fn}(...{json.dumps(list(args))})));"
+    return json.loads(subprocess.run([NODE, "-e", prog], capture_output=True, text=True, check=True).stdout)
 
 
 BASE = "# Notes\n\n- a\n- b\n\n## Done\n\n- c\n"
@@ -67,3 +71,11 @@ def test_same_line_changed_differently_conflicts(merge3):
 def test_same_edit_plus_separate_edit(merge3):
     both = BASE.replace("- a", "- A")
     assert merge3(BASE, both.replace("- c", "- C"), both) == both.replace("- c", "- C")
+
+
+@pytest.mark.parametrize("original", ["", BASE])
+def test_patch_applies_only_to_its_own_base(page_lib, original):
+    mine = original + "# dealing with discrepancies\n\nProblem:\n- How to distinguish?\n"
+    diff = js(page_lib, "unifiedDiff", original, mine)
+    assert js(page_lib, "applyPatch", original, diff) == mine
+    assert js(page_lib, "applyPatch", mine, diff) is None  # already on disk: never added a second time
