@@ -38,6 +38,18 @@ header strong{font-family:var(--mono);font-size:14px}
 #logo{width:22px;height:22px;flex:none;margin-right:-4px}
 header .path{color:var(--dim);font-family:var(--mono);font-size:12px;max-width:30vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header input[type=search]{flex:1;min-width:160px;max-width:340px;font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}
+#searchpop{max-height:34vh;overflow:auto;background:var(--panel);border-bottom:1px solid var(--line)}
+#searchpop[hidden]{display:none}
+.shead{display:flex;gap:10px;align-items:center;padding:6px 14px;color:var(--dim);font-size:12.5px;position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line)}
+.shead span{flex:1}
+.shead label{display:flex;gap:3px;align-items:center;cursor:pointer}
+#searchhits .hit{display:flex;gap:10px;padding:3px 14px;cursor:pointer;font:12.5px/1.45 var(--mono)}
+#searchhits .hit:hover{background:var(--sel)}
+#searchhits .hit .p{color:var(--accent);flex:none}
+#searchhits .hit .n{color:var(--dim);flex:none;min-width:3.2em;text-align:right}
+#searchhits .hit .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#searchhits mark{background:color-mix(in srgb,#f5c518 45%,transparent);color:inherit;border-radius:2px}
+#searchhits .none{color:var(--dim);padding:8px 14px}
 header label{font-size:13px;color:var(--dim);display:flex;gap:4px;align-items:center;cursor:pointer;user-select:none}
 .spacer{flex:1}
 #live{width:9px;height:9px;border-radius:50%;background:var(--ok);display:inline-block}
@@ -228,7 +240,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <header>
   <img id="logo" src="/logo.svg" alt="treedit" title="treedit">
   <strong id="rootname">…</strong><span class="path" id="rootpath"></span>
-  <input type="search" id="filter" placeholder="Filter by path, annotation or feedback…">
+  <input type="search" id="filter" placeholder="Filter the tree — Enter searches files" title="Filters by path, annotation or feedback as you type. Enter searches inside files.">
   <label title="Show your annotations in the tree"><input type="checkbox" id="shownotes" checked> annotations</label>
   <label><input type="checkbox" id="showcounts" checked> counts</label>
   <label title="Colour each document by its size in this tree (word count ranked among all files; folders among folders): dim = small, red = largest"><input type="checkbox" id="heat" checked> heat</label>
@@ -239,11 +251,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <button id="b-log" title="Git history of the selected file or folder">History</button>
   <button id="b-term" hidden title="Terminal / agent pane on the right">Agent</button>
 </header>
+<div id="searchpop" hidden>
+  <div class="shead"><span id="searchsum"></span><label title="Match case"><input type="checkbox" id="searchcase"> Aa</label><button id="searchx" title="Close (Esc)">×</button></div>
+  <div id="searchhits"></div>
+</div>
 <main>
   <aside id="treepane"><div id="tree"></div><div id="orphans"></div></aside>
   <div id="divider"></div>
   <section id="detail">
-    <div id="empty">Select a file to edit it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds · Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="empty">Select a file to edit it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
@@ -298,6 +314,7 @@ const S = {
   flashPaths: new Set(),
   multi: new Set(), anchor: null, order: [], mcache: new Map(), feedback: [], draft: null, modalFb: false, bufs: new Map(), msec: new Map(), lastDirty: false,
   drafts: {}, draftSent: new Map(), stuck: {}, hydrated: new Set(), changes: {}, dirFresh: new Map(), skew: 0, showDone: load('showdone', false),
+  hitsOn: false,
 };
 
 async function api(method, url, body) {
@@ -450,7 +467,7 @@ function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
   return r;
 }
 function renderTree() {
-  const f = $('#filter').value.trim().toLowerCase();
+  const f = S.hitsOn ? '' : $('#filter').value.trim().toLowerCase();
   const showNotes = $('#shownotes').checked, showCounts = $('#showcounts').checked, heat = $('#heat').checked, compact = $('#compact').checked;
   const box = $('#tree'); box.textContent = '';
   if (!S.tree) return;
@@ -1992,13 +2009,59 @@ document.addEventListener('keydown', e => {
     if (ta) { e.preventDefault(); openFind(ta); return; }
   }
   if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyZ') { e.preventDefault(); setWrap(!document.body.classList.contains('wrap')); return; }
+  if (e.key === 'Escape' && S.hitsOn && !$('#modal').open) { closeSearch(true); return; }
   if (e.key === 'Escape' && S.multi.size && !$('#modal').open) clearMulti();
   if (e.key === 'F2' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement?.tagName || '')) renameSel();
 });
 window.addEventListener('beforeunload', e => {
   if (isDirty() || S.bufs.size || [...S.msec.values()].some(sDirty)) { e.preventDefault(); e.returnValue = ''; }
 });
-['filter', 'shownotes', 'showcounts', 'heat', 'compact'].forEach(id => $('#' + id).addEventListener('input', () => { if (id !== 'filter') store(id, $('#' + id).checked); renderTree(); }));
+let searchGen = 0;
+function closeSearch(clear) {  // Esc / × also clear the box, so a content query does not then hide the tree
+  searchGen++; S.hitsOn = false; $('#searchpop').hidden = true;
+  if (clear) $('#filter').value = '';
+  renderTree();
+}
+function markQuery(node, text, q, caseOn) {
+  const hay = caseOn ? text : text.toLowerCase(), needle = caseOn ? q : q.toLowerCase();
+  const i = needle ? hay.indexOf(needle) : -1;
+  if (i < 0) { node.textContent = text; return; }
+  node.append(text.slice(0, i), el('mark', '', text.slice(i, i + q.length)), text.slice(i + q.length));
+}
+async function runSearch() {
+  const q = $('#filter').value, gen = ++searchGen;
+  if (!q.trim()) { closeSearch(); return; }
+  const caseOn = $('#searchcase').checked;
+  try {
+    const r = await api('GET', '/api/grep?q=' + encodeURIComponent(q) + (caseOn ? '&case=1' : ''));
+    if (gen !== searchGen) return;
+    S.hitsOn = true; $('#searchpop').hidden = false;
+    const n = r.hits.length;
+    $('#searchsum').textContent = !n ? `No matches for “${q}”`
+      : (r.truncated ? `First ${n} matches` : `${n} match${n === 1 ? '' : 'es'}`) + ` for “${q}”`;
+    const box = $('#searchhits'); box.textContent = '';
+    if (!n) box.append(el('div', 'none', 'Nothing in the files the tree shows.'));
+    for (const h of r.hits) {
+      const row = el('div', 'hit'), snip = el('span', 't');
+      markQuery(snip, h.text, q, caseOn);
+      row.append(el('span', 'p', h.path), el('span', 'n', String(h.line)), snip);
+      row.onclick = () => jumpTo(h.path, [h.line, h.line]);
+      box.append(row);
+    }
+    renderTree();
+  } catch (e) { if (gen === searchGen) toast(e.message, true); }
+}
+$('#filter').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+  if (e.key === 'Escape' && S.hitsOn) { e.preventDefault(); e.stopPropagation(); closeSearch(true); }
+});
+$('#searchcase').addEventListener('change', () => { if (S.hitsOn) runSearch(); });
+$('#searchx').onclick = () => closeSearch(true);
+['filter', 'shownotes', 'showcounts', 'heat', 'compact'].forEach(id => $('#' + id).addEventListener('input', () => {
+  if (id === 'filter') { searchGen++; if (S.hitsOn) { S.hitsOn = false; $('#searchpop').hidden = true; } }
+  else store(id, $('#' + id).checked);
+  renderTree();
+}));
 $('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = load('showcounts', true); $('#heat').checked = load('heat', true); $('#compact').checked = load('compact', true); setWrap(load('wrap', true)); $('#auto').checked = load('auto', true);
 if (!$('#auto').checked) setLive('paused');
 (() => {

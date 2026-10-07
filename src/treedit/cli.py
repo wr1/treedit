@@ -2,13 +2,15 @@
 treedit - edit and annotate a directory tree in your browser.
 
     treedit open PATH         # open the editor (http://127.0.0.1:8765)
+    treedit open PATH -r HOST # open PATH on HOST over ssh (e.g. a tailnet machine)
     treedit print PATH        # print the annotated tree (for agents, READMEs)
     treedit fb ls             # open feedback, for the agent to act on
 
 What it does
   * Shows PATH as a tree (line/word counts, symlink targets, empty folders);
     names are coloured by document size: word count ranked among all files (folders among folders)
-    (in the browser and in `treedit print` on a terminal).
+    (in the browser and in `treedit print` on a terminal). The header box filters that tree;
+    Enter searches inside the files (the same files the tree shows).
   * Edit any text file; Ctrl/Cmd+S saves. Symlinked files edit their target.
   * Annotate any file or folder (including the root): your standing comments for the agent,
     which it reads but never writes. Leave feedback
@@ -35,6 +37,7 @@ import json
 import os
 import re
 import secrets
+import select
 import shutil
 import stat
 import subprocess
@@ -62,6 +65,7 @@ DEFAULT_IGNORE = [".git", ".hg", ".svn", "__pycache__", "node_modules", ".venv",
 NOTES_NAME = ".treenotes.json"
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
+GREP_LIMIT = 200  # content-search hits returned in one go
 
 
 class HTTPError(Exception):
@@ -131,6 +135,27 @@ def locate(span: list, quote: str, text: str) -> tuple:
 
 def first_line(text: str) -> str:
     return (text.strip().splitlines() or [""])[0]
+
+
+def _rel_join(prefix: str, rel: str) -> str:
+    rel = (rel or "").replace("\\", "/").removeprefix("./")
+    if rel in ("", "."):
+        return prefix
+    return f"{prefix}/{rel}" if prefix else rel
+
+
+def _snippet(text: str, query: str, case: bool, width: int = 200) -> str:
+    """The matching line, shortened so the match stays in view."""
+    text = text.replace("\t", "    ").strip()
+    if len(text) <= width:
+        return text
+    hay = text if case else text.casefold()
+    i = hay.find(query if case else query.casefold())
+    if i < 0:
+        return text[:width] + "…"
+    start = max(0, i - 40)
+    end = min(len(text), start + width)
+    return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
 
 
 def fb_label(f: dict) -> str:
@@ -787,6 +812,213 @@ class Workspace:
         cwd, spec = self._git_where(rel)
         return self._run_git(cwd, "show", "--stat", "--patch", "--format=fuller", commit, *([] if whole else ["--", spec]))
 
+    # ---------- content search ----------
+    def grep(self, query: str, case: bool = False, limit: int = GREP_LIMIT) -> dict:
+        """Lines matching QUERY in the files the tree shows. case: match case. At most `limit` hits
+        (never more than GREP_LIMIT); truncated when some were left out."""
+        query = str(query or "")
+        if not query.strip():
+            raise HTTPError(400, "a search query is required")
+        if len(query) > 400 or "\n" in query or "\0" in query:
+            raise HTTPError(400, "query is too long")
+        limit = max(1, min(int(limit), GREP_LIMIT))
+        hits: list = []
+        if self._inside_git(self.root):
+            truncated = self._git_grep(self.root, "", query, case, hits, limit, no_exclude=not self.gitignore)
+            if self.gitignore:
+                for k in self.show:
+                    if len(hits) >= limit:
+                        truncated = True
+                        break
+                    if not self._ignored_by_git(k):
+                        continue  # the root search already covered it
+                    p = self.root.joinpath(*self.parts(k))
+                    if not p.exists():
+                        continue
+                    if p.is_dir() and not p.is_symlink():
+                        truncated = self._grep_dir(p, k, query, case, hits, limit) or truncated
+                    else:
+                        truncated = self._grep_one(k, query, case, hits, limit) or truncated
+        else:
+            truncated = self._grep_walk(self.root, "", query, case, hits, limit)
+        hits.sort(key=lambda h: (h["path"], h["line"]))
+        return {"hits": hits, "truncated": bool(truncated)}
+
+    def _inside_git(self, d: Path) -> bool:
+        try:
+            r = subprocess.run(["git", "-C", str(d), "rev-parse", "--is-inside-work-tree"],
+                               capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return r.returncode == 0 and r.stdout.strip() == b"true"
+
+    def _ignored_by_git(self, rel: str) -> bool:
+        try:
+            r = subprocess.run(["git", "-C", str(self.root), "check-ignore", "-q", "--", rel],
+                               capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return r.returncode == 0
+
+    def _searchable(self, rel: str) -> bool:
+        """A file the tree would show and the editor could open."""
+        try:
+            parts = self.parts(rel)
+        except HTTPError:
+            return False
+        if not parts or any(self.ignored(p) for p in parts):
+            return False
+        if self.gitignore:
+            hidden, cur = self.git_ignored(), ""
+            for p in parts:
+                cur = f"{cur}/{p}" if cur else p
+                if cur in hidden:
+                    return False
+        try:
+            node = self.node_path(rel)
+            target = node.resolve()
+        except (HTTPError, OSError):
+            return False
+        if not node.is_file() or target == self.notes_path:
+            return False
+        if not self.follow_outside and not self.inside(target):
+            return False
+        try:
+            return target.stat().st_size <= MAX_TEXT
+        except OSError:
+            return False
+
+    def _grep_one(self, rel: str, query: str, case: bool, hits: list, limit: int) -> bool:
+        """Search one file. True when a further match in it would not fit."""
+        if not self._searchable(rel):
+            return False
+        try:
+            data = self.target_path(rel).read_bytes()
+        except (OSError, HTTPError):
+            return False
+        text = decode(data)
+        if text is None:
+            return False
+        needle = query if case else query.casefold()
+        for i, line in enumerate(text.splitlines(), 1):
+            if needle not in (line if case else line.casefold()):
+                continue
+            if len(hits) >= limit:
+                return True
+            hits.append({"path": rel, "line": i, "text": _snippet(line, query, case)})
+        return False
+
+    def _grep_walk(self, d: Path, prefix: str, query: str, case: bool, hits: list, limit: int) -> bool:
+        """Search files under D the way the tree walks them. True when a file was left unsearched
+        because the hit list was already full."""
+        try:
+            entries = sorted(os.scandir(d), key=lambda e: e.name.lower())
+        except OSError:
+            return False
+        for e in entries:
+            if len(hits) >= limit:
+                return True
+            if self.ignored(e.name):
+                continue
+            rel = f"{prefix}/{e.name}" if prefix else e.name
+            if self.gitignore and rel in self.git_ignored():
+                continue
+            try:
+                is_dir = e.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+            if is_dir:
+                if not e.is_symlink() and self._grep_walk(Path(e.path), rel, query, case, hits, limit):
+                    return True
+                continue
+            if e.is_file(follow_symlinks=True) and self._grep_one(rel, query, case, hits, limit):
+                return True
+        return False
+
+    def _grep_dir(self, d: Path, prefix: str, query: str, case: bool, hits: list, limit: int) -> bool:
+        """Search a --show folder git would have skipped. A nested repo keeps its own ignore rules."""
+        if (d / ".git").exists() and self._inside_git(d):
+            return self._git_grep(d, prefix, query, case, hits, limit, no_exclude=False)
+        if self._inside_git(d):  # still the parent repo: its ignore rules are exactly what hid this folder
+            return self._git_grep(d, prefix, query, case, hits, limit, no_exclude=True)
+        return self._grep_walk(d, prefix, query, case, hits, limit)
+
+    def _consume_grep(self, raw: bytes, prefix: str, query: str, case: bool, hits: list, limit: int) -> bool:
+        """Parse `git grep -z -n` records (path, line, text, split by NUL). True if a record was left
+        over because the list was already full."""
+        for rec in raw.split(b"\n"):
+            if not rec:
+                continue
+            if len(hits) >= limit:
+                return True
+            path_b, sep, rest = rec.partition(b"\0")
+            line_b, sep2, text_b = rest.partition(b"\0")
+            if not sep or not sep2:
+                continue
+            try:
+                line_no = int(line_b)
+            except ValueError:
+                continue
+            rel = _rel_join(prefix, os.fsdecode(path_b))
+            if not self._searchable(rel) or any(h["path"] == rel and h["line"] == line_no for h in hits):
+                continue
+            text = text_b.decode("utf-8", "replace").rstrip("\r")
+            hits.append({"path": rel, "line": line_no, "text": _snippet(text, query, case)})
+        return False
+
+    def _git_grep(self, cwd: Path, prefix: str, query: str, case: bool, hits: list, limit: int,
+                  no_exclude: bool) -> bool:
+        """Run git grep in CWD. Paths in the output are relative to CWD; prefix them. True when the
+        hit list filled up with more matches still unread."""
+        cmd = ["git", "-C", str(cwd), "grep", "-n", "-I", "-F", "-z", "--untracked"]
+        if no_exclude:
+            cmd.append("--no-exclude-standard")
+        if not case:
+            cmd.append("-i")
+        cmd += ["-e", query]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError:
+            return self._grep_walk(cwd, prefix, query, case, hits, limit)
+        pending, truncated, deadline = b"", False, time.monotonic() + 15
+        assert proc.stdout is not None
+        fd = proc.stdout.fileno()
+        try:
+            while True:
+                if time.monotonic() > deadline:
+                    proc.kill()
+                    raise HTTPError(500, "search took too long")
+                ready, _, _ = select.select([fd], [], [], 0.2)
+                if not ready:
+                    if proc.poll() is not None:
+                        break
+                    continue
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                pending += chunk
+                if b"\n" not in pending:
+                    continue
+                done, pending = pending.rsplit(b"\n", 1)
+                if self._consume_grep(done, prefix, query, case, hits, limit):
+                    truncated = True
+                    proc.kill()
+                    break
+            if not truncated and pending.strip(b"\0"):
+                truncated = self._consume_grep(pending, prefix, query, case, hits, limit)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+            proc.stdout.close()
+        if proc.returncode == 128 and not hits:
+            return self._grep_walk(cwd, prefix, query, case, hits, limit)
+        return truncated
+
     def git_add(self, rel: str) -> bool:
         """Stage a file the editor created, in the repository that holds it (a nested notes/ repo is its
         own); ignored paths are not forced in, and outside git nothing happens. True when staged."""
@@ -1136,6 +1368,18 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.git_show(sub, whole, commit)
 
+    def grep(self, query: str, case: bool = False, limit: int = GREP_LIMIT) -> dict:
+        hits, truncated = [], False
+        for name, w in self.mounts.items():
+            if len(hits) >= limit:
+                truncated = True
+                break
+            part = w.grep(query, case, limit - len(hits))
+            hits.extend({**h, "path": self._pre(name, h["path"])} for h in part["hits"])
+            truncated = truncated or part["truncated"]
+        hits.sort(key=lambda h: (h["path"], h["line"]))
+        return {"hits": hits, "truncated": truncated}
+
     def create(self, rel: str, kind: str) -> bool:
         _, w, sub = self.split(rel)
         return w.create(sub, kind)
@@ -1242,6 +1486,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/git/show":
             return self.send(200, ws.git_show(q.get("path", ""), q.get("whole") == "1", q.get("commit", "")).encode("utf-8"),
                              "text/plain; charset=utf-8")
+        if method == "GET" and path == "/api/grep":
+            return self.send_json(200, ws.grep(q.get("q", ""), q.get("case") == "1"))
         if method == "GET" and path == "/api/changes":
             root, changes = ws.changes_for(q.get("root", "")) if isinstance(ws, Mounts) else (str(ws.root), ws.changes)
             return self.send_json(200, {"root": root, "changes": changes, "now": time.time()})
@@ -1414,11 +1660,117 @@ def find_app():
     return str(max(builds, key=lambda b: b.stat().st_mtime)) if builds else None
 
 
-def open_editor(root: List[str], port: int, host: str, browser: bool, headless: bool, agent: str,
+def free_port(port: int, host: str = "127.0.0.1") -> int:
+    """The first port in PORT..PORT+19 that HOST can bind."""
+    import socket
+    for p in range(port, port + 20):
+        with socket.socket() as s:
+            try:
+                s.bind((host, p))
+                return p
+            except OSError:
+                continue
+    sys.exit(f"treedit: no free port in {port}-{port + 19}")
+
+
+def remote_argv(target: str, roots: List[str], port: int, agent: str, notes: str, ignore: List[str],
+                follow_outside: bool, no_gitignore: bool, show: Optional[List[str]], app: bool) -> List[str]:
+    """ssh argv that runs a headless `treedit open` on TARGET. A forced tty makes the remote server
+    get SIGHUP (and stop) when the connection closes; $TREEDIT_REMOTE_CMD overrides `treedit` there."""
+    import shlex
+
+    def q(p: str) -> str:  # keep a leading ~ unquoted so the remote shell expands it
+        return "~/" + shlex.quote(p[2:]) if p.startswith("~/") and len(p) > 2 else shlex.quote(p)
+    cmd = shlex.split(os.environ.get("TREEDIT_REMOTE_CMD") or "treedit")
+    words = [shlex.quote(w) for w in cmd] + ["open", *map(q, roots), "--headless", "--port", str(port)]
+    if agent:
+        words += ["--agent", shlex.quote(agent)]
+    if notes:
+        words += ["--notes", q(notes)]
+    if ignore:
+        words += ["--ignore", *map(shlex.quote, ignore)]
+    if follow_outside:
+        words.append("--follow-outside")
+    if no_gitignore:
+        words.append("--no-gitignore")
+    if show is not None and show != DEFAULT_SHOW:
+        words += ["--show", *map(shlex.quote, show)]
+    if app:  # the page then handles Ctrl+W / Ctrl+Q (which stop the remote server, and so the window)
+        words = ["env", "TREEDIT_IN_APP=1", *words]
+    return ["ssh", "-tt", "-o", "ServerAliveInterval=15", target, " ".join(words)]
+
+
+def open_remote(target: str, root: List[str], port: int, browser: bool, headless: bool, agent: str,
                 notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+    """Run treedit on TARGET ([user@]host) over ssh, bound to its loopback, and tunnel it to a local port.
+    The agent pane runs there; closing the window (or Ctrl+C) closes ssh, which stops the remote server."""
+    exe = None if headless or browser else find_app()
+    server = subprocess.Popen(remote_argv(target, roots_of(root), port, agent, notes, ignore, follow_outside,
+                                          no_gitignore, show, bool(exe)),
+                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, errors="replace")
+    procs, win = [server], None
+    try:
+        rport = None
+        for line in server.stdout:
+            line = line.rstrip("\r\n")
+            m = re.match(r"\s*open\s+http://[^/]*:(\d+)/", line)
+            if m:
+                rport = int(m.group(1))
+                break
+            print(f"{target}: {line}" if line.startswith("treedit ") else line)
+        if rport is None:
+            sys.exit(f"treedit: the remote treedit on {target} did not start (exit {server.wait()})")
+        threading.Thread(target=lambda: [None for _ in server.stdout], daemon=True).start()  # keep draining
+        lport = free_port(port)
+        procs.append(subprocess.Popen(["ssh", "-N", "-o", "ExitOnForwardFailure=yes",
+                                       "-L", f"127.0.0.1:{lport}:127.0.0.1:{rport}", target],
+                                      stdin=subprocess.DEVNULL))
+        url = f"http://127.0.0.1:{lport}/"
+        deadline = time.time() + 15
+        while True:
+            try:
+                with urlopen(url + "api/version", timeout=2):
+                    break
+            except (URLError, OSError):
+                if time.time() > deadline or any(p.poll() is not None for p in procs):
+                    sys.exit(f"treedit: could not tunnel {url} to {target}:{rport}")
+                time.sleep(0.2)
+        print(f"  open   {url}  (tunnel to {target}:{rport})")
+        if exe:
+            win = subprocess.Popen([exe, "--url", url])
+            # the remote server stopping (Ctrl+Q in the page) closes the window too
+            threading.Thread(target=lambda: (server.wait(), win.poll() is None and win.terminate()),
+                             daemon=True).start()
+            win.wait()
+            return
+        if not headless and not browser:
+            print("  (treedit-app not built - `make app-build` or set TREEDIT_APP; using the browser)")
+        print("  (Ctrl+C to stop)")
+        if not headless:
+            threading.Timer(0.4, webbrowser.open, [url]).start()
+        server.wait()
+    except KeyboardInterrupt:
+        print()
+    finally:
+        for p in ([win] if win else []) + procs[::-1]:
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+
+
+def open_editor(root: List[str], port: int, host: str, browser: bool, headless: bool, agent: str,
+                notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str],
+                remote: str = "") -> None:
     """Serve the editor on HOST:PORT (next free port if taken) and show it in the treedit-app window.
     Closing the window stops the server. Falls back to the browser when the app is not built.
-    Several ROOTs open side by side, each a top-level folder of the tree with its own notes file."""
+    Several ROOTs open side by side, each a top-level folder of the tree with its own notes file.
+    With --remote [user@]host the ROOTs are paths on that machine, served there and tunnelled over ssh."""
+    if remote:
+        return open_remote(remote, root, port, browser, headless, agent, notes, ignore, follow_outside,
+                           no_gitignore, show)
     roots = [_ws(r, notes, ignore, follow_outside, no_gitignore, show) for r in roots_of(root)]
     if notes and len(roots) > 1:
         sys.exit("treedit: --notes works with one folder; each opened folder keeps its own notes file")
@@ -1438,7 +1790,7 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
     url = f"http://{shown}:{srv.server_port}/"
     for w in roots:
         print(f"treedit  {w.root}\n  notes  {w.notes_path}")
-    print(f"  open   {url}")
+    print(f"  open   {url}", flush=True)  # `--remote` reads it through a pipe
     ws.scan()  # baseline for change tracking
     agent = agent or os.environ.get("TREEDIT_AGENT", "")
     Handler.agent = agent
@@ -1747,6 +2099,8 @@ app = cli(
                 option(flags=["--host"], arg_type=str, default="127.0.0.1", help="interface to bind"),
                 option(flags=["--browser"], flag=True, help="use the web browser instead of the app window"),
                 option(flags=["--headless"], flag=True, help="only serve; open no window"),
+                option(flags=["--remote", "-r"], arg_type=str, default="",
+                       help="[user@]host: open ROOT on that machine (it needs treedit), tunnelled over ssh"),
                 option(flags=["--agent", "-a"], arg_type=str, default="",
                        help="command for the right-hand pane, e.g. claude or 'hermes --skills treedit' "
                             "(default $TREEDIT_AGENT, else a shell)"),

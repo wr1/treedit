@@ -278,6 +278,49 @@ def test_git_history(repo):
     assert "A  added.txt" in git(repo, "status", "--short")
 
 
+def test_grep_walks_when_there_is_no_git(ws, tree):
+    (tree / "__pycache__").mkdir()
+    (tree / "__pycache__" / "hidden.py").write_text("return 1\n")
+    (tree / "bin.dat").write_bytes(b"return 1\0rest")
+    (tree / ".treenotes.json").write_text("return 1\n")
+    (tree / "dots.txt").write_text("a.b\naxb\n")
+    (tree / "long.txt").write_text(("word " * 80) + "zephyr\n")
+    (tree / "many.txt").write_text("".join(f"hit {i}\n" for i in range(5)))
+    out = ws.grep("return 1")
+    assert out["truncated"] is False
+    assert [(h["path"], h["line"]) for h in out["hits"]] == [("pkg/a.py", 2)]
+    assert ws.grep("RETURN 1")["hits"] == out["hits"]
+    assert ws.grep("RETURN 1", case=True)["hits"] == []
+    assert [h["line"] for h in ws.grep("a.b")["hits"]] == [1]
+    long = ws.grep("zephyr")["hits"]
+    assert long[0]["path"] == "long.txt" and long[0]["text"].startswith("…") and long[0]["text"].endswith("zephyr")
+    capped = ws.grep("hit", limit=2)
+    assert [h["line"] for h in capped["hits"]] == [1, 2] and capped["truncated"] is True
+    with pytest.raises(HTTPError):
+        ws.grep("  ")
+    with pytest.raises(HTTPError):
+        ws.grep("x" * 401)
+
+
+def test_grep_respects_gitignore_and_notes(repo):
+    from treedit.cli import _ws
+    (repo / "notes" / "only-here.md").write_text("zephyr token\n")
+    (repo / "flag.txt").write_text("use -n here\n")
+    ws = _ws(str(repo), "", [], False)
+    assert [(h["path"], h["line"]) for h in ws.grep("return")["hits"]] == [("pkg/a.py", 2), ("pkg/a.py", 6)]
+    assert ws.grep("noise")["hits"] == []
+    assert [h["path"] for h in ws.grep("zephyr")["hits"]] == ["notes/only-here.md"]
+    assert ws.grep("-n")["hits"][0]["path"] == "flag.txt"
+    assert _ws(str(repo), "", [], False, show=[]).grep("zephyr")["hits"] == []
+    assert [h["path"] for h in _ws(str(repo), "", [], False, no_gitignore=True).grep("noise")["hits"]] == ["debug.log"]
+    git(repo / "notes", "init", "-q")
+    (repo / "notes" / ".gitignore").write_text("secret.md\n")
+    (repo / "notes" / "secret.md").write_text("zephyr hidden\n")
+    (repo / "notes" / "open.md").write_text("zephyr shown\n")
+    assert [h["path"] for h in _ws(str(repo), "", [], False).grep("zephyr")["hits"]] == [
+        "notes/only-here.md", "notes/open.md"]
+
+
 def test_git_log_outside_repo(ws):
     with pytest.raises(HTTPError) as e:
         ws.git_log("", True, 5)

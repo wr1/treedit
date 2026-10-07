@@ -28,6 +28,7 @@ Without the `treedit-app` window, `treedit open` uses your web browser.
 make open ROOT=PATH          # build the app window if needed and open PATH (make web: browser)
 treedit open PATH            # app window if built, else the browser (--browser, --headless)
 treedit open A B C           # several folders in one tree, each with its own notes
+treedit open PATH -r HOST    # PATH on another machine (e.g. over Tailscale), tunnelled over ssh
 treedit print PATH           # print the annotated tree, coloured by word count
 treedit annotation ls        # your comments on files/folders (also: get, set, mv)
 treedit fb ls                # open feedback for the agent (also: add, reply, done, reopen, rm)
@@ -42,6 +43,8 @@ python -m treedit print PATH # without installing the script
   switching files and views; word-sized steps; a disk reload (an agent edit) is one step, so you can undo it.
 - Find: Ctrl+F (pre-filled from a one-line selection); Enter / Shift+Enter or F3 / Shift+F3 cycle, "n of m",
   Aa for case; matches tick the overview strip; Esc leaves the match selected. Main and stacked editors.
+- Search the tree: the header box filters by path, annotation or feedback as you type; Enter searches
+  inside the files the tree shows (gitignored files stay hidden, `notes/` stays included) and a click opens the line.
 - Text size: Ctrl+scroll over the editor (or Ctrl+= / Ctrl+- / Ctrl+0) zooms the main and the stacked editors;
   remembered across sessions.
 - Line wrapping (on by default; **Wrap** in the status bar or Alt+Z), in the main and the stacked editors.
@@ -67,6 +70,10 @@ python -m treedit print PATH # without installing the script
 - Several folders at once (`treedit open A B`, `make open ROOT="A B"`): each is a top-level folder of the
   tree and keeps its own `.treenotes.json`, gitignore, drafts and history; feedback ids read `name:N`.
   The agent pane starts in their common parent, with `$TREEDIT_ROOTS` listing them.
+- Another machine (`treedit open ~/proj --remote [user@]host`, e.g. a Tailscale name): ssh runs a
+  headless treedit there on its loopback and tunnels it to a local port, so the agent pane runs on that
+  machine and nothing is exposed on the network. The remote needs treedit on its `PATH` (or set
+  `$TREEDIT_REMOTE_CMD`, e.g. `'uvx treedit'`) and ssh access; closing the window stops it there.
 - Live refresh when agents or other editors change the tree.
 - Unsaved edits are never dropped: every 1.5 s they are kept as a unified diff against the version
   they started from, in `~/.local/state/treedit/` (outside the project). Reopen treedit and they come

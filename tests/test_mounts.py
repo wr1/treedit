@@ -41,6 +41,11 @@ def test_tree_and_files(two, tree, tmp_path):
             two.read_file(bad)
 
 
+def test_grep_prefixes_the_folder(two):
+    assert [h["path"] for h in two.grep("Read me")["hits"]] == ["other/docs/guide.md"]
+    assert [h["path"] for h in two.grep("return 1")["hits"]] == ["proj/pkg/a.py"]
+
+
 def test_notes_and_feedback_stay_per_folder(two, tree, tmp_path):
     two.set_note("proj/pkg", "package")
     two.set_note("other", "the other root")

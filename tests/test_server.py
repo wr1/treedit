@@ -93,6 +93,15 @@ def test_guards(server):
     assert call(server, "GET", "/api/term")[0] == 404
 
 
+def test_grep_endpoint(server):
+    from urllib.parse import quote
+    status, out = call(server, "GET", "/api/grep?q=" + quote("return 1"))
+    assert status == 200 and out["hits"] == [{"path": "pkg/a.py", "line": 2, "text": "return 1"}]
+    assert out["truncated"] is False
+    assert call(server, "GET", "/api/grep?q=")[0] == 400
+    assert call(server, "GET", "/api/grep?q=" + quote("RETURN 1") + "&case=1")[1]["hits"] == []
+
+
 def test_git_endpoints(server, repo):
     status, log = call(server, "GET", "/api/git/log?whole=1")
     assert status == 200 and log["commits"][0]["subject"] == "init"
@@ -227,3 +236,66 @@ def test_terminal_sessions(server, monkeypatch, tree):
     assert call(server, "POST", "/api/term/close", {"id": "2"})[0] == 404
     assert call(server, "GET", "/api/term?id=9&token=" + Handler.token)[0] == 404
     terms.stop()
+
+
+FAKE_SSH = r'''#!PYTHON
+"""Stands in for ssh: `-N -L l:lport:h:rport` relays a local port, else runs the last argument locally."""
+import socket, subprocess, sys, threading
+args = sys.argv[1:]
+if "-N" in args:
+    _, lport, _, rport = args[args.index("-L") + 1].split(":")
+    srv = socket.create_server(("127.0.0.1", int(lport)))
+    def pipe(a, b):
+        try:
+            while data := a.recv(65536):
+                b.sendall(data)
+        except OSError:
+            pass
+        finally:
+            b.close()
+    while True:
+        c, _ = srv.accept()
+        r = socket.create_connection(("127.0.0.1", int(rport)))
+        threading.Thread(target=pipe, args=(c, r), daemon=True).start()
+        threading.Thread(target=pipe, args=(r, c), daemon=True).start()
+sys.exit(subprocess.call(["sh", "-c", args[-1]]))
+'''
+
+
+def test_remote_argv(monkeypatch):
+    from treedit.cli import remote_argv
+    monkeypatch.delenv("TREEDIT_REMOTE_CMD", raising=False)
+    argv = remote_argv("me@box", ["~/my proj", "/srv/x"], 8765, "claude --x", "", ["*.log"], False, True,
+                       ["notes"], True)
+    assert argv[:-1] == ["ssh", "-tt", "-o", "ServerAliveInterval=15", "me@box"]
+    assert argv[-1] == ("env TREEDIT_IN_APP=1 treedit open ~/'my proj' /srv/x --headless --port 8765 "
+                        "--agent 'claude --x' --ignore '*.log' --no-gitignore")
+
+
+def test_open_remote(tree, tmp_path, monkeypatch, capsys):
+    import sys
+    from treedit.cli import open_editor
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "ssh").write_text(FAKE_SSH.replace("PYTHON", sys.executable))
+    (bin_ / "ssh").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("TREEDIT_REMOTE_CMD", f"{sys.executable} -m treedit")
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    t = threading.Thread(target=open_editor, args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False,
+                                                   False, ["notes"], "box"), daemon=True)
+    t.start()
+    out, deadline, base = "", time.time() + 20, None
+    while time.time() < deadline and base is None:
+        out += capsys.readouterr().out
+        for line in out.splitlines():
+            if "(tunnel to box:" in line:
+                base = line.split()[1].rstrip("/")
+        time.sleep(0.05)
+    assert base and base != f"http://127.0.0.1:{port}"  # the local end of the tunnel, not the server
+    assert call(base, "GET", "/api/tree")[0] == 200
+    assert call(base, "POST", "/api/quit", {})[1] == {"ok": True}
+    t.join(10)
+    assert not t.is_alive()
