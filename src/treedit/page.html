@@ -8,27 +8,61 @@
 <link rel="stylesheet" href="/vendor/xterm.css">
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
+<script>
+try {
+  var themeChoice = JSON.parse(localStorage.getItem('treedit:theme') || '"system"');
+  document.documentElement.dataset.theme = { paper: 1, ink: 1, dusk: 1, leaf: 1 }[themeChoice] ? themeChoice : 'system';
+} catch (e) { document.documentElement.dataset.theme = 'system'; }
+</script>
 <style>
-:root{
+:root, html[data-theme="paper"]{
+  color-scheme: light; --scheme: light;
   --bg:#fbfaf8; --panel:#f3f1ed; --line:#e2ded6; --text:#22201c; --dim:#8a857b;
   --accent:#3f6fb5; --note:#7a5a1f; --note-bg:#fbf1dc; --sel:#e3ebf7; --danger:#b23b2e; --ok:#2f7d4f; --heat:#c27c0e; --heat2:#d42a1e;
+  --fb:#b4236e; --agentc:#1f8a70;
+  --t-k:#8a3ab9; --t-s:#2f7d4f; --t-c:#948e83; --t-n:#b35c00; --t-f:#3f6fb5; --t-t:#0f7b85; --t-d:#a0522d;
+}
+html[data-theme="ink"]{
+  color-scheme: dark; --scheme: dark;
+  --bg:#1b1a18; --panel:#23221f; --line:#38352f; --text:#e8e4dc; --dim:#8f8a80;
+  --accent:#7fa7e0; --note:#e2be7a; --note-bg:#3a3224; --sel:#2c3a50; --danger:#e57262; --ok:#6cc08f; --heat:#f2b84b; --heat2:#ff6b5e;
+  --fb:#f07ab8; --agentc:#4fd1a5;
+  --t-k:#c792ea; --t-s:#9ccc8a; --t-c:#857f75; --t-n:#f0a35e; --t-f:#82aaff; --t-t:#6fc3c9; --t-d:#e2be7a;
+}
+@media (prefers-color-scheme: dark){
+  html[data-theme="system"]{
+    color-scheme: dark; --scheme: dark;
+    --bg:#1b1a18; --panel:#23221f; --line:#38352f; --text:#e8e4dc; --dim:#8f8a80;
+    --accent:#7fa7e0; --note:#e2be7a; --note-bg:#3a3224; --sel:#2c3a50; --danger:#e57262; --ok:#6cc08f; --heat:#f2b84b; --heat2:#ff6b5e;
+    --fb:#f07ab8; --agentc:#4fd1a5;
+    --t-k:#c792ea; --t-s:#9ccc8a; --t-c:#857f75; --t-n:#f0a35e; --t-f:#82aaff; --t-t:#6fc3c9; --t-d:#e2be7a;
+  }
+}
+html[data-theme="dusk"]{
+  color-scheme: dark; --scheme: dark;
+  --bg:#141a22; --panel:#1b2430; --line:#2c3848; --text:#e7eef6; --dim:#8b9aaf;
+  --accent:#8eb6ef; --note:#e4c07a; --note-bg:#2e291c; --sel:#243246; --danger:#f07178; --ok:#7dcea0; --heat:#f0b45a; --heat2:#ff7b72;
+  --fb:#f5a0cc; --agentc:#5ddec8;
+  --t-k:#d2a8ff; --t-s:#9ccc8a; --t-c:#8b9aaf; --t-n:#ffbf7a; --t-f:#8eb6ef; --t-t:#7ee0d6; --t-d:#e4c07a;
+}
+html[data-theme="leaf"]{
+  color-scheme: light; --scheme: light;
+  --bg:#f3f6f1; --panel:#e6eee3; --line:#d0ddd0; --text:#1b241c; --dim:#6c7a6e;
+  --accent:#2c6b4a; --note:#6b5420; --note-bg:#f4efd8; --sel:#dce8dc; --danger:#a33b32; --ok:#2a7a45; --heat:#b56a0e; --heat2:#c4322a;
+  --fb:#9d2468; --agentc:#1c7560;
+  --t-k:#7a3e9a; --t-s:#217848; --t-c:#7a877c; --t-n:#9a5810; --t-f:#245a86; --t-t:#0d686c; --t-d:#8a5430;
+}
+:root{
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --tree-w: 440px;
   --term-w: 560px;
-  --fb:#b4236e; --agentc:#1f8a70;
-  --t-k:#8a3ab9; --t-s:#2f7d4f; --t-c:#948e83; --t-n:#b35c00; --t-f:#3f6fb5; --t-t:#0f7b85; --t-d:#a0522d;
-}
-@media (prefers-color-scheme: dark){
-  :root{ --bg:#1b1a18; --panel:#23221f; --line:#38352f; --text:#e8e4dc; --dim:#8f8a80;
-    --accent:#7fa7e0; --note:#e2be7a; --note-bg:#3a3224; --sel:#2c3a50; --danger:#e57262; --ok:#6cc08f; --heat:#f2b84b; --heat2:#ff6b5e;
-    --fb:#f07ab8; --agentc:#4fd1a5;
-    --t-k:#c792ea; --t-s:#9ccc8a; --t-c:#857f75; --t-n:#f0a35e; --t-f:#82aaff; --t-t:#6fc3c9; --t-d:#e2be7a; }
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:14px/1.45 var(--sans);display:flex;flex-direction:column}
-button{font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button,header select{font:inherit;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+header select{padding:3px 4px}
 button:hover:not(:disabled){border-color:var(--accent)}
 button:disabled{opacity:.45;cursor:default}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -245,6 +279,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <label><input type="checkbox" id="showcounts" checked> counts</label>
   <label title="Colour each document by its size in this tree (word count ranked among all files; folders among folders): dim = small, red = largest"><input type="checkbox" id="heat" checked> heat</label>
   <label title="Show a folder that holds just one file (however deep) on one line"><input type="checkbox" id="compact" checked> compact</label>
+  <label title="Colour of the window. System follows this machine.">theme
+    <select id="theme">
+      <option value="system">system</option>
+      <option value="paper">paper</option>
+      <option value="ink">ink</option>
+      <option value="dusk">dusk</option>
+      <option value="leaf">leaf</option>
+    </select>
+  </label>
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
   <button id="fball" title="All feedback for the agent">Feedback</button>
@@ -1744,11 +1787,11 @@ const T = { open: false, list: [], active: null };  // list: one session per ser
 const LIGHT_ANSI = { black: '#2e2b26', red: '#b23b2e', green: '#2f7d4f', yellow: '#946400', blue: '#3f6fb5', magenta: '#8a3ab9',
   cyan: '#0f7b85', white: '#8a857b', brightBlack: '#6b665d', brightRed: '#cf4436', brightGreen: '#38945c', brightYellow: '#b07a00',
   brightBlue: '#4f82cc', brightMagenta: '#a050d0', brightCyan: '#14909e', brightWhite: '#a9a397' };
-const darkMode = () => matchMedia('(prefers-color-scheme: dark)').matches;
+const schemeDark = () => getComputedStyle(document.documentElement).getPropertyValue('--scheme').trim() !== 'light';
 function termTheme() {
-  const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
+  const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim(), dark = schemeDark();
   return { background: v('--bg'), foreground: v('--text'), cursor: v('--accent'), cursorAccent: v('--bg'),
-    selectionBackground: darkMode() ? 'rgba(127,167,224,.35)' : 'rgba(63,111,181,.25)', ...(darkMode() ? {} : LIGHT_ANSI) };
+    selectionBackground: dark ? 'rgba(127,167,224,.35)' : 'rgba(63,111,181,.25)', ...(dark ? {} : LIGHT_ANSI) };
 }
 const termFont = () => getComputedStyle(document.documentElement).getPropertyValue('--mono');
 function termMake(info) {  // the pane, the xterm and (once shown) the socket of one server terminal
@@ -2063,6 +2106,15 @@ $('#searchx').onclick = () => closeSearch(true);
   renderTree();
 }));
 $('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = load('showcounts', true); $('#heat').checked = load('heat', true); $('#compact').checked = load('compact', true); setWrap(load('wrap', true)); $('#auto').checked = load('auto', true);
+const THEMES = ['system', 'paper', 'ink', 'dusk', 'leaf'];
+function setTheme(name) {
+  const t = THEMES.includes(name) ? name : 'system';
+  document.documentElement.dataset.theme = t; store('theme', t);
+  if ($('#theme').value !== t) $('#theme').value = t;
+  for (const P of T.list) P.term.options.theme = termTheme();
+}
+$('#theme').onchange = () => setTheme($('#theme').value);
+setTheme(load('theme', document.documentElement.dataset.theme || 'system'));
 if (!$('#auto').checked) setLive('paused');
 (() => {
   const d = $('#divider'); let x0, w0;
