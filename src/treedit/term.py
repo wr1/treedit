@@ -4,6 +4,7 @@ Standard library only (POSIX). The shell starts lazily on the first connection; 
 preset (e.g. "claude") the command is typed into the shell, so quitting the agent leaves you at
 a prompt. Output is kept in a scrollback buffer and replayed when a page (re)connects.
 """
+
 from __future__ import annotations
 
 import base64
@@ -112,8 +113,17 @@ class Terminal:
             def ctty():  # runs in the child after setsid(): make the pty its controlling terminal
                 fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
-            self.proc = subprocess.Popen([shell, "-i"], stdin=slave, stdout=slave, stderr=slave, cwd=self.cwd,
-                                         env=self.env, start_new_session=True, preexec_fn=ctty, close_fds=True)
+            self.proc = subprocess.Popen(
+                [shell, "-i"],
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                cwd=self.cwd,
+                env=self.env,
+                start_new_session=True,
+                preexec_fn=ctty,
+                close_fds=True,
+            )
             os.close(slave)
             self.master = master
             self.gen += 1
@@ -152,7 +162,7 @@ class Terminal:
         with self.lock:
             self.buf += chunk
             if len(self.buf) > SCROLLBACK:
-                del self.buf[:len(self.buf) - SCROLLBACK]
+                del self.buf[: len(self.buf) - SCROLLBACK]
             clients = list(self.clients)
         for c in clients:
             if not c.send(2, chunk):
@@ -262,7 +272,9 @@ class Sessions:
         return True
 
     def list(self) -> list:
-        return [{"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive} for sid, t in list(self.terms.items())]
+        return [
+            {"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive} for sid, t in list(self.terms.items())
+        ]
 
     def stop(self) -> None:
         for t in list(self.terms.values()):

@@ -30,8 +30,9 @@ web: $(TREEDIT) ## Open ROOT in the web browser instead
 print: $(TREEDIT) ## Print the annotated, word-count coloured tree of ROOT
 	$(TREEDIT) print $(ROOT)
 
-lint: ## Run ruff on src and tests
-	uvx ruff check src tests
+lint: ## Run ruff check and format on src and tests
+	uv run ruff check src tests
+	uv run ruff format --check src tests
 
 test: ## Run the tests with coverage
 	uv run pytest

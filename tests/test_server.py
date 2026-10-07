@@ -95,6 +95,7 @@ def test_guards(server):
 
 def test_grep_endpoint(server):
     from urllib.parse import quote
+
     status, out = call(server, "GET", "/api/grep?q=" + quote("return 1"))
     assert status == 200 and out["hits"] == [{"path": "pkg/a.py", "line": 2, "text": "return 1"}]
     assert out["truncated"] is False
@@ -110,8 +111,12 @@ def test_git_endpoints(server, repo):
 
 
 def test_context_roundtrip(server, capsys):
-    call(server, "POST", "/api/context", {"paths": ["pkg/a.py", "README.md"], "lines": [1, 2],
-                                          "quote": "def a():\n    return 1", "focus": "pkg/a.py"})
+    call(
+        server,
+        "POST",
+        "/api/context",
+        {"paths": ["pkg/a.py", "README.md"], "lines": [1, 2], "quote": "def a():\n    return 1", "focus": "pkg/a.py"},
+    )
     main(["context", "--url", server])
     assert capsys.readouterr().out == "pkg/a.py L1-2\nREADME.md\n    | def a():\n    |     return 1\n"
     call(server, "POST", "/api/context", {})
@@ -146,8 +151,12 @@ def test_terminal(server, monkeypatch, tree):
     def handshake(origin, tok=token):
         s = socket.create_connection((host, int(port)), timeout=5)
         key = base64.b64encode(os.urandom(16)).decode()
-        s.sendall((f"GET /api/term?token={tok} HTTP/1.1\r\nHost: {host}:{port}\r\nOrigin: {origin}\r\n"
-                   f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n\r\n").encode())
+        s.sendall(
+            (
+                f"GET /api/term?token={tok} HTTP/1.1\r\nHost: {host}:{port}\r\nOrigin: {origin}\r\n"
+                f"Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n\r\n"
+            ).encode()
+        )
         return s
 
     s = handshake("http://evil.example")
@@ -167,7 +176,9 @@ def test_terminal(server, monkeypatch, tree):
     def send(op, payload):
         mask = b"\0\0\0\0"
         frame = ws_frame(op, payload)
-        s.sendall(frame[:1] + bytes([frame[1] | 0x80]) + frame[2:2 + (len(frame) - 2 - len(payload))] + mask + payload)
+        s.sendall(
+            frame[:1] + bytes([frame[1] | 0x80]) + frame[2 : 2 + (len(frame) - 2 - len(payload))] + mask + payload
+        )
 
     send(1, json.dumps({"t": "resize", "rows": 30, "cols": 100}).encode())
     send(1, b"not json")
@@ -186,13 +197,17 @@ def test_terminal(server, monkeypatch, tree):
 
 def test_open_headless(tree, monkeypatch, capsys):
     from treedit.cli import open_editor
+
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     monkeypatch.setattr(Handler, "window", None)
     monkeypatch.setattr(Handler, "terms", None)
-    t = threading.Thread(target=open_editor, args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False,
-                                                   False, ["notes"]), daemon=True)
+    t = threading.Thread(
+        target=open_editor,
+        args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False, False, ["notes"]),
+        daemon=True,
+    )
     t.start()
     base, deadline = f"http://127.0.0.1:{port}", time.time() + 5
     while time.time() < deadline:
@@ -217,9 +232,13 @@ def test_terminal_sessions(server, monkeypatch, tree):
     assert status == 200 and out["id"] == "2" and [t["label"] for t in out["terms"]] == ["sh", "echo second-pane"]
     host, port = server.removeprefix("http://").split(":")
     s = socket.create_connection((host, int(port)), timeout=5)
-    s.sendall((f"GET /api/term?token={Handler.token}&id=2 HTTP/1.1\r\nHost: {host}:{port}\r\n"
-               f"Origin: http://{host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-               "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").encode())
+    s.sendall(
+        (
+            f"GET /api/term?token={Handler.token}&id=2 HTTP/1.1\r\nHost: {host}:{port}\r\n"
+            f"Origin: http://{host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+        ).encode()
+    )
     data, deadline = b"", time.time() + 10
     while b"second-pane" not in data.split(b"echo second-pane")[-1] and time.time() < deadline:
         data += s.recv(65536)
@@ -264,17 +283,22 @@ sys.exit(subprocess.call(["sh", "-c", args[-1]]))
 
 def test_remote_argv(monkeypatch):
     from treedit.cli import remote_argv
+
     monkeypatch.delenv("TREEDIT_REMOTE_CMD", raising=False)
-    argv = remote_argv("me@box", ["~/my proj", "/srv/x"], 8765, "claude --x", "", ["*.log"], False, True,
-                       ["notes"], True)
+    argv = remote_argv(
+        "me@box", ["~/my proj", "/srv/x"], 8765, "claude --x", "", ["*.log"], False, True, ["notes"], True
+    )
     assert argv[:-1] == ["ssh", "-tt", "-o", "ServerAliveInterval=15", "me@box"]
-    assert argv[-1] == ("env TREEDIT_IN_APP=1 treedit open ~/'my proj' /srv/x --headless --port 8765 "
-                        "--agent 'claude --x' --ignore '*.log' --no-gitignore")
+    assert argv[-1] == (
+        "env TREEDIT_IN_APP=1 treedit open ~/'my proj' /srv/x --headless --port 8765 "
+        "--agent 'claude --x' --ignore '*.log' --no-gitignore"
+    )
 
 
 def test_open_remote(tree, tmp_path, monkeypatch, capsys):
     import sys
     from treedit.cli import open_editor
+
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     (bin_ / "ssh").write_text(FAKE_SSH.replace("PYTHON", sys.executable))
@@ -284,8 +308,11 @@ def test_open_remote(tree, tmp_path, monkeypatch, capsys):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    t = threading.Thread(target=open_editor, args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False,
-                                                   False, ["notes"], "box"), daemon=True)
+    t = threading.Thread(
+        target=open_editor,
+        args=(str(tree), port, "127.0.0.1", False, True, "", "", [], False, False, ["notes"], "box"),
+        daemon=True,
+    )
     t.start()
     out, deadline, base = "", time.time() + 20, None
     while time.time() < deadline and base is None:

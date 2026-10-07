@@ -78,8 +78,12 @@ def test_mutations_and_drafts(two, tree, tmp_path):
     two.set_draft("other/docs/new.txt", None)
     two.delete("other/docs/new.txt")
     two.mark_ui("proj/README.md")
-    for call_, args in ((two.rename, ("other", "proj/other")), (two.delete, ("other",)),
-                        (two.rename, ("other/docs", "proj/docs")), (two.create, ("top.txt", "file"))):
+    for call_, args in (
+        (two.rename, ("other", "proj/other")),
+        (two.delete, ("other",)),
+        (two.rename, ("other/docs", "proj/docs")),
+        (two.create, ("top.txt", "file")),
+    ):
         with pytest.raises(HTTPError):
             call_(*args)
     assert two.changes == {} and two.line_changes == {}

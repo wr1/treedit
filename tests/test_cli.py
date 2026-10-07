@@ -84,6 +84,8 @@ def test_schema(capsys):
 
 def test_module_entry(tree):
     import subprocess
-    r = subprocess.run([sys.executable, "-m", "treedit", "print", str(tree), "--no-counts"],
-                       capture_output=True, text=True, check=True)
+
+    r = subprocess.run(
+        [sys.executable, "-m", "treedit", "print", str(tree), "--no-counts"], capture_output=True, text=True, check=True
+    )
     assert "pkg/" in r.stdout

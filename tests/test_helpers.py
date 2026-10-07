@@ -51,11 +51,15 @@ def test_fmt_tokens(n, s):
 
 
 def test_rank_by_size_and_heat():
-    tree = {"path": "", "type": "dir", "children": [
-        {"path": "d", "type": "dir", "children": [{"path": "d/x", "type": "file", "words": 10}]},
-        {"path": "y", "type": "file", "words": 100},
-        {"path": "z", "type": "file", "words": 0},
-    ]}
+    tree = {
+        "path": "",
+        "type": "dir",
+        "children": [
+            {"path": "d", "type": "dir", "children": [{"path": "d/x", "type": "file", "words": 10}]},
+            {"path": "y", "type": "file", "words": 100},
+            {"path": "z", "type": "file", "words": 0},
+        ],
+    }
     words = cli.word_totals(tree)
     assert words == {"": 110, "d": 10, "d/x": 10, "y": 100, "z": 0}
     dirs = cli.dir_paths(tree)
@@ -70,14 +74,22 @@ def test_rank_by_size_and_heat():
 
 
 def test_skill_tokens():
-    tree = {"type": "dir", "name": "", "children": [
-        {"type": "dir", "name": "s", "children": [
-            {"type": "file", "name": "SKILL.md", "kind": "text", "chars": 40},
-            {"type": "file", "name": "leaf.md", "kind": "text", "chars": 400},
-            {"type": "file", "name": "img.png", "kind": "binary"},
-        ]},
-        {"type": "dir", "name": "other", "children": []},
-    ]}
+    tree = {
+        "type": "dir",
+        "name": "",
+        "children": [
+            {
+                "type": "dir",
+                "name": "s",
+                "children": [
+                    {"type": "file", "name": "SKILL.md", "kind": "text", "chars": 40},
+                    {"type": "file", "name": "leaf.md", "kind": "text", "chars": 400},
+                    {"type": "file", "name": "img.png", "kind": "binary"},
+                ],
+            },
+            {"type": "dir", "name": "other", "children": []},
+        ],
+    }
     cli.skill_tokens(tree)
     s = tree["children"][0]
     assert tree["skills"] is True

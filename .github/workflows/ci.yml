@@ -2,8 +2,15 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -17,11 +24,13 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync
+      - run: uv sync --frozen
       - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
       - run: uv run pytest --cov-report=xml
       - uses: codecov/codecov-action@v5
         if: matrix.python == '3.12'
         with:
           files: coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

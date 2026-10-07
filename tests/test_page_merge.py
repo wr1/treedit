@@ -1,4 +1,5 @@
 """The editor's merge of your unsaved edits with a change on disk (page.html JavaScript, run in node)."""
+
 import json
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ def js_function(src: str, name: str) -> str:
     for k in range(src.index("{", i), len(src)):
         depth += {"{": 1, "}": -1}.get(src[k], 0)
         if depth == 0:
-            return src[i:k + 1]
+            return src[i : k + 1]
     raise ValueError(name)
 
 
@@ -52,7 +53,9 @@ def test_separate_edits_merge(merge3):
     assert merge3(BASE, mine, theirs) == BASE.replace("- a", "- a, mine").replace("- c", "- c, theirs")
 
 
-@pytest.mark.parametrize("mine", [BASE + "\nNew paragraph.\n", "New first line\n" + BASE, BASE.replace("- b\n", "- b\n- new\n")])
+@pytest.mark.parametrize(
+    "mine", [BASE + "\nNew paragraph.\n", "New first line\n" + BASE, BASE.replace("- b\n", "- b\n- new\n")]
+)
 def test_edit_already_on_disk_is_not_doubled(merge3, mine):
     assert merge3(BASE, mine, mine) == mine
 

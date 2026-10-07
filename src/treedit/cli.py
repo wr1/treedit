@@ -27,6 +27,7 @@ What it does
 
 Built on treeparse (Python 3.12+): `treedit --stub` / `-j` describe it. Binds to 127.0.0.1 by default.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -60,8 +61,19 @@ from treeparse import argument, cli, command, group, option
 from . import __version__
 from .term import Sessions, ws_accept
 
-DEFAULT_IGNORE = [".git", ".hg", ".svn", "__pycache__", "node_modules", ".venv",
-                  ".DS_Store", "*.pyc", ".treedit-*", ".ruff_cache", "target"]
+DEFAULT_IGNORE = [
+    ".git",
+    ".hg",
+    ".svn",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    ".DS_Store",
+    "*.pyc",
+    ".treedit-*",
+    ".ruff_cache",
+    "target",
+]
 NOTES_NAME = ".treenotes.json"
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
@@ -124,9 +136,9 @@ def locate(span: list, quote: str, text: str) -> tuple:
     place the quote moved to, else the old span marked stale."""
     a, b = span
     have, q = text.split("\n"), quote.split("\n")
-    if have[a - 1:a - 1 + len(q)] == q:
+    if have[a - 1 : a - 1 + len(q)] == q:
         return a, b, False
-    hits = [i + 1 for i in range(len(have) - len(q) + 1) if have[i:i + len(q)] == q]
+    hits = [i + 1 for i in range(len(have) - len(q) + 1) if have[i : i + len(q)] == q]
     if not hits:
         return a, b, True
     na = min(hits, key=lambda i: abs(i - a))
@@ -178,9 +190,12 @@ def skill_tokens(tree: dict) -> None:
     """In a skill tree (one holding a SKILL.md), estimate what loading costs. Files get "tok". Folders
     get "tmin" - their SKILL.md alone, no leaf loaded (a folder without one: the entry SKILL.md of each
     skill inside) - and "tmax", every text file underneath. The root gets "skills": True."""
+
     def has_skill(n: dict) -> bool:
-        return any((c["type"] == "file" and c["name"] == "SKILL.md") or (c["type"] == "dir" and has_skill(c))
-                   for c in n.get("children") or [])
+        return any(
+            (c["type"] == "file" and c["name"] == "SKILL.md") or (c["type"] == "dir" and has_skill(c))
+            for c in n.get("children") or []
+        )
 
     if not has_skill(tree):
         return
@@ -262,8 +277,15 @@ def heat_ansi(rank, bold: bool) -> str:
 
 
 class Workspace:
-    def __init__(self, root: Path, notes_path: Path, ignore: List[str], follow_outside: bool,
-                 gitignore: bool = True, show: Optional[List[str]] = None):
+    def __init__(
+        self,
+        root: Path,
+        notes_path: Path,
+        ignore: List[str],
+        follow_outside: bool,
+        gitignore: bool = True,
+        show: Optional[List[str]] = None,
+    ):
         self.root = root.resolve()
         self.notes_path = notes_path.resolve()
         self.ignore = ignore
@@ -308,8 +330,12 @@ class Workspace:
 
     def _git_collect(self, d: Path, prefix: str, out: set) -> None:
         try:
-            r = subprocess.run(["git", "-C", str(d), "ls-files", "-z", "--others", "--ignored", "--exclude-standard",
-                                "--directory"], capture_output=True, timeout=10, check=False)
+            r = subprocess.run(
+                ["git", "-C", str(d), "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
         except (OSError, subprocess.TimeoutExpired):
             return
         if r.returncode != 0:  # not a git work tree, or no git
@@ -356,7 +382,11 @@ class Workspace:
 
     def _by(self, rel: str) -> str:
         now = time.time()
-        return "you" if any((rel == k or rel.startswith(k + "/")) and now - t < 15 for k, t in self._ui.items()) else "agent"
+        return (
+            "you"
+            if any((rel == k or rel.startswith(k + "/")) and now - t < 15 for k, t in self._ui.items())
+            else "agent"
+        )
 
     def _remember_text(self, rel: str, text: str, at: float) -> None:
         old = self._texts.get(rel)
@@ -508,8 +538,9 @@ class Workspace:
                 self._ui = ui
             self._seen = cur
             self.changes = {k: v for k, v in self.changes.items() if k in cur and now - v["at"] < self.CHANGE_TTL}
-            self.line_changes = {k: [e for e in v if now - e["at"] < self.CHANGE_TTL]
-                                 for k, v in self.line_changes.items() if k in cur}
+            self.line_changes = {
+                k: [e for e in v if now - e["at"] < self.CHANGE_TTL] for k, v in self.line_changes.items() if k in cur
+            }
             for k in [k for k in self._texts if k not in cur]:  # gone (or renamed): forget its text
                 self._text_bytes -= len(self._texts.pop(k))
 
@@ -538,7 +569,9 @@ class Workspace:
             else:
                 return
             if drafts:
-                atomic_write(self.drafts_path, (json.dumps(drafts, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+                atomic_write(
+                    self.drafts_path, (json.dumps(drafts, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
+                )
             else:
                 try:
                     self.drafts_path.unlink()
@@ -634,7 +667,7 @@ class Workspace:
             notes, feedback, moved, changed = self.read_notes(), self.read_feedback(), {}, False
             for k, v in notes.items():
                 if under(k):
-                    nk = dst + k[len(src):]
+                    nk = dst + k[len(src) :]
                     moved[nk] = (moved[nk] + "\n\n" + v) if nk in moved else v
                     changed = True
             for k in list(notes):
@@ -643,7 +676,7 @@ class Workspace:
             for k, v in moved.items():
                 notes[k] = (notes[k] + "\n\n" + v) if k in notes else v
             for f in feedback:
-                new = sorted({dst + k[len(src):] if under(k) else k for k in f.get("paths", [])})
+                new = sorted({dst + k[len(src) :] if under(k) else k for k in f.get("paths", [])})
                 if new != f.get("paths"):
                     f["paths"], changed = new, True
             if changed:
@@ -667,8 +700,15 @@ class Workspace:
         now = stamp()
         with self.lock:
             feedback = self.read_feedback()
-            e = {"id": max((f["id"] for f in feedback), default=0) + 1, "paths": keys, "text": text.rstrip(),
-                 "status": "open", "reply": "", "created": now, "updated": now}
+            e = {
+                "id": max((f["id"] for f in feedback), default=0) + 1,
+                "paths": keys,
+                "text": text.rstrip(),
+                "status": "open",
+                "reply": "",
+                "created": now,
+                "updated": now,
+            }
             if lines:
                 if len(keys) != 1:
                     raise HTTPError(400, "line comments attach to exactly one file")
@@ -796,13 +836,16 @@ class Workspace:
         cwd, spec = self._git_where(rel)
         top = self._run_git(cwd, "rev-parse", "--show-toplevel").strip()
         specs = [] if whole else ["--", spec]
-        raw = self._run_git(cwd, "log", f"-n{max(1, min(n, 1000))}", "--format=%H%x1f%h%x1f%an%x1f%at%x1f%s%x1e", *specs)
+        raw = self._run_git(
+            cwd, "log", f"-n{max(1, min(n, 1000))}", "--format=%H%x1f%h%x1f%an%x1f%at%x1f%s%x1e", *specs
+        )
         commits = []
         for rec in raw.split("\x1e"):
             parts = rec.strip("\n").split("\x1f")
             if len(parts) == 5:
-                commits.append({"hash": parts[0], "short": parts[1], "author": parts[2], "at": int(parts[3]),
-                                "subject": parts[4]})
+                commits.append(
+                    {"hash": parts[0], "short": parts[1], "author": parts[2], "at": int(parts[3]), "subject": parts[4]}
+                )
         status = self._run_git(cwd, "status", "--short", *([] if whole else ["--", spec])).splitlines()
         return {"repo": top, "commits": commits, "status": status, "scope": "repository" if whole else (rel or ".")}
 
@@ -810,7 +853,9 @@ class Workspace:
         if not re.fullmatch(r"[0-9a-f]{4,40}", commit or ""):
             raise HTTPError(400, "bad commit id")
         cwd, spec = self._git_where(rel)
-        return self._run_git(cwd, "show", "--stat", "--patch", "--format=fuller", commit, *([] if whole else ["--", spec]))
+        return self._run_git(
+            cwd, "show", "--stat", "--patch", "--format=fuller", commit, *([] if whole else ["--", spec])
+        )
 
     # ---------- content search ----------
     def grep(self, query: str, case: bool = False, limit: int = GREP_LIMIT) -> dict:
@@ -846,16 +891,21 @@ class Workspace:
 
     def _inside_git(self, d: Path) -> bool:
         try:
-            r = subprocess.run(["git", "-C", str(d), "rev-parse", "--is-inside-work-tree"],
-                               capture_output=True, timeout=5, check=False)
+            r = subprocess.run(
+                ["git", "-C", str(d), "rev-parse", "--is-inside-work-tree"], capture_output=True, timeout=5, check=False
+            )
         except (OSError, subprocess.TimeoutExpired):
             return False
         return r.returncode == 0 and r.stdout.strip() == b"true"
 
     def _ignored_by_git(self, rel: str) -> bool:
         try:
-            r = subprocess.run(["git", "-C", str(self.root), "check-ignore", "-q", "--", rel],
-                               capture_output=True, timeout=5, check=False)
+            r = subprocess.run(
+                ["git", "-C", str(self.root), "check-ignore", "-q", "--", rel],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
         except (OSError, subprocess.TimeoutExpired):
             return False
         return r.returncode == 0
@@ -966,8 +1016,9 @@ class Workspace:
             hits.append({"path": rel, "line": line_no, "text": _snippet(text, query, case)})
         return False
 
-    def _git_grep(self, cwd: Path, prefix: str, query: str, case: bool, hits: list, limit: int,
-                  no_exclude: bool) -> bool:
+    def _git_grep(
+        self, cwd: Path, prefix: str, query: str, case: bool, hits: list, limit: int, no_exclude: bool
+    ) -> bool:
         """Run git grep in CWD. Paths in the output are relative to CWD; prefix them. True when the
         hit list filled up with more matches still unread."""
         cmd = ["git", "-C", str(cwd), "grep", "-n", "-I", "-F", "-z", "--untracked"]
@@ -1024,8 +1075,9 @@ class Workspace:
         own); ignored paths are not forced in, and outside git nothing happens. True when staged."""
         p = self.node_path(self.norm(rel))
         try:
-            r = subprocess.run(["git", "-C", str(p.parent), "add", "--", p.name], capture_output=True,
-                               timeout=10, check=False)
+            r = subprocess.run(
+                ["git", "-C", str(p.parent), "add", "--", p.name], capture_output=True, timeout=10, check=False
+            )
         except (OSError, subprocess.TimeoutExpired):
             return False
         return r.returncode == 0
@@ -1065,7 +1117,7 @@ class Workspace:
             self.move_notes(src, dst)
             drafts = self.read_drafts()
             for k in [k for k in drafts if k == src or k.startswith(src + "/")]:
-                self.set_draft(dst + k[len(src):], {x: y for x, y in drafts[k].items() if x != "at"})
+                self.set_draft(dst + k[len(src) :], {x: y for x, y in drafts[k].items() if x != "at"})
                 self.set_draft(k, None)
 
     def delete(self, rel: str) -> None:
@@ -1122,13 +1174,18 @@ class Workspace:
                 cont = prefix + ("    " if last else "│   ")
                 kids = n.get("children") or []
                 branch, text = prefix + ("└── " if last else "├── "), label(n)
-                rows.append((branch + text, branch + paint(n, text), self._row_note(n["path"], notes, single),
-                             cont + ("│" if kids else "")))
+                rows.append(
+                    (
+                        branch + text,
+                        branch + paint(n, text),
+                        self._row_note(n["path"], notes, single),
+                        cont + ("│" if kids else ""),
+                    )
+                )
                 walk(kids, cont)
 
         root = tree["name"] + "/"
-        rows.append((root, paint(tree, root), self._row_note(".", notes, single),
-                     "│" if tree["children"] else ""))
+        rows.append((root, paint(tree, root), self._row_note(".", notes, single), "│" if tree["children"] else ""))
         walk(tree["children"], "")
         noted = [len(r[0]) for r in rows if r[2]]
         col = min(max(noted) + 2, 72) if noted else 0
@@ -1142,8 +1199,11 @@ class Workspace:
             out.append(shown + " " * (pad - len(head)) + "# " + lines[0])
             out.extend(cont.ljust(pad) + "# " + ln for ln in lines[1:])
         if counts and tree.get("skills"):
-            out += ["", f"# tokens (~{CHARS_PER_TOKEN} chars each): folder min-max = its SKILL.md alone, no leaf loaded "
-                        "(a folder without one: the SKILL.md of each skill inside) - every file underneath loaded"]
+            out += [
+                "",
+                f"# tokens (~{CHARS_PER_TOKEN} chars each): folder min-max = its SKILL.md alone, no leaf loaded "
+                "(a folder without one: the SKILL.md of each skill inside) - every file underneath loaded",
+            ]
         multi = [f for f in feedback if len(f["paths"]) > 1]
         if multi:
             out += ["", "# open feedback on several paths:"]
@@ -1184,8 +1244,11 @@ class Mounts:
         self.label = " + ".join(self.mounts)
         w0 = workspaces[0]
         same = [w for w in workspaces if w.root == self.root]  # a folder holding the others: share its notes
-        self.top = same[0] if same else Workspace(self.root, self.root / NOTES_NAME, w0.ignore, w0.follow_outside,
-                                                  w0.gitignore, w0.show)
+        self.top = (
+            same[0]
+            if same
+            else Workspace(self.root, self.root / NOTES_NAME, w0.ignore, w0.follow_outside, w0.gitignore, w0.show)
+        )
         self.own_top = not same
         self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces + ([self.top] if self.own_top else []))
 
@@ -1226,8 +1289,13 @@ class Mounts:
     def _top_out(self, f: dict) -> dict:
         if not self.own_top:
             return self._fb_out(next(n for n, w in self.mounts.items() if w is self.top), f)
-        return {**f, "id": f"{self.TOP}:{f['id']}", "num": f["id"], "root": str(self.root),
-                "paths": [self._from_top(p) for p in f["paths"]]}
+        return {
+            **f,
+            "id": f"{self.TOP}:{f['id']}",
+            "num": f["id"],
+            "root": str(self.root),
+            "paths": [self._from_top(p) for p in f["paths"]],
+        }
 
     def _prefix_map(self, get) -> dict:
         return {self._pre(name, k): v for name, w in self.mounts.items() for k, v in get(w).items()}
@@ -1241,8 +1309,13 @@ class Mounts:
         return self.mounts[name], int(num)
 
     def _fb_out(self, name: str, f: dict) -> dict:
-        return {**f, "id": f"{name}:{f['id']}", "num": f["id"], "root": str(self.mounts[name].root),
-                "paths": [self._pre(name, p) for p in f["paths"]]}
+        return {
+            **f,
+            "id": f"{name}:{f['id']}",
+            "num": f["id"],
+            "root": str(self.mounts[name].root),
+            "paths": [self._pre(name, p) for p in f["paths"]],
+        }
 
     # ---------- the tree ----------
     def scan(self) -> dict:
@@ -1466,14 +1539,21 @@ class Handler(BaseHTTPRequestHandler):
     def route(self, method: str, path: str, q: dict):
         ws = self.ws
         if method == "GET" and path in ("/", "/index.html"):
-            cfg = json.dumps({"token": self.token, "agent": self.agent, "term": self.terms is not None, "app": self.app,
-                              "ptyxis": bool(shutil.which("ptyxis") or shutil.which("gnome-terminal"))})
+            cfg = json.dumps(
+                {
+                    "token": self.token,
+                    "agent": self.agent,
+                    "term": self.terms is not None,
+                    "app": self.app,
+                    "ptyxis": bool(shutil.which("ptyxis") or shutil.which("gnome-terminal")),
+                }
+            )
             page = PAGE.replace("/*TREEDIT_CONFIG*/{}", cfg.replace("</", "<\\/"))
             return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if method == "GET" and path == "/logo.svg":
             return self.send(200, (resources.files(__package__) / "logo.svg").read_bytes(), "image/svg+xml")
         if method == "GET" and path.startswith("/vendor/"):
-            name = path[len("/vendor/"):]
+            name = path[len("/vendor/") :]
             if name not in VENDOR:
                 raise HTTPError(404, "no such file")
             return self.send(200, (resources.files(__package__) / "vendor" / name).read_bytes(), VENDOR[name])
@@ -1484,8 +1564,11 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/git/log":
             return self.send_json(200, ws.git_log(q.get("path", ""), q.get("whole") == "1", int(q.get("n", "150"))))
         if method == "GET" and path == "/api/git/show":
-            return self.send(200, ws.git_show(q.get("path", ""), q.get("whole") == "1", q.get("commit", "")).encode("utf-8"),
-                             "text/plain; charset=utf-8")
+            return self.send(
+                200,
+                ws.git_show(q.get("path", ""), q.get("whole") == "1", q.get("commit", "")).encode("utf-8"),
+                "text/plain; charset=utf-8",
+            )
         if method == "GET" and path == "/api/grep":
             return self.send_json(200, ws.grep(q.get("q", ""), q.get("case") == "1"))
         if method == "GET" and path == "/api/changes":
@@ -1498,11 +1581,22 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/tree":
             v = ws.version()
             multi = isinstance(ws, Mounts)
-            return self.send_json(200, {"root": ws.label if multi else ws.root.name, "rootPath": str(ws.root),
-                                        "notesFile": str(ws.notes_path), "version": v,
-                                        "tree": ws.scan(), "notes": ws.read_notes(),
-                                        "feedback": ws.refresh_anchors(), "changes": ws.changes,
-                                        "drafts": ws.read_drafts(), "lines": ws.line_changes, "now": time.time()})
+            return self.send_json(
+                200,
+                {
+                    "root": ws.label if multi else ws.root.name,
+                    "rootPath": str(ws.root),
+                    "notesFile": str(ws.notes_path),
+                    "version": v,
+                    "tree": ws.scan(),
+                    "notes": ws.read_notes(),
+                    "feedback": ws.refresh_anchors(),
+                    "changes": ws.changes,
+                    "drafts": ws.read_drafts(),
+                    "lines": ws.line_changes,
+                    "now": time.time(),
+                },
+            )
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
         b = self.body()
@@ -1514,8 +1608,10 @@ class Handler(BaseHTTPRequestHandler):
             ws.set_draft(b.get("path", ""), None)
             return self.send_json(200, {"ok": True})
         if method == "PUT" and path == "/api/file":
-            return self.send_json(200, ws.write_file(b.get("path", ""), str(b.get("content", "")),
-                                                     b.get("base_hash"), bool(b.get("force"))))
+            return self.send_json(
+                200,
+                ws.write_file(b.get("path", ""), str(b.get("content", "")), b.get("base_hash"), bool(b.get("force"))),
+            )
         if method == "PUT" and path == "/api/note":
             ws.set_note(b.get("path", ""), str(b.get("note", "")))
             return self.send_json(200, {"ok": True})
@@ -1541,14 +1637,24 @@ class Handler(BaseHTTPRequestHandler):
                 raise HTTPError(404, "no such terminal")
             return self.send_json(200, {"terms": self.sessions().list()})
         if method == "POST" and path == "/api/term/external":
-            return self.send_json(200, {"ok": True, "cmd": external_terminal(ws.root, self.terms.env if self.terms else
-                                                                             dict(os.environ), self.agent)})
+            return self.send_json(
+                200,
+                {
+                    "ok": True,
+                    "cmd": external_terminal(ws.root, self.terms.env if self.terms else dict(os.environ), self.agent),
+                },
+            )
         if method == "POST" and path == "/api/feedback":
-            return self.send_json(200, ws.add_feedback(list(b.get("paths") or []), str(b.get("text", "")),
-                                                       b.get("lines"), str(b.get("quote") or "")))
+            return self.send_json(
+                200,
+                ws.add_feedback(
+                    list(b.get("paths") or []), str(b.get("text", "")), b.get("lines"), str(b.get("quote") or "")
+                ),
+            )
         if method == "PUT" and path == "/api/feedback":
-            return self.send_json(200, ws.update_feedback(self.fid(b), text=b.get("text"),
-                                                          status=b.get("status"), reply=b.get("reply")))
+            return self.send_json(
+                200, ws.update_feedback(self.fid(b), text=b.get("text"), status=b.get("status"), reply=b.get("reply"))
+            )
         if method == "POST" and path == "/api/feedback-delete":
             ws.delete_feedback(self.fid(b))
             return self.send_json(200, {"ok": True})
@@ -1564,7 +1670,6 @@ class Handler(BaseHTTPRequestHandler):
             ws.delete(b.get("path", ""))
             return self.send_json(200, {"ok": True})
         raise HTTPError(404, "no such endpoint")
-
 
     def fid(self, b: dict):
         """A feedback id from a request: N, or "name:N" when several folders are open."""
@@ -1615,24 +1720,45 @@ def external_terminal(root: Path, env: dict, agent: str) -> str:
         cmd = ["gnome-terminal", f"--working-directory={root}", "--", *run]
     else:
         raise HTTPError(404, "neither ptyxis nor gnome-terminal is installed")
-    subprocess.Popen(cmd, cwd=str(root), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    subprocess.Popen(
+        cmd,
+        cwd=str(root),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
     return " ".join(cmd[:4])
 
 
-VENDOR = {"xterm.js": "text/javascript; charset=utf-8", "xterm.css": "text/css; charset=utf-8",
-          "addon-fit.js": "text/javascript; charset=utf-8"}
+VENDOR = {
+    "xterm.js": "text/javascript; charset=utf-8",
+    "xterm.css": "text/css; charset=utf-8",
+    "addon-fit.js": "text/javascript; charset=utf-8",
+}
 PAGE = (resources.files(__package__) / "page.html").read_text("utf-8")
 
 
-def _ws(root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool = False,
-        show: Optional[List[str]] = None) -> Workspace:
+def _ws(
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool = False,
+    show: Optional[List[str]] = None,
+) -> Workspace:
     r = Path(root).expanduser()
     if not r.is_dir():
         sys.exit(f"treedit: {r} is not a folder")
     n = Path(notes).expanduser() if notes else r / NOTES_NAME
-    return Workspace(r, n, DEFAULT_IGNORE + list(ignore or []), follow_outside, not no_gitignore,
-                     DEFAULT_SHOW if show is None else show)
+    return Workspace(
+        r,
+        n,
+        DEFAULT_IGNORE + list(ignore or []),
+        follow_outside,
+        not no_gitignore,
+        DEFAULT_SHOW if show is None else show,
+    )
 
 
 def roots_of(root) -> list:
@@ -1655,14 +1781,18 @@ def find_app():
     if hit:
         return hit
     target = Path(__file__).resolve().parents[2] / "app" / "target"
-    builds = [b for b in (target / "release" / "treedit-app", target / "debug" / "treedit-app")
-              if b.is_file() and os.access(b, os.X_OK)]
+    builds = [
+        b
+        for b in (target / "release" / "treedit-app", target / "debug" / "treedit-app")
+        if b.is_file() and os.access(b, os.X_OK)
+    ]
     return str(max(builds, key=lambda b: b.stat().st_mtime)) if builds else None
 
 
 def free_port(port: int, host: str = "127.0.0.1") -> int:
     """The first port in PORT..PORT+19 that HOST can bind."""
     import socket
+
     for p in range(port, port + 20):
         with socket.socket() as s:
             try:
@@ -1673,14 +1803,25 @@ def free_port(port: int, host: str = "127.0.0.1") -> int:
     sys.exit(f"treedit: no free port in {port}-{port + 19}")
 
 
-def remote_argv(target: str, roots: List[str], port: int, agent: str, notes: str, ignore: List[str],
-                follow_outside: bool, no_gitignore: bool, show: Optional[List[str]], app: bool) -> List[str]:
+def remote_argv(
+    target: str,
+    roots: List[str],
+    port: int,
+    agent: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: Optional[List[str]],
+    app: bool,
+) -> List[str]:
     """ssh argv that runs a headless `treedit open` on TARGET. A forced tty makes the remote server
     get SIGHUP (and stop) when the connection closes; $TREEDIT_REMOTE_CMD overrides `treedit` there."""
     import shlex
 
     def q(p: str) -> str:  # keep a leading ~ unquoted so the remote shell expands it
         return "~/" + shlex.quote(p[2:]) if p.startswith("~/") and len(p) > 2 else shlex.quote(p)
+
     cmd = shlex.split(os.environ.get("TREEDIT_REMOTE_CMD") or "treedit")
     words = [shlex.quote(w) for w in cmd] + ["open", *map(q, roots), "--headless", "--port", str(port)]
     if agent:
@@ -1700,14 +1841,29 @@ def remote_argv(target: str, roots: List[str], port: int, agent: str, notes: str
     return ["ssh", "-tt", "-o", "ServerAliveInterval=15", target, " ".join(words)]
 
 
-def open_remote(target: str, root: List[str], port: int, browser: bool, headless: bool, agent: str,
-                notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def open_remote(
+    target: str,
+    root: List[str],
+    port: int,
+    browser: bool,
+    headless: bool,
+    agent: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Run treedit on TARGET ([user@]host) over ssh, bound to its loopback, and tunnel it to a local port.
     The agent pane runs there; closing the window (or Ctrl+C) closes ssh, which stops the remote server."""
     exe = None if headless or browser else find_app()
-    server = subprocess.Popen(remote_argv(target, roots_of(root), port, agent, notes, ignore, follow_outside,
-                                          no_gitignore, show, bool(exe)),
-                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, errors="replace")
+    server = subprocess.Popen(
+        remote_argv(target, roots_of(root), port, agent, notes, ignore, follow_outside, no_gitignore, show, bool(exe)),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        text=True,
+        errors="replace",
+    )
     procs, win = [server], None
     try:
         rport = None
@@ -1722,9 +1878,12 @@ def open_remote(target: str, root: List[str], port: int, browser: bool, headless
             sys.exit(f"treedit: the remote treedit on {target} did not start (exit {server.wait()})")
         threading.Thread(target=lambda: [None for _ in server.stdout], daemon=True).start()  # keep draining
         lport = free_port(port)
-        procs.append(subprocess.Popen(["ssh", "-N", "-o", "ExitOnForwardFailure=yes",
-                                       "-L", f"127.0.0.1:{lport}:127.0.0.1:{rport}", target],
-                                      stdin=subprocess.DEVNULL))
+        procs.append(
+            subprocess.Popen(
+                ["ssh", "-N", "-o", "ExitOnForwardFailure=yes", "-L", f"127.0.0.1:{lport}:127.0.0.1:{rport}", target],
+                stdin=subprocess.DEVNULL,
+            )
+        )
         url = f"http://127.0.0.1:{lport}/"
         deadline = time.time() + 15
         while True:
@@ -1739,8 +1898,9 @@ def open_remote(target: str, root: List[str], port: int, browser: bool, headless
         if exe:
             win = subprocess.Popen([exe, "--url", url])
             # the remote server stopping (Ctrl+Q in the page) closes the window too
-            threading.Thread(target=lambda: (server.wait(), win.poll() is None and win.terminate()),
-                             daemon=True).start()
+            threading.Thread(
+                target=lambda: (server.wait(), win.poll() is None and win.terminate()), daemon=True
+            ).start()
             win.wait()
             return
         if not headless and not browser:
@@ -1761,16 +1921,28 @@ def open_remote(target: str, root: List[str], port: int, browser: bool, headless
                     p.kill()
 
 
-def open_editor(root: List[str], port: int, host: str, browser: bool, headless: bool, agent: str,
-                notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str],
-                remote: str = "") -> None:
+def open_editor(
+    root: List[str],
+    port: int,
+    host: str,
+    browser: bool,
+    headless: bool,
+    agent: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+    remote: str = "",
+) -> None:
     """Serve the editor on HOST:PORT (next free port if taken) and show it in the treedit-app window.
     Closing the window stops the server. Falls back to the browser when the app is not built.
     Several ROOTs open side by side, each a top-level folder of the tree with its own notes file.
     With --remote [user@]host the ROOTs are paths on that machine, served there and tunnelled over ssh."""
     if remote:
-        return open_remote(remote, root, port, browser, headless, agent, notes, ignore, follow_outside,
-                           no_gitignore, show)
+        return open_remote(
+            remote, root, port, browser, headless, agent, notes, ignore, follow_outside, no_gitignore, show
+        )
     roots = [_ws(r, notes, ignore, follow_outside, no_gitignore, show) for r in roots_of(root)]
     if notes and len(roots) > 1:
         sys.exit("treedit: --notes works with one folder; each opened folder keeps its own notes file")
@@ -1795,9 +1967,15 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
     agent = agent or os.environ.get("TREEDIT_AGENT", "")
     Handler.agent = agent
     if Handler.loopback:
-        env = {**{k: v for k, v in os.environ.items() if k != "TREEDIT_IN_APP"}, "TERM": "xterm-256color", "COLORTERM": "truecolor", "TREEDIT_ROOT": str(roots[0].root),
-               "TREEDIT_ROOTS": os.pathsep.join(str(w.root) for w in roots),
-               "TREEDIT_NOTES": str(ws.notes_path), "TREEDIT_URL": url}
+        env = {
+            **{k: v for k, v in os.environ.items() if k != "TREEDIT_IN_APP"},
+            "TERM": "xterm-256color",
+            "COLORTERM": "truecolor",
+            "TREEDIT_ROOT": str(roots[0].root),
+            "TREEDIT_ROOTS": os.pathsep.join(str(w.root) for w in roots),
+            "TREEDIT_NOTES": str(ws.notes_path),
+            "TREEDIT_URL": url,
+        }
         Handler.terms = Sessions(str(ws.root), env, agent)
         print(f"  agent  {agent or 'shell'} (right pane)")
     exe = None if headless or browser else find_app()
@@ -1831,17 +2009,30 @@ def open_editor(root: List[str], port: int, host: str, browser: bool, headless: 
         srv.server_close()
 
 
-def print_tree(root: List[str], no_counts: bool, no_color: bool, color: bool,
-               notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def print_tree(
+    root: List[str],
+    no_counts: bool,
+    no_color: bool,
+    color: bool,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Print the tree with annotations and open feedback as '# ...' comments. On a terminal rows are
     coloured by document size in the tree (dim, default, amber, red; dark grey = no words)."""
     use = not no_color and (color or (sys.stdout.isatty() and not os.environ.get("NO_COLOR")))
     for i, r in enumerate(roots_of(root)):
-        sys.stdout.write(("\n" if i else "") + _ws(r, notes, ignore, follow_outside, no_gitignore, show)
-                         .export(counts=not no_counts, color=use))
+        sys.stdout.write(
+            ("\n" if i else "")
+            + _ws(r, notes, ignore, follow_outside, no_gitignore, show).export(counts=not no_counts, color=use)
+        )
 
 
-def note_get(path: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def note_get(
+    path: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """Print the user's annotation on PATH ('.' is the root); exit 1 if there is none."""
     key = "/".join(Workspace.parts(path)) or "."
     text = _ws(root, notes, ignore, follow_outside, no_gitignore, show).read_notes().get(key)
@@ -1850,17 +2041,37 @@ def note_get(path: str, root: str, notes: str, ignore: List[str], follow_outside
     print(text)
 
 
-def note_set(path: str, text: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def note_set(
+    path: str,
+    text: str,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Set the annotation on PATH; an empty TEXT removes it. For the user: agents never write annotations."""
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).set_note(path, text)
 
 
-def note_mv(src: str, dst: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def note_mv(
+    src: str,
+    dst: str,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Re-key the annotations of SRC (and everything under it) to DST, without touching files."""
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).move_notes(src, dst)
 
 
-def note_ls(root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def note_ls(
+    root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """List every annotation as 'path<TAB>first line'; paths that no longer exist are marked '(gone)'."""
     ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
     for k, v in sorted(ws.read_notes().items()):
@@ -1868,7 +2079,9 @@ def note_ls(root: str, notes: str, ignore: List[str], follow_outside: bool, no_g
         print(f"{k}\t{(v.strip().splitlines() or [''])[0]}{gone}")
 
 
-def fb_ls(all: bool, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_ls(
+    all: bool, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """List feedback for the agent to act on: id, status, path(s), lines, the quoted code, the
     request and any reply. Open items only unless --all. Line numbers follow the quoted code."""
     items = _ws(root, notes, ignore, follow_outside, no_gitignore, show).refresh_anchors()
@@ -1885,8 +2098,17 @@ def fb_ls(all: bool, root: str, notes: str, ignore: List[str], follow_outside: b
         print()
 
 
-def fb_add(text: str, paths: List[str], lines: str, root: str, notes: str, ignore: List[str],
-           follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_add(
+    text: str,
+    paths: List[str],
+    lines: str,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Add feedback on one or more paths; --lines A-B anchors it to lines of a single file."""
     ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
     span, quote = None, ""
@@ -1894,26 +2116,44 @@ def fb_add(text: str, paths: List[str], lines: str, root: str, notes: str, ignor
         a, _, b = lines.partition("-")
         span = [int(a), int(b or a)]
         body = decode(ws.target_path(paths[0]).read_bytes()) or ""
-        quote = "\n".join(body.split("\n")[span[0] - 1:span[0] - 1 + min(QUOTE_LINES, span[1] - span[0] + 1)])
+        quote = "\n".join(body.split("\n")[span[0] - 1 : span[0] - 1 + min(QUOTE_LINES, span[1] - span[0] + 1)])
     print(f"#{ws.add_feedback(paths, text, span, quote)['id']}")
 
 
-def fb_reply(id: int, text: str, done: bool, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_reply(
+    id: int,
+    text: str,
+    done: bool,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
     """Answer feedback ID (what was changed, or why not); --done also resolves it."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(id, reply=text, status="done" if done else None)
+    _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(
+        id, reply=text, status="done" if done else None
+    )
 
 
-def fb_done(id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_done(
+    id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """Mark feedback ID done."""
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(id, status="done")
 
 
-def fb_reopen(id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_reopen(
+    id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """Mark feedback ID open again."""
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(id, status="open")
 
 
-def fb_rm(id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]) -> None:
+def fb_rm(
+    id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """Delete feedback ID."""
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).delete_feedback(id)
 
@@ -1941,8 +2181,9 @@ def show_context(url: str) -> None:
         print(f"    | {ln}")
 
 
-def show_edits(url: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool,
-               show: List[str]) -> None:
+def show_edits(
+    url: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
     """The user's own edits, for an agent to keep apart from its work: unsaved drafts from the editor
     (shown as diffs against the file they started from) and, when the window is running, the files
     the user saved in the editor recently. Commit saved ones as the user's before your own work."""
@@ -2077,8 +2318,13 @@ def skill_install(claude: bool, hermes: bool, dir: str) -> None:
 ROOT = argument(name="root", arg_type=str, nargs="*", default=["."], help="folder(s) to open")
 NOTE_ROOT = option(flags=["--root", "-C"], arg_type=str, default=".", help="tree root")
 SHARED = [
-    option(flags=["--show"], arg_type=str, nargs="*", default=DEFAULT_SHOW,
-           help="paths kept visible though .gitignore hides them"),
+    option(
+        flags=["--show"],
+        arg_type=str,
+        nargs="*",
+        default=DEFAULT_SHOW,
+        help="paths kept visible though .gitignore hides them",
+    ),
     option(flags=["--no-gitignore"], flag=True, help="show what .gitignore hides"),
     option(flags=["--notes"], arg_type=str, default="", help=f"notes file (empty: ROOT/{NOTES_NAME})"),
     option(flags=["--ignore"], arg_type=str, nargs="*", default=[], help="extra name globs to hide"),
@@ -2090,65 +2336,131 @@ NOTE_PATH = argument(name="path", arg_type=str, help="path relative to the root 
 app = cli(
     name="treedit",
     help="Review a directory tree with an agent: annotate files and folders, leave feedback (also on lines), "
-         "see it coloured by word count; agents read both and answer feedback from the CLI.",
+    "see it coloured by word count; agents read both and answer feedback from the CLI.",
     version=__version__,
     subgroups=[
-        cli(name="open", help="Open the editor window (edit files, notes, feedback, live refresh).",
-            callback=open_editor, arguments=[ROOT], options=[*SHARED,
+        cli(
+            name="open",
+            help="Open the editor window (edit files, notes, feedback, live refresh).",
+            callback=open_editor,
+            arguments=[ROOT],
+            options=[
+                *SHARED,
                 option(flags=["--port", "-p"], arg_type=int, default=8765, help="port (next free one if taken)"),
                 option(flags=["--host"], arg_type=str, default="127.0.0.1", help="interface to bind"),
                 option(flags=["--browser"], flag=True, help="use the web browser instead of the app window"),
                 option(flags=["--headless"], flag=True, help="only serve; open no window"),
-                option(flags=["--remote", "-r"], arg_type=str, default="",
-                       help="[user@]host: open ROOT on that machine (it needs treedit), tunnelled over ssh"),
-                option(flags=["--agent", "-a"], arg_type=str, default="",
-                       help="command for the right-hand pane, e.g. claude or 'hermes --skills treedit' "
-                            "(default $TREEDIT_AGENT, else a shell)"),
-            ]),
-        cli(name="print", help="Print the annotated tree, coloured by word count per level.",
-            callback=print_tree, arguments=[ROOT], options=[*SHARED,
+                option(
+                    flags=["--remote", "-r"],
+                    arg_type=str,
+                    default="",
+                    help="[user@]host: open ROOT on that machine (it needs treedit), tunnelled over ssh",
+                ),
+                option(
+                    flags=["--agent", "-a"],
+                    arg_type=str,
+                    default="",
+                    help="command for the right-hand pane, e.g. claude or 'hermes --skills treedit' "
+                    "(default $TREEDIT_AGENT, else a shell)",
+                ),
+            ],
+        ),
+        cli(
+            name="print",
+            help="Print the annotated tree, coloured by word count per level.",
+            callback=print_tree,
+            arguments=[ROOT],
+            options=[
+                *SHARED,
                 option(flags=["--no-counts"], flag=True, help="omit line/word counts"),
                 option(flags=["--no-color"], flag=True, help="never colour"),
                 option(flags=["--color"], flag=True, help="colour even when not a terminal"),
-            ]),
-        group(name="annotation", help="The user's comments on files and folders, for the agent to read.",
-              options=[NOTE_ROOT, *SHARED],
-              commands=[
-                  command(name="get", help="Print one annotation.", callback=note_get, arguments=[NOTE_PATH]),
-                  command(name="set", help="Set or clear one (user only).", callback=note_set,
-                          arguments=[NOTE_PATH, argument(name="text", arg_type=str, help="annotation ('' clears)")]),
-                  command(name="mv", help="Move annotations to a new path.", callback=note_mv,
-                          arguments=[argument(name="src", arg_type=str), argument(name="dst", arg_type=str)]),
-                  command(name="ls", help="List all annotations.", callback=note_ls),
-              ]),
-        cli(name="edits", help="The user's own edits: unsaved drafts (diffs) and files saved in the editor.",
-            callback=show_edits, options=[NOTE_ROOT, *SHARED,
-                                          option(flags=["--url"], arg_type=str, default="",
-                                                 help="window URL (default $TREEDIT_URL)")]),
-        cli(name="context", help="What the user has selected in the treedit window.", callback=show_context,
-            options=[option(flags=["--url"], arg_type=str, default="", help="window URL (default $TREEDIT_URL)")]),
-        group(name="skill", help="The agent skill that teaches Claude Code / Hermes to use treedit.", commands=[
-            command(name="show", help="Print SKILL.md.", callback=skill_show),
-            command(name="install", help="Install SKILL.md for Claude Code / Hermes.", callback=skill_install,
-                    options=[option(flags=["--claude"], flag=True, help="~/.claude/skills"),
-                             option(flags=["--hermes"], flag=True, help="~/.hermes/skills"),
-                             option(flags=["--dir"], arg_type=str, default="", help="another skills folder")]),
-        ]),
-        group(name="fb", help="Feedback for the agent: list it, answer it, resolve it.", options=[NOTE_ROOT, *SHARED],
-              commands=[
-                  command(name="ls", help="List open feedback.", callback=fb_ls,
-                          options=[option(flags=["--all", "-a"], flag=True, help="include done items")]),
-                  command(name="add", help="Add feedback on paths.", callback=fb_add,
-                          arguments=[argument(name="text", arg_type=str),
-                                     argument(name="paths", arg_type=str, nargs="+")],
-                          options=[option(flags=["--lines", "-l"], arg_type=str, default="", help="A-B (one file)")]),
-                  command(name="reply", help="Reply to feedback.", callback=fb_reply,
-                          arguments=[FB_ID, argument(name="text", arg_type=str)],
-                          options=[option(flags=["--done", "-d"], flag=True, help="also mark it done")]),
-                  command(name="done", help="Mark feedback done.", callback=fb_done, arguments=[FB_ID]),
-                  command(name="reopen", help="Reopen feedback.", callback=fb_reopen, arguments=[FB_ID]),
-                  command(name="rm", help="Delete feedback.", callback=fb_rm, arguments=[FB_ID]),
-              ]),
+            ],
+        ),
+        group(
+            name="annotation",
+            help="The user's comments on files and folders, for the agent to read.",
+            options=[NOTE_ROOT, *SHARED],
+            commands=[
+                command(name="get", help="Print one annotation.", callback=note_get, arguments=[NOTE_PATH]),
+                command(
+                    name="set",
+                    help="Set or clear one (user only).",
+                    callback=note_set,
+                    arguments=[NOTE_PATH, argument(name="text", arg_type=str, help="annotation ('' clears)")],
+                ),
+                command(
+                    name="mv",
+                    help="Move annotations to a new path.",
+                    callback=note_mv,
+                    arguments=[argument(name="src", arg_type=str), argument(name="dst", arg_type=str)],
+                ),
+                command(name="ls", help="List all annotations.", callback=note_ls),
+            ],
+        ),
+        cli(
+            name="edits",
+            help="The user's own edits: unsaved drafts (diffs) and files saved in the editor.",
+            callback=show_edits,
+            options=[
+                NOTE_ROOT,
+                *SHARED,
+                option(flags=["--url"], arg_type=str, default="", help="window URL (default $TREEDIT_URL)"),
+            ],
+        ),
+        cli(
+            name="context",
+            help="What the user has selected in the treedit window.",
+            callback=show_context,
+            options=[option(flags=["--url"], arg_type=str, default="", help="window URL (default $TREEDIT_URL)")],
+        ),
+        group(
+            name="skill",
+            help="The agent skill that teaches Claude Code / Hermes to use treedit.",
+            commands=[
+                command(name="show", help="Print SKILL.md.", callback=skill_show),
+                command(
+                    name="install",
+                    help="Install SKILL.md for Claude Code / Hermes.",
+                    callback=skill_install,
+                    options=[
+                        option(flags=["--claude"], flag=True, help="~/.claude/skills"),
+                        option(flags=["--hermes"], flag=True, help="~/.hermes/skills"),
+                        option(flags=["--dir"], arg_type=str, default="", help="another skills folder"),
+                    ],
+                ),
+            ],
+        ),
+        group(
+            name="fb",
+            help="Feedback for the agent: list it, answer it, resolve it.",
+            options=[NOTE_ROOT, *SHARED],
+            commands=[
+                command(
+                    name="ls",
+                    help="List open feedback.",
+                    callback=fb_ls,
+                    options=[option(flags=["--all", "-a"], flag=True, help="include done items")],
+                ),
+                command(
+                    name="add",
+                    help="Add feedback on paths.",
+                    callback=fb_add,
+                    arguments=[argument(name="text", arg_type=str), argument(name="paths", arg_type=str, nargs="+")],
+                    options=[option(flags=["--lines", "-l"], arg_type=str, default="", help="A-B (one file)")],
+                ),
+                command(
+                    name="reply",
+                    help="Reply to feedback.",
+                    callback=fb_reply,
+                    arguments=[FB_ID, argument(name="text", arg_type=str)],
+                    options=[option(flags=["--done", "-d"], flag=True, help="also mark it done")],
+                ),
+                command(name="done", help="Mark feedback done.", callback=fb_done, arguments=[FB_ID]),
+                command(name="reopen", help="Reopen feedback.", callback=fb_reopen, arguments=[FB_ID]),
+                command(name="rm", help="Delete feedback.", callback=fb_rm, arguments=[FB_ID]),
+            ],
+        ),
     ],
 )
 

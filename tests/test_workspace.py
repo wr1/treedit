@@ -251,6 +251,7 @@ def test_export_skill_tree(ws, tree):
 
 def test_gitignore_and_show(repo):
     from treedit.cli import _ws
+
     t = _ws(str(repo), "", [], False).scan()
     assert find(t, "debug.log") is None
     assert find(t, "notes/todo.md") is not None
@@ -262,6 +263,7 @@ def test_gitignore_and_show(repo):
 
 def test_git_history(repo):
     from treedit.cli import _ws
+
     ws = _ws(str(repo), "", [], False)
     (repo / "README.md").write_text("changed\n")
     log = ws.git_log("README.md", False, 10)
@@ -304,6 +306,7 @@ def test_grep_walks_when_there_is_no_git(ws, tree):
 
 def test_grep_respects_gitignore_and_notes(repo):
     from treedit.cli import _ws
+
     (repo / "notes" / "only-here.md").write_text("zephyr token\n")
     (repo / "flag.txt").write_text("use -n here\n")
     ws = _ws(str(repo), "", [], False)
@@ -318,7 +321,9 @@ def test_grep_respects_gitignore_and_notes(repo):
     (repo / "notes" / "secret.md").write_text("zephyr hidden\n")
     (repo / "notes" / "open.md").write_text("zephyr shown\n")
     assert [h["path"] for h in _ws(str(repo), "", [], False).grep("zephyr")["hits"]] == [
-        "notes/only-here.md", "notes/open.md"]
+        "notes/only-here.md",
+        "notes/open.md",
+    ]
 
 
 def test_git_log_outside_repo(ws):

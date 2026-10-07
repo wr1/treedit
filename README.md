@@ -6,6 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/treedit.svg)](https://pypi.org/project/treedit/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
 Editor and annotator aimed at agent assisted editing of skill trees. 
 Review a directory tree with an agent collaborator: annotate files and folders, leave feedback on
@@ -121,8 +122,9 @@ See `treedit -h` (or `treedit <cmd> -h`) for options.
 ```sh
 make install                 # .venv with treedit (editable)
 make test                    # pytest with coverage
-make lint                    # ruff
+make lint                    # ruff check and format
 make build                   # sdist + wheel in dist/
+uv run pre-commit install    # ruff check --fix and ruff format on every commit
 ```
 
 Releases: bump the version in `pyproject.toml` and `src/treedit/__init__.py`, update `CHANGELOG.md`, then
