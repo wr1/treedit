@@ -13,6 +13,8 @@ Review a directory tree with an agent collaborator: annotate files and folders, 
 files, lines or the structure, and let the agent answer it from the CLI.
 A [treeparse](https://github.com/wr1/treeparse) toolbox with a native (Tauri) window.
 
+![Agents on the tree, a live merge into unsaved edits, several files open, change bars fading](docs/treedit.png)
+
 ## Install
 
 ```sh
