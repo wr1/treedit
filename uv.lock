@@ -479,7 +479,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "treeparse", specifier = ">=0.3.4" }]
+requires-dist = [{ name = "treeparse", git = "https://github.com/wr1/treeparse.git?rev=3e1d2990eb629cb4d3d0f602ae45178672805c87" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -491,16 +491,12 @@ dev = [
 
 [[package]]
 name = "treeparse"
-version = "0.3.4"
-source = { registry = "https://pypi.org/simple" }
+version = "0.4.0"
+source = { git = "https://github.com/wr1/treeparse.git?rev=3e1d2990eb629cb4d3d0f602ae45178672805c87#3e1d2990eb629cb4d3d0f602ae45178672805c87" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/30/ae/f9627becf20b812ee37203e73ac0b7e519a7761e87fe54c987ca3f08096d/treeparse-0.3.4.tar.gz", hash = "sha256:c5421a6441cece94f8964e7c2e7960de6308a0211d10583d47ddae785624b5f4", size = 23574, upload-time = "2026-08-10T21:19:35.415Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/50/3c2bb956a45d998dbbd89955406abd6f0ca0697f701194127064280733ca/treeparse-0.3.4-py3-none-any.whl", hash = "sha256:c3b5fd269e613ab34a724da994ff06850f06c61cc353246f6dc406e67441fd43", size = 27408, upload-time = "2026-08-10T21:19:34.051Z" },
 ]
 
 [[package]]

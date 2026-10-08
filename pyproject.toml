@@ -21,7 +21,9 @@ classifiers = [
     "Topic :: Software Development",
     "Topic :: Text Editors",
 ]
-dependencies = ["treeparse>=0.3.4"]
+dependencies = [
+    "treeparse>=0.4.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/wr1/treedit"
@@ -70,3 +72,6 @@ branch = true
 [tool.coverage.report]
 skip_covered = true
 exclude_also = ["if __name__ == .__main__.:"]
+
+[tool.uv.sources]
+treeparse = { git = "https://github.com/wr1/treeparse.git", rev = "3e1d2990eb629cb4d3d0f602ae45178672805c87" }
