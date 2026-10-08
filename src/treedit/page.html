@@ -177,6 +177,28 @@ body.wrap #editor{overflow-x:hidden}
 #editwrap.hl #editor{color:transparent;caret-color:var(--text)}
 #editwrap.hl #editor::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
 #hl.flash{animation:flash 1.2s ease-out}
+#plotbar{display:flex;gap:8px;align-items:center;padding:4px 14px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
+#plotbar[hidden]{display:none}
+#plotbar button{padding:1px 8px;font-size:12px}
+#plotview{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+#plotview[hidden]{display:none}
+#plotstage{flex:1;min-height:0;overflow:auto;cursor:grab;
+  background-color:var(--panel);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--line) 80%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--line) 80%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--line) 80%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--line) 80%, transparent) 75%);
+  background-size:20px 20px; background-position:0 0, 0 10px, 10px -10px, -10px 0}
+#plotstage:active{cursor:grabbing}
+#plotstage.pdf{cursor:default;background-image:none;background:var(--bg)}
+#plotstage .plotframe{min-width:100%;min-height:100%;display:flex;align-items:center;justify-content:center}
+#plotstage img{display:block;box-shadow:0 0 0 1px var(--line);background:var(--bg)}
+#plotstage iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.plotmini{display:flex;justify-content:center;align-items:center;padding:12px;background:var(--panel);min-height:120px}
+.plotmini.flash{animation:flash 1.2s ease-out}
+.plotmini img{max-width:100%;max-height:68vh;object-fit:contain;box-shadow:0 0 0 1px var(--line);background:var(--bg)}
+.plotmini iframe{width:100%;height:68vh;border:0;background:#fff}
 .t-k{color:var(--t-k)} .t-s{color:var(--t-s)} .t-c{color:var(--t-c)} .t-n,.t-v{color:var(--t-n)}
 .t-f{color:var(--t-f)} .t-t,.t-b{color:var(--t-t)} .t-d{color:var(--t-d)} .t-h{color:var(--accent)}
 #fbbox{border-bottom:1px solid var(--line);padding:5px 14px;max-height:36vh;overflow:auto}
@@ -302,7 +324,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <aside id="treepane"><div id="tree"></div><div id="orphans"></div></aside>
   <div id="divider"></div>
   <section id="detail">
-    <div id="empty">Select a file to edit it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
@@ -311,6 +333,14 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
       <div id="banner" hidden></div>
+      <div id="plotbar" hidden>
+        <span id="plotmeta"></span><span class="spacer"></span>
+        <button id="plot-out" title="Zoom out">−</button>
+        <button id="plot-fit" title="Fit the pane. Double-click the plot for its own size">Fit</button>
+        <button id="plot-in" title="Zoom in">+</button>
+        <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
+      </div>
+      <div id="plotview" hidden><div id="plotstage"></div></div>
       <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
@@ -451,6 +481,7 @@ function tokSpan(n) {  // skill trees: what loading costs, min (no leaf loaded) 
 }
 function countText(n) {
   if (n.kind === 'text') return `${n.lines} l · ${n.words} w`;
+  if (n.kind === 'plot') return (n.name.includes('.') ? n.name.split('.').pop() : 'plot').toLowerCase();
   if (n.kind === 'binary') return 'binary';
   if (n.kind === 'large') return `${(n.size / 1048576).toFixed(1)} MB`;
   if (n.kind === 'outside') return 'outside root';
@@ -685,7 +716,7 @@ async function rebaseBuffers(paths) {  // background buffers follow the agent's 
     if (!b) continue;
     let f;
     try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { continue; }
-    if (f.kind !== 'text' || f.hash === b.hash) continue;
+    if ((f.kind !== 'text' && !(f.kind === 'plot' && f.content != null)) || f.hash === b.hash) continue;
     const merged = rebaseEdits(b.original, b.value, f.content);
     if (merged == null) continue;  // overlapping change: the conflict banner shows when the file is opened
     if (merged === f.content) { S.bufs.delete(p); continue; }  // the disk now holds your edits: nothing unsaved
@@ -723,9 +754,10 @@ async function hydrateDrafts() {
     S.hydrated.add(p);
     if (dirtyBuffers().has(p)) continue;  // already being edited here
     const n = S.byPath.get(p);
-    if (!n || n.type !== 'file' || n.kind !== 'text') { S.stuck[p] = { ...dr, why: 'the file is gone' }; continue; }
+    if (!n || n.type !== 'file' || (n.kind !== 'text' && n.kind !== 'plot')) { S.stuck[p] = { ...dr, why: 'the file is gone' }; continue; }
     let f;
     try { f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); } catch { S.stuck[p] = { ...dr, why: 'the file cannot be read' }; continue; }
+    if (f.kind === 'plot' && f.content == null) { S.stuck[p] = { ...dr, why: 'the file cannot be edited as text' }; continue; }
     const same = !dr.base_hash || dr.base_hash === f.hash, mine = dr.base != null ? applyPatch(dr.base, dr.diff || '') : null;
     const value = dr.base != null && mine != null ? merge3(dr.base, mine, f.content)  // three-way, like live edits
       : dr.full != null ? (same || dr.full === f.content ? dr.full : null)
@@ -845,6 +877,8 @@ async function select(path) {
   if (path === S.sel) return;
   const n = S.byPath.get(path); if (!n) return;
   stashSingle();
+  Plot.source = false; S.plotDoc = null;
+  if ($('#plotstage').dataset.path !== path) { $('#plotstage').replaceChildren(); $('#plotstage').dataset.path = ''; $('#plotmeta').textContent = ''; }
   S.sel = path; S.anchor = path; S.file = null; S.conflict = null; hideBanner(); closeFind(false);
   history.replaceState(null, '', '#' + encodeURIComponent(path));
   renderTree(); renderDetail();
@@ -862,11 +896,11 @@ function renderDetail() {
   $('#crumb').textContent = (p || S.rootName) + (n ? '' : '  (missing on disk)');
   $('#linkinfo').textContent = n && n.link ? `→ ${n.link}  · edits go to the target` : '';
   const isFile = n ? n.type === 'file' : true;
-  $('#editwrap').hidden = !isFile; $('#save').hidden = !isFile; $('#pos').hidden = !isFile; $('#filestate').hidden = !isFile;
   $('#dirinfo').hidden = isFile;
   $('#b-rename').disabled = $('#b-delete').disabled = !n || p === '';
   if (!isFile) renderDirInfo(n);
   updateFileState();
+  syncChrome();
   renderFb(); renderDraft();
 }
 function renderDirInfo(n) {
@@ -904,7 +938,7 @@ async function renderMulti() {
 }
 async function multiFile(p) {
   const n = S.byPath.get(p);
-  if (n.type !== 'file' || n.kind !== 'text') return null;
+  if (n.type !== 'file' || (n.kind !== 'text' && n.kind !== 'plot')) return null;
   const c = S.mcache.get(p);
   if (c && c.mtime === n.mtime && c.size === n.size) return c.f;
   try { const f = await api('GET', '/api/file?path=' + encodeURIComponent(p)); S.mcache.set(p, { mtime: n.mtime, size: n.size, f }); return f; }
@@ -940,6 +974,21 @@ function sectionHeader(n, st) {
   return h;
 }
 function sectionBody(st, n, f) {
+  if (f && f.kind === 'plot') {
+    if (!st.plot || st.disk !== f.hash) {
+      const box = el('div', 'plotmini'), src = rawUrl(f.path, f.hash);
+      if (f.mime === 'application/pdf') {
+        const fr = document.createElement('iframe'); fr.src = src; fr.title = f.path; box.append(fr);
+      } else {
+        const img = document.createElement('img'); img.alt = f.path; img.draggable = false; img.src = src; box.append(img);
+      }
+      if (st.body) st.body.replaceWith(box); else st.sec.append(box);
+      st.body = box; st.ta = null; st.plot = true; st.disk = f.hash; st.lang = null;
+      box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+    }
+    return;
+  }
+  st.plot = false;
   if (!f || f.content == null) {  // folder, binary, error: a one-line summary
     const kids = (n.children || []).map(c => c.name + (c.type === 'dir' ? '/' : '')).join('   ');
     const m = el('div', 'msg', f?.error || (n.type === 'dir' ? (n.linked ? 'linked folder' : kids || 'empty folder') : countText(n) || n.type));
@@ -1102,7 +1151,7 @@ $('#mclear').onclick = clearMulti;
 
 /* ---------- files ---------- */
 function resumeBuf(path, f) {  // your unsaved edits to PATH, merged onto the disk version F if it moved on; null if none left
-  const b = f.kind === 'text' && S.bufs.get(path);
+  const b = (f.kind === 'text' || (f.kind === 'plot' && f.content != null)) && S.bufs.get(path);
   if (!b) return null;
   const merged = b.hash !== f.hash ? rebaseEdits(b.original, b.value, f.content) : null;
   const r = merged != null ? { hash: f.hash, original: f.content, value: merged } : b;
@@ -1112,33 +1161,146 @@ function resumeBuf(path, f) {  // your unsaved edits to PATH, merged onto the di
 }
 async function openFile(path) {
   try {
-    const f = await api('GET', '/api/file?path=' + encodeURIComponent(path));
-    const b = resumeBuf(path, f);
+    const disk = await api('GET', '/api/file?path=' + encodeURIComponent(path));
+    const b = resumeBuf(path, disk);
     if (b) histSync(path, b.value, b.original);  // undo can walk back to the disk version
-    setFile(b ? { ...f, content: b.value } : f);
+    const f = b ? { ...disk, content: b.value, source: disk.kind === 'plot' } : disk;
+    setFile(f);
     if (b) {  // resume unsaved edits; the conflict banner only when they could not be merged
       S.bufs.delete(path); S.file.original = b.original; S.file.hash = b.hash; updateFileState();
-      if (b.hash !== f.hash) showConflict({ type: 'changed', disk: f });
+      if (b.hash !== disk.hash) showConflict({ type: 'changed', disk });
     }
   } catch (e) { toast(e.message, true); }
 }
 function setFile(f, keepView) {
-  S.file = { path: f.path, hash: f.hash, kind: f.kind, original: f.kind === 'text' ? f.content : null };
+  const plot = f.kind === 'plot';
+  if (!plot) Plot.source = false;
+  else if (f.source) Plot.source = true;
+  else if (!keepView) Plot.source = false;
+  const source = plot && Plot.source && f.content != null;
+  S.plotDoc = plot ? f : null;
+  S.file = {
+    path: f.path, hash: f.hash, kind: source ? 'text' : f.kind, mime: f.mime || null, plot,
+    original: f.kind === 'text' || source ? f.content : null,
+  };
   const a = editor.selectionStart, b = editor.selectionEnd, top = editor.scrollTop;
-  if (f.kind === 'text') { editor.readOnly = false; editor.value = f.content; }
-  else { editor.readOnly = true; editor.value = f.kind === 'binary' ? '(binary file — not editable here)' : '(file too large to edit here)'; }
-  editor.style.tabSize = hlEl.style.tabSize = /\.py$/.test(f.path) ? 4 : 2;
-  S.file.lang = f.kind === 'text' ? langOf(f.path) : null;
-  if (f.kind === 'text') histSync(f.path, editor.value);  // a disk reload becomes an undoable step
+  if (plot && !source) {
+    editor.readOnly = true; editor.value = ''; S.file.lang = null; showPlot(f, keepView);
+  } else if (f.kind === 'text' || source) {
+    editor.readOnly = false; editor.value = f.content;
+    editor.style.tabSize = hlEl.style.tabSize = /\.py$/.test(f.path) ? 4 : 2;
+    S.file.lang = langOf(f.path);
+    histSync(f.path, editor.value);  // a disk reload becomes an undoable step
+    if (keepView) { const L = editor.value.length; editor.setSelectionRange(Math.min(a, L), Math.min(b, L)); editor.scrollTop = top; }
+    else { editor.setSelectionRange(0, 0); editor.scrollTop = 0; }
+  } else {
+    editor.readOnly = true; S.file.lang = null;
+    editor.value = f.kind === 'binary' ? '(binary file — not editable here)' : '(file too large to edit here)';
+  }
   updateUndoButtons();
   renderHL(true);
-  if (keepView) { const L = editor.value.length; editor.setSelectionRange(Math.min(a, L), Math.min(b, L)); editor.scrollTop = top; }
-  else { editor.setSelectionRange(0, 0); editor.scrollTop = 0; }
   updateFileState(); updatePos(); renderMarks();
+  syncChrome();
 }
+const Plot = { source: false, fit: true, scale: 1 };  // the open plot: picture, or SVG source
+S.plotDoc = null;
+function rawUrl(path, hash) {
+  return '/api/raw?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(hash || '');
+}
+function showPlot(f, keep) {
+  const stage = $('#plotstage');
+  if (stage.dataset.path !== f.path) { Plot.fit = true; Plot.scale = 1; }
+  if (keep && stage.dataset.path === f.path && stage.dataset.hash === f.hash && stage.firstChild) return;
+  stage.dataset.path = f.path; stage.dataset.hash = f.hash;
+  stage.replaceChildren();
+  const pdf = f.mime === 'application/pdf';
+  stage.classList.toggle('pdf', pdf);
+  if (pdf) {
+    const fr = document.createElement('iframe');
+    fr.src = rawUrl(f.path, f.hash); fr.title = f.path; stage.append(fr);
+    $('#plotmeta').textContent = 'pdf';
+  } else {
+    const frame = el('div', 'plotframe'), img = document.createElement('img');
+    img.alt = f.path; img.draggable = false; img.title = 'Double-click for the plot’s own size';
+    img.src = rawUrl(f.path, f.hash);
+    img.onload = () => layoutPlot();
+    img.onerror = () => { $('#plotmeta').textContent = 'could not show this plot'; };
+    frame.append(img); stage.append(frame);
+    $('#plotmeta').textContent = '';
+  }
+}
+function layoutPlot() {
+  const img = $('#plotstage img');
+  if (!img || !img.naturalWidth) return;
+  const stage = $('#plotstage'), sw = stage.clientWidth - 24, sh = stage.clientHeight - 24;
+  if (sw < 20 || sh < 20) return;  // the pane is hidden, or not laid out yet
+  if (Plot.fit) Plot.scale = Math.min(1, sw / img.naturalWidth, sh / img.naturalHeight);
+  img.style.width = Math.max(1, Math.round(img.naturalWidth * Plot.scale)) + 'px';
+  img.style.height = Math.max(1, Math.round(img.naturalHeight * Plot.scale)) + 'px';
+  $('#plotmeta').textContent = `${img.naturalWidth} × ${img.naturalHeight} · ${Math.round(Plot.scale * 100)}%`;
+}
+function zoomPlot(factor) {  // factor null: actual size
+  const img = $('#plotstage img');
+  if (!img || !img.naturalWidth) return;
+  Plot.fit = false;
+  Plot.scale = factor == null ? 1 : Math.min(16, Math.max(0.05, Plot.scale * factor));
+  layoutPlot();
+}
+function syncChrome() {
+  if (!$('#multi').hidden) return;
+  const n = S.byPath.get(S.sel), isFile = n ? n.type === 'file' : !!S.file;
+  const plotFile = !!(S.file && S.file.plot) || (!S.file && !!(n && n.kind === 'plot'));
+  const plotView = plotFile && !Plot.source;
+  $('#editwrap').hidden = !isFile || plotView;
+  $('#plotview').hidden = !plotView;
+  $('#plotbar').hidden = !plotFile;
+  $('#save').hidden = !isFile || plotView;
+  $('#pos').hidden = !isFile || plotView;
+  $('#filestate').hidden = !isFile;
+  for (const id of ['b-wrap', 'b-undo', 'b-redo']) $('#' + id).hidden = plotView;
+  if (!plotFile) return;
+  $('#plot-src').hidden = !(S.plotDoc && S.plotDoc.content != null);
+  $('#plot-src').textContent = Plot.source ? 'Plot' : 'Source';
+  const pdf = !!(S.file && S.file.mime === 'application/pdf') || !!(n && n.mime === 'application/pdf');
+  $('#plot-out').hidden = $('#plot-in').hidden = $('#plot-fit').hidden = pdf || Plot.source;
+}
+$('#plot-in').onclick = () => zoomPlot(1.25);
+$('#plot-out').onclick = () => zoomPlot(0.8);
+$('#plot-fit').onclick = () => { Plot.fit = true; layoutPlot(); };
+$('#plot-src').onclick = () => {
+  if (!S.file || !S.file.plot || !S.plotDoc || S.plotDoc.content == null) return;
+  if (!Plot.source) {
+    const edited = S.bufs.get(S.file.path);
+    Plot.source = true;
+    setFile({ ...S.plotDoc, content: edited ? edited.value : S.plotDoc.content, source: true }, !!edited);
+    if (edited) { S.file.original = edited.original; S.file.hash = edited.hash; S.bufs.delete(S.file.path); updateFileState(); }
+    editor.focus();
+  } else {
+    if (isDirty()) S.bufs.set(S.file.path, { hash: S.file.hash, original: S.file.original, value: editor.value });
+    Plot.source = false; S.file.kind = 'plot';
+    showPlot(S.plotDoc, true); syncChrome(); updateFileState(); updateUndoButtons();
+  }
+};
+$('#plotstage').addEventListener('dblclick', e => {
+  if (e.target.tagName !== 'IMG') return;
+  if (Plot.fit || Math.abs(Plot.scale - 1) > 0.02) zoomPlot(null); else { Plot.fit = true; layoutPlot(); }
+});
+$('#plotstage').addEventListener('wheel', e => {
+  if (!$('#plotstage img') || !(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  zoomPlot(e.deltaY < 0 ? 1.1 : 0.9);
+}, { passive: false });
+$('#plotstage').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('iframe')) return;
+  const stage = $('#plotstage'), x = e.clientX, y = e.clientY, sl = stage.scrollLeft, st = stage.scrollTop;
+  const mv = ev => { stage.scrollLeft = sl - (ev.clientX - x); stage.scrollTop = st - (ev.clientY - y); };
+  const up = () => { stage.removeEventListener('pointermove', mv); stage.removeEventListener('pointerup', up); };
+  stage.addEventListener('pointermove', mv); stage.addEventListener('pointerup', up);
+});
+new ResizeObserver(() => { if (Plot.fit && !$('#plotview').hidden) layoutPlot(); }).observe($('#plotstage'));
 function updateFileState() {
   const d = isDirty(), fs = $('#filestate');
-  fs.textContent = !S.file ? '' : S.file.kind !== 'text' ? S.file.kind : d ? '● unsaved changes' : 'saved';
+  fs.textContent = !S.file ? '' : S.file.plot && !Plot.source ? (S.file.mime === 'application/pdf' ? 'pdf' : 'plot') : S.file.kind !== 'text' ? S.file.kind : d ? '● unsaved changes' : 'saved';
   fs.className = d ? 'dirty' : '';
   $('#save').disabled = !d && !S.conflict;
   if (d !== S.lastDirty) { S.lastDirty = d; renderTree(); }
@@ -1436,7 +1598,8 @@ async function checkOpenFile() {
     hlEl.classList.remove('flash'); void hlEl.offsetWidth; hlEl.classList.add('flash');
     toast('Reloaded — file changed on disk');
   } else {  // unsaved edits: merge the disk change in when the two touch different lines
-    const merged = f.kind === 'text' ? rebaseEdits(S.file.original, editor.value, f.content) : null;
+    const theirs = f.kind === 'text' || (Plot.source && f.content != null) ? f.content : null;
+    const merged = theirs != null ? rebaseEdits(S.file.original, editor.value, theirs) : null;
     if (merged == null) { if (S.conflict?.disk?.hash !== f.hash) showConflict({ type: 'changed', disk: f }); return; }
     const a = editor.selectionStart, z = editor.selectionEnd, top = editor.scrollTop, shift = merged.length - editor.value.length;
     const before = editor.value.slice(0, a) === merged.slice(0, a);  // the change was after the caret
@@ -1453,7 +1616,9 @@ async function save(force = false) {
   const content = editor.value;
   try {
     const r = await api('PUT', '/api/file', { path: S.file.path, content, base_hash: S.file.hash, force });
-    S.file.hash = r.hash; S.file.original = content; hideBanner(); updateFileState(); toast('Saved');
+    S.file.hash = r.hash; S.file.original = content;
+    if (S.file.plot && S.plotDoc) S.plotDoc = { ...S.plotDoc, hash: r.hash, content };
+    hideBanner(); updateFileState(); toast('Saved');
     poll();
   } catch (e) {
     if (e.status === 409) showConflict(e.data.disk ? { type: 'changed', disk: e.data.disk } : { type: 'deleted' });
@@ -1470,7 +1635,7 @@ function showConflict(c) {
       btn('Recreate with my text', () => save(true)), btn('Close file', () => { S.file = null; S.sel = null; hideBanner(); renderTree(); renderDetail(); }));
   } else {
     b.append(el('b', null, 'Changed on disk while you were editing.'), el('span', 'spacer'));
-    if (c.disk.kind === 'text') b.append(btn('Compare', () => showDiff(editor.value, c.disk.content)));
+    if (c.disk.kind === 'text' || c.disk.content != null) b.append(btn('Compare', () => showDiff(editor.value, c.disk.content)));
     b.append(btn('Load disk version', () => { if (confirm('Discard your edits and load the version on disk?')) { setFile(c.disk); hideBanner(); } }),
       btn('Overwrite with mine', () => save(true), 'danger'));
   }

@@ -46,6 +46,22 @@ def test_page_and_vendor(server):
     assert call(server, "GET", "/vendor/nope.js")[0] == 404
 
 
+def test_raw_plot(server, tree):
+    png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0P\x0f\x00\x04\x85\x01\x80\x84\xa9\x8c!\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    (tree / "fig.png").write_bytes(png)
+    (tree / "fig.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    with urlopen(server + "/api/raw?path=fig.png", timeout=5) as r:
+        assert r.status == 200 and r.headers["Content-Type"] == "image/png" and r.read() == png
+        assert "sandbox" in r.headers["Content-Security-Policy"]
+    status, svg = call(server, "GET", "/api/file?path=" + "fig.svg")
+    assert status == 200 and svg["kind"] == "plot" and svg["content"].startswith("<svg")
+    assert call(server, "GET", "/api/raw?path=README.md")[0] == 415
+    assert call(server, "GET", "/api/raw?path=../x")[0] == 400
+
+
 def test_tree_and_files(server, tree):
     status, t = call(server, "GET", "/api/tree")
     assert status == 200 and t["root"] == "proj" and t["feedback"] == []

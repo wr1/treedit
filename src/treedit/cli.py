@@ -12,6 +12,8 @@ What it does
     (in the browser and in `treedit print` on a terminal). The header box filters that tree;
     Enter searches inside the files (the same files the tree shows).
   * Edit any text file; Ctrl/Cmd+S saves. Symlinked files edit their target.
+  * Plot files (png, jpg, gif, webp, bmp, tiff, avif, svg, pdf) open in a viewer.
+    SVG can still be edited as source.
   * Annotate any file or folder (including the root): your standing comments for the agent,
     which it reads but never writes. Leave feedback
     for an agent on a path, on lines of a file, or on several paths; it is open or
@@ -77,7 +79,21 @@ DEFAULT_IGNORE = [
 NOTES_NAME = ".treenotes.json"
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
+RAW_MAX = 64 * 1024 * 1024  # a plot larger than this is listed, but not sent to the viewer
 GREP_LIMIT = 200  # content-search hits returned in one go
+PLOT_MIME = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+    "avif": "image/avif",
+    "svg": "image/svg+xml",
+    "pdf": "application/pdf",
+}
 
 
 class HTTPError(Exception):
@@ -97,6 +113,11 @@ def decode(data: bytes):
         return data.decode("utf-8")
     except UnicodeDecodeError:
         return None
+
+
+def plot_mime(name: str) -> str | None:
+    """Content type when NAME is a plot the window can show, else None."""
+    return PLOT_MIME.get(Path(name).suffix.lower().lstrip("."))
 
 
 def count_lines(text: str) -> int:
@@ -438,7 +459,10 @@ class Workspace:
         hit = self._info_cache.get(key)
         if hit is not None:
             return hit
-        if st.st_size > MAX_TEXT:
+        mime = plot_mime(rel or path.name)
+        if mime:
+            info = {"kind": "plot", "mime": mime}  # shown in the viewer; the bytes stay on disk
+        elif st.st_size > MAX_TEXT:
             info = {"kind": "large"}
         else:
             try:
@@ -780,6 +804,21 @@ class Workspace:
             raise HTTPError(404, "file not found")
         if not t.is_file():
             raise HTTPError(400, "not a file")
+        mime = plot_mime(rel)
+        if mime:
+            h, size = hashlib.sha1(), 0
+            with t.open("rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    size += len(chunk)
+                    h.update(chunk)
+            out = {"path": rel, "hash": h.hexdigest(), "size": size, "kind": "plot", "mime": mime}
+            if mime == "image/svg+xml" and size <= MAX_TEXT:  # source stays editable
+                data = t.read_bytes()
+                text = decode(data)
+                if text is not None:
+                    out["content"] = text.replace("\r\n", "\n")
+                    out["crlf"] = b"\r\n" in data
+            return out
         data = t.read_bytes()
         out = {"path": rel, "hash": sha1(data), "size": len(data)}
         if len(data) > MAX_TEXT:
@@ -791,6 +830,22 @@ class Workspace:
             return out
         out.update(kind="text", content=text.replace("\r\n", "\n"), crlf="\r\n" in text)
         return out
+
+    def raw_file(self, rel: str) -> tuple[bytes, str]:
+        """Bytes and content type of a plot, for the viewer. Anything else is refused."""
+        rel = self.norm(rel)
+        mime = plot_mime(rel)
+        if not mime:
+            raise HTTPError(415, "not a plot")
+        t = self.target_path(rel)
+        if not t.exists():
+            raise HTTPError(404, "file not found")
+        if not t.is_file():
+            raise HTTPError(400, "not a file")
+        data = t.read_bytes()
+        if len(data) > RAW_MAX:
+            raise HTTPError(413, "plot is too large to show")
+        return data, mime
 
     def write_file(self, rel: str, content: str, base_hash, force: bool) -> dict:
         rel = self.norm(rel)
@@ -1158,6 +1213,8 @@ class Workspace:
             elif counts and n["type"] == "dir" and n.get("tmax"):
                 lo, hi = fmt_tokens(n["tmin"]), fmt_tokens(n["tmax"])
                 s += f"  ~{lo} tokens" if lo == hi else f"  ~{lo}-{hi} tokens"
+            elif counts and n.get("kind") == "plot":
+                s += f"  (plot, {n['size']} bytes)"
             elif counts and n.get("kind") in ("binary", "large"):
                 s += f"  ({n['kind']}, {n['size']} bytes)"
             return s
@@ -1423,6 +1480,10 @@ class Mounts:
         name, w, sub = self.split(rel)
         return {**w.read_file(sub), "path": self._pre(name, w.norm(sub))}
 
+    def raw_file(self, rel: str) -> tuple[bytes, str]:
+        _, w, sub = self.split(rel)
+        return w.raw_file(sub)
+
     def write_file(self, rel: str, content: str, base_hash, force: bool) -> dict:
         name, w, sub = self.split(rel)
         try:
@@ -1484,11 +1545,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def send(self, status: int, body: bytes, ctype: str):
+    def send(self, status: int, body: bytes, ctype: str, headers: dict | None = None):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1599,6 +1662,18 @@ class Handler(BaseHTTPRequestHandler):
             )
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
+        if method == "GET" and path == "/api/raw":
+            data, mime = ws.raw_file(q.get("path", ""))
+            return self.send(
+                200,
+                data,
+                mime,
+                {
+                    "X-Content-Type-Options": "nosniff",
+                    # a plot opened on its own must not run as a page on this origin
+                    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; sandbox",
+                },
+            )
         b = self.body()
         if method == "PUT" and path == "/api/draft":
             draft = {k: b[k] for k in ("base_hash", "diff", "full", "base") if b.get(k) is not None}

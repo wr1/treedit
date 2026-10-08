@@ -13,6 +13,27 @@ def test_decode_text_and_binary():
     assert cli.decode(b"\xff\xfe") is None
 
 
+@pytest.mark.parametrize(
+    "name,mime",
+    [
+        ("fig.png", "image/png"),
+        ("dir/FIG.PNG", "image/png"),
+        ("a.jpg", "image/jpeg"),
+        ("a.jpeg", "image/jpeg"),
+        ("a.gif", "image/gif"),
+        ("a.webp", "image/webp"),
+        ("a.svg", "image/svg+xml"),
+        ("a.pdf", "application/pdf"),
+        ("a.tif", "image/tiff"),
+        ("notes.txt", None),
+        ("dir.png/readme", None),
+        ("noext", None),
+    ],
+)
+def test_plot_mime(name, mime):
+    assert cli.plot_mime(name) == mime
+
+
 @pytest.mark.parametrize("text,n", [("", 0), ("a", 1), ("a\n", 1), ("a\nb", 2), ("a\nb\n", 2)])
 def test_count_lines(text, n):
     assert cli.count_lines(text) == n

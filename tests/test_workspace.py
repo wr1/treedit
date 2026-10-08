@@ -55,6 +55,60 @@ def test_large_file(ws, tree, monkeypatch):
     assert ws.read_file("big.txt")["kind"] == "large"
 
 
+PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+    b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0P\x0f\x00\x04\x85\x01\x80\x84\xa9\x8c!\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def test_plots(ws, tree):
+    (tree / "fig.png").write_bytes(PNG)
+    (tree / "FIG.SVG").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>\n')
+    (tree / "doc.pdf").write_bytes(b"%PDF-1.4\n")
+    (tree / "link.png").symlink_to("fig.png")
+    scanned = ws.scan()
+    png = find(scanned, "fig.png")
+    assert png["kind"] == "plot" and png["mime"] == "image/png" and "content" not in png and "words" not in png
+    assert find(scanned, "FIG.SVG")["mime"] == "image/svg+xml"
+    assert find(scanned, "doc.pdf")["kind"] == "plot"
+    assert find(scanned, "link.png")["kind"] == "plot"
+    got = ws.read_file("fig.png")
+    assert got["kind"] == "plot" and got["mime"] == "image/png" and "content" not in got and got["size"] == len(PNG)
+    svg = ws.read_file("FIG.SVG")
+    assert svg["content"].startswith("<svg") and svg["mime"] == "image/svg+xml"
+    assert ws.raw_file("fig.png") == (PNG, "image/png")
+    assert ws.raw_file("link.png")[0] == PNG
+    with pytest.raises(HTTPError) as e:
+        ws.raw_file("README.md")
+    assert e.value.status == 415
+    (tree / "bad.svg").write_bytes(b"<svg>\0</svg>")
+    assert "content" not in ws.read_file("bad.svg")
+    with pytest.raises(HTTPError) as e:
+        ws.raw_file("missing.png")
+    assert e.value.status == 404
+    (tree / "dir.pdf").mkdir()
+    with pytest.raises(HTTPError) as e:
+        ws.raw_file("dir.pdf")
+    assert e.value.status == 400
+    assert "(plot," in ws.export()
+
+
+def test_plot_too_large(ws, tree, monkeypatch):
+    monkeypatch.setattr("treedit.cli.RAW_MAX", 8)
+    (tree / "big.png").write_bytes(PNG)
+    assert find(ws.scan(), "big.png")["kind"] == "plot"
+    with pytest.raises(HTTPError) as e:
+        ws.raw_file("big.png")
+    assert e.value.status == 413
+
+
+def test_plot_larger_than_text(ws, tree, monkeypatch):
+    monkeypatch.setattr("treedit.cli.MAX_TEXT", 4)
+    (tree / "wide.png").write_bytes(PNG)
+    assert find(ws.scan(), "wide.png")["kind"] == "plot"
+    assert ws.read_file("wide.png")["kind"] == "plot"
+
+
 def test_change_tracking(ws, tree):
     ws.scan()
     p = tree / "pkg" / "b.py"
