@@ -76,6 +76,18 @@ def test_tree_and_files(server, tree):
     assert call(server, "GET", "/api/changes")[1]["root"] == str(tree)
 
 
+def test_history_endpoint(server, tree):
+    assert call(server, "GET", "/api/tree")[0] == 200
+    p = tree / "pkg" / "b.py"
+    p.write_text("x = 1\ny = 2\n")
+    os.utime(p, None)
+    assert call(server, "GET", "/api/tree")[0] == 200
+    status, body = call(server, "GET", "/api/history")
+    assert status == 200
+    ev = [e for e in body["events"] if e["path"] == "pkg/b.py" and e["ranges"]]
+    assert ev[-1]["ranges"] == [[2, 2, "add"]] and ev[-1]["by"] == "agent"
+
+
 def test_mutations(server, tree):
     assert call(server, "POST", "/api/new", {"path": "d/n.txt"})[1] == {"ok": True, "git": False}
     assert call(server, "POST", "/api/new", {"path": "d2", "kind": "dir"})[0] == 200

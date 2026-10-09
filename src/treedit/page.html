@@ -163,6 +163,8 @@ section#detail{flex:1;min-width:0;display:flex;flex-direction:column;position:re
 .mark{position:absolute;left:0;right:0;background:color-mix(in srgb,var(--fb) 9%,transparent);border-left:3px solid var(--fb)}
 .chg{position:absolute;width:4px;border-radius:2px;background:var(--agentc)}
 .chg.you{background:var(--accent)} .chg.del{height:3px !important;width:10px;border-radius:0}
+.wash{position:absolute;left:0;right:18px;background:color-mix(in srgb, var(--agentc) 18%, transparent)}
+.wash.you{background:color-mix(in srgb, var(--accent) 18%, transparent)}
 #ovr{position:absolute;top:0;bottom:0;width:7px;pointer-events:none;z-index:2}
 #ovr i{position:absolute;left:0;right:0;min-height:3px;border-radius:2px;background:var(--agentc);pointer-events:auto;cursor:pointer}
 #ovr i.you{background:var(--accent)}
@@ -263,7 +265,18 @@ body.wrap #editor{overflow-x:hidden}
 .sbanner{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 14px;background:color-mix(in srgb,var(--danger) 14%,var(--bg));border-bottom:1px solid var(--danger);font-size:13px}
 .sbanner b{color:var(--danger)}
 .unsaved,.conflict,.agentmark{font-size:11px;flex:none}
-.unsaved{color:var(--note)} .conflict{color:var(--danger)} .agentmark{color:var(--agentc)}
+.unsaved{color:var(--note)} .conflict{color:var(--danger)} .agentmark{color:var(--agentc)} .youmark{color:var(--accent)}
+#tl{display:none;position:relative;margin:4px 8px 6px;padding:4px 6px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);user-select:none}
+#tl.on{display:block}
+.tlane{display:flex;align-items:center;gap:6px;height:16px}
+.tlane b{width:38px;flex:none;font-size:10px;font-weight:600;color:var(--dim)}
+.track{position:relative;flex:1;height:8px;border-radius:4px;background:color-mix(in srgb, var(--line) 70%, transparent);cursor:crosshair}
+.track .tick{position:absolute;top:0;width:3px;height:8px;margin-left:-1px;border-radius:1px;background:var(--agentc)}
+.track .tick.you{background:var(--accent)}
+.track .tick.git{background:var(--dim)}
+#tlbrush{position:absolute;top:4px;bottom:4px;background:color-mix(in srgb, var(--accent) 16%, transparent);border-left:1px solid var(--accent);border-right:1px solid var(--accent);pointer-events:none}
+#tlbrush[hidden]{display:none}
+.recent-empty{color:var(--dim);padding:10px 12px;font-size:12.5px}
 #orphans .d span.why{color:var(--dim);font-style:normal}
 .mfile .t-c{font-style:italic} .mfile .t-h{font-weight:600}
 .mfile .msg{padding:10px 16px;color:var(--dim);font-size:13px}
@@ -299,7 +312,23 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <input type="search" id="filter" placeholder="Filter the tree — Enter searches files" title="Filters by path, annotation or feedback as you type. Enter searches inside files.">
   <label title="Show your annotations in the tree"><input type="checkbox" id="shownotes" checked> annotations</label>
   <label><input type="checkbox" id="showcounts" checked> counts</label>
-  <label title="Colour each document by its size in this tree (word count ranked among all files; folders among folders): dim = small, red = largest"><input type="checkbox" id="heat" checked> heat</label>
+  <label title="Colour names in the tree. Size is word count. Recency, feedback and notes use the same dim-to-red scale.">colour
+    <select id="colour">
+      <option value="size">size</option>
+      <option value="recency">recency</option>
+      <option value="feedback">feedback</option>
+      <option value="notes">notes</option>
+      <option value="off">off</option>
+    </select>
+  </label>
+  <label title="Name keeps folders first. Recency orders each folder by its newest change. Recent is a flat list.">order
+    <select id="order">
+      <option value="name">name</option>
+      <option value="recency">recency</option>
+      <option value="recent">recent</option>
+    </select>
+  </label>
+  <label title="You, agent and git over the last hour. Drag across the strip to filter the tree."><input type="checkbox" id="timeline"> timeline</label>
   <label title="Show a folder that holds just one file (however deep) on one line"><input type="checkbox" id="compact" checked> compact</label>
   <label title="Colour of the window. System follows this machine.">theme
     <select id="theme">
@@ -321,7 +350,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <div id="searchhits"></div>
 </div>
 <main>
-  <aside id="treepane"><div id="tree"></div><div id="orphans"></div></aside>
+  <aside id="treepane">
+    <div id="tl">
+      <div class="tlane"><b>you</b><div class="track" id="lane-you"></div></div>
+      <div class="tlane"><b>agent</b><div class="track" id="lane-agent"></div></div>
+      <div class="tlane"><b>git</b><div class="track" id="lane-git"></div></div>
+      <div id="tlbrush" hidden></div>
+    </div>
+    <div id="tree"></div><div id="orphans"></div>
+  </aside>
   <div id="divider"></div>
   <section id="detail">
     <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
@@ -387,7 +424,7 @@ const S = {
   flashPaths: new Set(),
   multi: new Set(), anchor: null, order: [], mcache: new Map(), feedback: [], draft: null, modalFb: false, bufs: new Map(), msec: new Map(), lastDirty: false,
   drafts: {}, draftSent: new Map(), stuck: {}, hydrated: new Set(), changes: {}, dirFresh: new Map(), skew: 0, showDone: load('showdone', false),
-  hitsOn: false,
+  hitsOn: false, colour: 'size', orderMode: 'name', brush: null, gitCommits: [],
 };
 
 async function api(method, url, body) {
@@ -422,13 +459,19 @@ function rowMarks(r, path, isDir) {  // unsaved / conflict / agent-change marker
     else if (isDirtyPath(path)) r.append(markerSpan('unsaved', '✎', 'unsaved edits (kept as a draft until you save)'));
     if (isDirtyPath(path)) bg = 'color-mix(in srgb, var(--note) 13%, transparent)';
   }
-  const c = !isDir && S.changes[path], at = c && c.by === 'agent' ? c.at : isDir ? S.dirFresh.get(path) : null;
+  const c = !isDir && S.changes[path], dir = isDir ? S.dirFresh.get(path) : null;
+  const at = c ? c.at : dir && dir.at;
   const f = at ? freshness(at) * (isDir ? 0.5 : 1) : 0;
+  const who = (c ? c.by : dir && dir.by) === 'you' ? 'you' : 'agent';
   if (f > 0 && !isDir) {
-    const m = markerSpan('agentmark', '◆', `changed by the agent ${ago(at)}`);
+    const m = markerSpan(who === 'you' ? 'youmark' : 'agentmark', who === 'you' ? '●' : '◆',
+      `changed by ${who === 'you' ? 'you' : 'the agent'} ${ago(at)}`);
     m.style.opacity = (0.35 + 0.65 * f).toFixed(2); r.append(m);
   }
-  if (f > 0 && !bg) bg = `color-mix(in srgb, var(--agentc) ${(3 + 15 * f).toFixed(1)}%, transparent)`;
+  if (f > 0 && !bg) {
+    const tint = who === 'you' ? '--accent' : '--agentc';
+    bg = `color-mix(in srgb, var(${tint}) ${(3 + 15 * f).toFixed(1)}%, transparent)`;
+  }
   if (bg) r.style.setProperty('--mark', bg);
 }
 function stashSingle() {
@@ -439,15 +482,51 @@ const parentOf = p => p.split('/').slice(0, -1).join('/');
 /* ---------- tree ---------- */
 // heat: how big a document is in this tree - its words ranked among all files (folders among all
 // folders), 0 = fewest, 1 = most - shown dim -> text colour -> amber -> red
-function rankBySize(root) {  // n.rank 0..1: files against all files, folders against all folders
+function clearRank(n) {
+  delete n.rank; delete n._rec; delete n._fb; delete n._note;
+  for (const c of n.children || []) clearRank(c);
+}
+function recencyOf(n) {  // newest change under n, or the file's mtime when nothing is recorded
+  if (n._rec != null) return n._rec;
+  const c = S.changes[n.path];
+  let m = c ? c.at : (n.mtime || 0);
+  for (const k of n.children || []) m = Math.max(m, recencyOf(k));
+  return n._rec = m;
+}
+function feedbackWeight(n) {
+  if (n._fb != null) return n._fb;
+  let t = openFb(n.path);
+  for (const c of n.children || []) t += feedbackWeight(c);
+  return n._fb = t;
+}
+function noteWeight(n) {
+  if (n._note != null) return n._note;
+  let t = (S.notes[noteKey(n.path)] || '').trim().length;
+  for (const c of n.children || []) t += noteWeight(c);
+  return n._note = t;
+}
+function rankGroup(group, valueOf) {  // n.rank 0..1 within the group; a zero value stays uncoloured
+  const scored = [];
+  for (const n of group) { const v = valueOf(n); if (v > 0) scored.push([n, v]); }
+  const vs = scored.map(([, v]) => v).sort((a, b) => a - b), last = vs.length - 1;
+  const bound = (v, strict) => { let lo = 0, hi = vs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (strict ? vs[m] <= v : vs[m] < v) lo = m + 1; else hi = m; } return lo; };
+  const trust = Math.min(1, Math.max(last, 0) / 8);  // two or three documents say little: stay near neutral
+  for (const [n, v] of scored) n.rank = 0.5 + ((last ? (bound(v, false) + bound(v, true) - 1) / 2 / last : 1) - 0.5) * trust;
+}
+function rankBySize(root) {  // files against all files, folders against all folders
   const groups = { file: [], dir: [] };
   (function walk(n, d) { if (d && n.w) groups[n.type === 'dir' ? 'dir' : 'file'].push(n); for (const c of n.children || []) walk(c, d + 1); })(root, 0);
-  for (const group of Object.values(groups)) {
-    const ws = group.map(n => n.w).sort((a, b) => a - b), last = ws.length - 1;
-    const bound = (v, strict) => { let lo = 0, hi = ws.length; while (lo < hi) { const m = (lo + hi) >> 1; if (strict ? ws[m] <= v : ws[m] < v) lo = m + 1; else hi = m; } return lo; };
-    const trust = Math.min(1, last / 8);  // two or three documents say little: stay near neutral
-    for (const n of group) n.rank = 0.5 + ((last ? (bound(n.w, false) + bound(n.w, true) - 1) / 2 / last : 1) - 0.5) * trust;
-  }
+  for (const group of Object.values(groups)) rankGroup(group, n => n.w);
+}
+function rankTree(root) {
+  clearRank(root);
+  const mode = S.colour || 'size';
+  if (mode === 'off') return;
+  if (mode === 'size') return rankBySize(root);
+  const files = [], dirs = [];
+  (function walk(n, d) { if (d) (n.type === 'dir' ? dirs : files).push(n); for (const c of n.children || []) walk(c, d + 1); })(root, 0);
+  const value = mode === 'recency' ? recencyOf : mode === 'feedback' ? feedbackWeight : noteWeight;
+  rankGroup(files, value); rankGroup(dirs, value);
 }
 const HEAT_STOPS = [[0, '--dim'], [0.5, '--text'], [0.8, '--heat'], [1, '--heat2']];
 function heatColor(rank) {
@@ -540,17 +619,63 @@ function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
   S.order.push(leaf.path);
   return r;
 }
+function rowMatches(n, f) {
+  return !f || n.path.toLowerCase().includes(f) || (S.notes[noteKey(n.path)] || '').toLowerCase().includes(f)
+    || fbFor(n.path).some(x => (x.text + '\n' + (x.reply || '')).toLowerCase().includes(f));
+}
+function inBrush(n) {
+  if (!S.brush || n.type === 'dir') return true;
+  const at = (S.changes[n.path] && S.changes[n.path].at) || n.mtime || 0;
+  return at >= S.brush.a && at <= S.brush.b;
+}
+function fileWhen(n) {  // a recorded change, or a file touched in the last hour
+  const c = S.changes[n.path];
+  if (c) return c.at;
+  if (n.mtime && nowSec() - n.mtime < 3600) return n.mtime;
+  return 0;
+}
+function renderRecent(f) {
+  const box = $('#tree'); box.textContent = '';
+  S.order = [];
+  const files = [];
+  (function walk(n) {
+    if (n.type === 'file' && fileWhen(n) && rowMatches(n, f) && inBrush(n)) files.push(n);
+    for (const c of n.children || []) walk(c);
+  })(S.tree);
+  files.sort((a, b) => fileWhen(b) - fileWhen(a) || a.path.localeCompare(b.path));
+  if (!files.length) box.append(el('div', 'recent-empty', 'No changes in the last hour.'));
+  const picked = p => S.multi.size ? S.multi.has(p) : S.sel === p;
+  const heat = S.colour !== 'off';
+  for (const n of files) {
+    S.order.push(n.path);
+    const r = el('div', 'row' + (picked(n.path) ? ' sel' : '') + (S.flashPaths.has(n.path) ? ' flash' : ''));
+    r.append(el('span', 'caret', ''), el('span', 'name', n.path));
+    rowMarks(r, n.path, false);
+    if (heat && n.rank != null) { r.classList.add('heat'); r.style.setProperty('--hc', heatColor(n.rank)); }
+    const c = S.changes[n.path];
+    r.title = c ? `${n.path}\n${c.by === 'you' ? 'you' : 'the agent'}, ${ago(c.at)}` : n.path;
+    r.onclick = e => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return multiClick(n.path, e.shiftKey, e.ctrlKey || e.metaKey);
+      if (S.multi.size) return leaveMulti(n.path);
+      select(n.path);
+    };
+    box.append(r);
+  }
+  S.flashPaths.clear();
+  renderOrphans();
+}
 function renderTree() {
   const f = S.hitsOn ? '' : $('#filter').value.trim().toLowerCase();
-  const showNotes = $('#shownotes').checked, showCounts = $('#showcounts').checked, heat = $('#heat').checked, compact = $('#compact').checked;
+  const showNotes = $('#shownotes').checked, showCounts = $('#showcounts').checked, heat = S.colour !== 'off', compact = $('#compact').checked;
   const box = $('#tree'); box.textContent = '';
   if (!S.tree) return;
+  if (S.orderMode === 'recent') return renderRecent(f);
   S.order = [];
   const picked = p => S.multi.size ? S.multi.has(p) : S.sel === p;
   const vis = new Map();
   (function mark(n) {
-    let v = !f || n.path.toLowerCase().includes(f) || (S.notes[noteKey(n.path)] || '').toLowerCase().includes(f)
-      || fbFor(n.path).some(x => (x.text + '\n' + (x.reply || '')).toLowerCase().includes(f));
+    let v = rowMatches(n, f) && inBrush(n);
+    if (S.brush && n.type === 'dir' && n.path !== '') v = false;  // a folder shows when a file inside the brush does
     for (const c of n.children || []) v = mark(c) || v;
     vis.set(n.path, v); return v;
   })(S.tree);
@@ -589,7 +714,12 @@ function renderTree() {
       select(n.path);
     };
     frag.append(r);
-    if (open) for (const c of n.children) row(c, depth + 1);
+    if (open) {
+      const kids = S.orderMode === 'recency'
+        ? [...n.children].sort((a, b) => recencyOf(b) - recencyOf(a) || a.name.localeCompare(b.name))
+        : n.children;
+      for (const c of kids) row(c, depth + 1);
+    }
   })(S.tree, 0);
   box.append(frag);
   S.flashPaths.clear();
@@ -834,13 +964,15 @@ async function loadTree() {
   const prev = S.byPath, firstLoad = !S.tree;
   S.tree = d.tree; S.notes = d.notes; S.feedback = d.feedback || []; S.version = d.version; S.rootName = d.root;
   S.changes = d.changes || {}; S.drafts = d.drafts || {}; S.lines = d.lines || {}; S.skills = !!d.tree.skills; S.skew = (d.now || Date.now() / 1000) - Date.now() / 1000;
-  S.dirFresh = new Map();  // folder -> freshest agent change inside it
+  S.dirFresh = new Map();  // folder -> {at, by} of the freshest change inside it
   for (const [p, c] of Object.entries(S.changes)) {
-    if (c.by !== 'agent') continue;
     const parts = p.split('/');
-    for (let i = 0; i < parts.length; i++) { const k = parts.slice(0, i).join('/'); if (!(S.dirFresh.get(k) >= c.at)) S.dirFresh.set(k, c.at); }
+    for (let i = 0; i < parts.length; i++) {
+      const k = parts.slice(0, i).join('/'), prev = S.dirFresh.get(k);
+      if (!prev || c.at > prev.at) S.dirFresh.set(k, c);
+    }
   }
-  S.byPath = new Map(); index(S.tree); rankBySize(S.tree);
+  S.byPath = new Map(); index(S.tree); rankTree(S.tree);
   if (firstLoad && d.tree.multi) for (const m of d.tree.children) S.expanded.add(m.path);  // several folders: show each
   for (const p of S.multi) if (!S.byPath.has(p)) S.multi.delete(p);
   await hydrateDrafts();  // unsaved edits from an earlier session come back as buffers
@@ -853,6 +985,7 @@ async function loadTree() {
   renderDetail();
   renderMarks(); for (const st of S.msec.values()) if (st.ta) sectionMarks(st);
   updateFbHeader();
+  if ($('#timeline').checked) { renderTimeline(); loadGitLane(); }
   if (S.modalFb && $('#modal').open) showAllFb();
 }
 let polling = false;
@@ -1051,7 +1184,7 @@ function sectionMarks(st) {  // change bars in a stacked editor (it does not scr
   const chg = changeRanges(st.path);
   if (!chg.length) return;
   const at = lineBox(st.ta);
-  for (const c of chg) { const [top, height] = at(c.a, c.b); st.marks.append(changeBar(c, top, height, 4)); }
+  for (const c of chg) { const [top, height] = at(c.a, c.b); st.marks.append(changeWash(c, top, height), changeBar(c, top, height, 4)); }
 }
 function paintSection(st) {
   const v = st.ta.value, on = !!st.lang && v.length <= HL_MAX;
@@ -1794,13 +1927,53 @@ function lineBox(ta) {  // (a, b) -> [top, height] of lines a..b in the text box
     return A && B ? [A.offsetTop, B.offsetTop + B.offsetHeight - A.offsetTop] : [pad + (a - 1) * lh, (b - a + 1) * lh];
   };
 }
-function changeRanges(path) {  // [{a, b, kind, by, f}] for recent line changes still visible (f = freshness)
+function remapEvents(oldText, newText, events) {  // move line ranges from oldText onto newText; dropped lines lose their mark
+  if (!events || !events.length || oldText == null || newText == null || oldText === newText) return events || [];
+  const d = lineDiff(oldText, newText);
+  if (!d) return events;
+  const map = [];
+  let oi = 0, ni = 0;
+  for (const row of d) {
+    const t = row[0];
+    if (t === ' ') map[oi++] = ++ni;
+    else if (t === '-') map[oi++] = 0;
+    else ni++;
+  }
   const out = [];
-  for (const ev of (S.lines && S.lines[path]) || []) {
-    const f = freshness(ev.at);
-    if (f > 0) for (const [a, b, kind] of ev.ranges) out.push({ a, b, kind, by: ev.by, f, at: ev.at });
+  for (const ev of events) {
+    const kept = [];
+    for (const range of ev.ranges) {
+      const a = range[0], b = range[1], kind = range[2], moved = [];
+      for (let x = a; x <= b; x++) if (map[x - 1]) moved.push(map[x - 1]);
+      if (moved.length) kept.push([Math.min.apply(null, moved), Math.max.apply(null, moved), kind]);
+    }
+    if (kept.length) out.push({ at: ev.at, by: ev.by, ranges: kept });
   }
   return out;
+}
+function bufferText(path) {  // disk text and the unsaved buffer, when this file is open somewhere
+  if (S.file && S.file.path === path && S.file.original != null) return { disk: S.file.original, value: editor.value };
+  const st = S.msec.get(path);
+  if (st && st.ta) return { disk: st.original, value: st.ta.value };
+  const b = S.bufs.get(path);
+  if (b) return { disk: b.original, value: b.value };
+  return null;
+}
+function changeRanges(path) {  // [{a, b, kind, by, f}] for recent line changes still visible (f = freshness)
+  let events = (S.lines && S.lines[path]) || [];
+  const buf = bufferText(path);
+  if (buf && buf.value !== buf.disk) events = remapEvents(buf.disk, buf.value, events);
+  const out = [];
+  for (const ev of events) {
+    const f = freshness(ev.at);
+    if (f > 0) for (const range of ev.ranges) out.push({ a: range[0], b: range[1], kind: range[2], by: ev.by, f, at: ev.at });
+  }
+  return out;
+}
+function changeWash(c, top, height) {
+  const m = el('div', `wash ${c.by}`);
+  Object.assign(m.style, { top: top + 'px', height: Math.max(height, 3) + 'px', opacity: (0.35 + 0.65 * c.f).toFixed(2) });
+  return m;
 }
 function changeBar(c, top, height, right) {
   const m = el('div', `chg ${c.by}${c.kind === 'del' ? ' del' : ''}`);
@@ -1816,9 +1989,9 @@ function renderMarks() {
   if (!spans.length && !chg.length) return;
   const at = lineBox(editor), sb = editor.offsetWidth - editor.clientWidth;
   ovr.style.right = sb + 'px';
-  for (const c of chg) {  // a bar beside the changed lines, and a tick in the overview strip
+  for (const c of chg) {  // a wash and a bar beside the changed lines, and a tick in the overview strip
     const [top, height] = at(c.a, c.b);
-    box.append(changeBar(c, top, height, sb + 11));  // just left of the overview strip
+    box.append(changeWash(c, top, height), changeBar(c, top, height, sb + 11));  // bar sits just left of the overview strip
     const t = el('i', c.by); t.title = `line ${c.a}${c.b > c.a ? '–' + c.b : ''}: ${c.kind === 'del' ? 'deleted' : 'changed'} by ${c.by === 'you' ? 'you' : 'the agent'}`;
     const total = Math.max(editor.scrollHeight, 1), h = editor.clientHeight;
     Object.assign(t.style, { top: (top / total * h) + 'px', height: Math.max(3, height / total * h) + 'px', opacity: (0.35 + 0.65 * c.f).toFixed(2) });
@@ -2265,12 +2438,112 @@ $('#filter').addEventListener('keydown', e => {
 });
 $('#searchcase').addEventListener('change', () => { if (S.hitsOn) runSearch(); });
 $('#searchx').onclick = () => closeSearch(true);
-['filter', 'shownotes', 'showcounts', 'heat', 'compact'].forEach(id => $('#' + id).addEventListener('input', () => {
+function timelineSpan() {
+  const now = nowSec();
+  let min = now - 3600, max = now;
+  const consider = at => { if (at < min) min = at; if (at > max) max = at; };
+  for (const c of Object.values(S.changes)) consider(c.at);
+  for (const evs of Object.values(S.lines || {})) for (const ev of evs) consider(ev.at);
+  if (max - min < 60) min = max - 60;
+  return { min, max };
+}
+function renderTimeline() {
+  const root = $('#tl');
+  if (!root.classList.contains('on')) return;
+  const span = timelineSpan(), spanS = span.max - span.min || 1;
+  const put = (id, items, cls) => {
+    const track = $('#' + id); track.textContent = '';
+    for (const item of items) {
+      if (item.at < span.min || item.at > span.max) continue;
+      const tick = el('i', 'tick ' + cls);
+      tick.style.left = ((item.at - span.min) / spanS * 100).toFixed(2) + '%';
+      tick.title = item.title;
+      track.append(tick);
+    }
+  };
+  const you = [], agent = [];
+  const push = (at, by, title) => (by === 'you' ? you : agent).push({ at, title });
+  for (const [p, evs] of Object.entries(S.lines || {})) for (const ev of evs) push(ev.at, ev.by, `${p} · ${ago(ev.at)}`);
+  for (const [p, c] of Object.entries(S.changes)) if (!(S.lines && S.lines[p])) push(c.at, c.by, `${p} · ${ago(c.at)}`);
+  put('lane-you', you, 'you');
+  put('lane-agent', agent, 'agent');
+  put('lane-git', (S.gitCommits || []).filter(c => c.at >= span.min).map(c => ({ at: c.at, title: `${c.short} ${c.subject}` })), 'git');
+  const brush = $('#tlbrush');
+  if (!S.brush) { brush.hidden = true; return; }
+  const track = $('#lane-you'), parent = root.getBoundingClientRect(), box = track.getBoundingClientRect();
+  const x = at => box.left - parent.left + (at - span.min) / spanS * box.width;
+  brush.hidden = false;
+  brush.style.left = x(S.brush.a) + 'px';
+  brush.style.width = Math.max(2, x(S.brush.b) - x(S.brush.a)) + 'px';
+}
+async function loadGitLane() {
+  if (!$('#timeline').checked) return;
+  try {
+    const d = await api('GET', '/api/git/log?path=&whole=1&n=60');
+    S.gitCommits = d.commits || [];
+  } catch { S.gitCommits = []; }
+  renderTimeline();
+}
+function setTimeline(on) {
+  store('timeline', !!on);
+  $('#timeline').checked = !!on;
+  $('#tl').classList.toggle('on', !!on);
+  if (!on) { S.brush = null; renderTree(); return; }
+  renderTimeline();
+  loadGitLane();
+}
+(() => {
+  const root = $('#tl');
+  let drag = null;
+  root.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const track = root.querySelector('.track');
+    drag = { x: e.clientX, box: track.getBoundingClientRect(), moved: false };
+    try { root.setPointerCapture(e.pointerId); } catch { /* a synthetic event has nothing to capture */ }
+  });
+  root.addEventListener('pointermove', e => {
+    if (!drag || Math.abs(e.clientX - drag.x) <= 3) return;
+    drag.moved = true;
+  });
+  root.addEventListener('pointerup', e => {
+    if (!drag) return;
+    const start = drag;
+    drag = null;
+    if (!start.moved) { S.brush = null; renderTree(); renderTimeline(); return; }
+    const span = timelineSpan(), width = Math.max(1, start.box.width);
+    const x1 = Math.max(start.box.left, Math.min(start.x, e.clientX));
+    const x2 = Math.min(start.box.right, Math.max(start.x, e.clientX));
+    const t = x => span.min + (x - start.box.left) / width * (span.max - span.min);
+    S.brush = { a: t(x1), b: t(x2) };
+    renderTree(); renderTimeline();
+  });
+})();
+const COLOURS = ['off', 'size', 'recency', 'feedback', 'notes'];
+const ORDERS = ['name', 'recency', 'recent'];
+function setColour(name) {
+  const c = COLOURS.includes(name) ? name : 'size';
+  S.colour = c; store('colour', c);
+  if ($('#colour').value !== c) $('#colour').value = c;
+  if (S.tree) { rankTree(S.tree); renderTree(); }
+}
+function setOrder(name) {
+  const o = ORDERS.includes(name) ? name : 'name';
+  S.orderMode = o; store('order', o);
+  if ($('#order').value !== o) $('#order').value = o;
+  renderTree();
+}
+['filter', 'shownotes', 'showcounts', 'compact'].forEach(id => $('#' + id).addEventListener('input', () => {
   if (id === 'filter') { searchGen++; if (S.hitsOn) { S.hitsOn = false; $('#searchpop').hidden = true; } }
   else store(id, $('#' + id).checked);
   renderTree();
 }));
-$('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = load('showcounts', true); $('#heat').checked = load('heat', true); $('#compact').checked = load('compact', true); setWrap(load('wrap', true)); $('#auto').checked = load('auto', true);
+$('#colour').addEventListener('change', () => setColour($('#colour').value));
+$('#order').addEventListener('change', () => setOrder($('#order').value));
+$('#timeline').addEventListener('change', () => setTimeline($('#timeline').checked));
+$('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = load('showcounts', true); $('#compact').checked = load('compact', true); setWrap(load('wrap', true)); $('#auto').checked = load('auto', true);
+setColour(load('colour', null) || (load('heat', true) ? 'size' : 'off'));
+setOrder(load('order', 'name'));
+setTimeline(load('timeline', false));
 const THEMES = ['system', 'paper', 'ink', 'dusk', 'leaf'];
 function setTheme(name) {
   const t = THEMES.includes(name) ? name : 'system';

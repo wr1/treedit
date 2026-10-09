@@ -9,7 +9,7 @@ import pytest
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="needs node")
-FUNCS = ["lineDiff", "unifiedDiff", "applyPatch", "lineHunks", "merge3"]
+FUNCS = ["lineDiff", "remapEvents", "unifiedDiff", "applyPatch", "lineHunks", "merge3"]
 
 
 def js_function(src: str, name: str) -> str:
@@ -82,3 +82,16 @@ def test_patch_applies_only_to_its_own_base(page_lib, original):
     diff = js(page_lib, "unifiedDiff", original, mine)
     assert js(page_lib, "applyPatch", original, diff) == mine
     assert js(page_lib, "applyPatch", mine, diff) is None  # already on disk: never added a second time
+
+
+def test_remap_follows_an_insert_above(page_lib):
+    events = [{"at": 10, "by": "agent", "ranges": [[2, 2, "chg"]]}]
+    out = js(page_lib, "remapEvents", "a\nb\nc", "a\nX\nb\nc", events)
+    assert out == [{"at": 10, "by": "agent", "ranges": [[3, 3, "chg"]]}]
+
+
+def test_remap_drops_a_deleted_line(page_lib):
+    events = [{"at": 10, "by": "you", "ranges": [[1, 1, "chg"]]}]
+    assert js(page_lib, "remapEvents", "a\nb", "b", events) == []
+    kept = [{"at": 10, "by": "you", "ranges": [[2, 2, "add"]]}]
+    assert js(page_lib, "remapEvents", "a\nb", "b", kept) == [{"at": 10, "by": "you", "ranges": [[1, 1, "add"]]}]

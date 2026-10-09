@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import git
-from treedit.cli import HTTPError, Workspace
+from treedit.cli import HTTPError, Workspace, _ws
 
 
 def names(node):
@@ -124,6 +124,57 @@ def test_change_tracking(ws, tree):
     p.unlink()
     ws.scan()
     assert "pkg/b.py" not in ws.changes
+
+
+def test_later_edit_keeps_earlier_line_age(ws, tree):
+    ws.scan()
+    p = tree / "pkg" / "b.py"
+    p.write_text("x = 1\ny = 2\n")
+    past = time.time() - 200
+    os.utime(p, (past, past))
+    ws.scan()
+    first = ws.line_changes["pkg/b.py"][0]
+    assert ws.changes["pkg/b.py"]["at"] == first["at"]
+    p.write_text("x = 1\ny = 2\nz = 3\n")
+    os.utime(p, None)
+    ws.scan()
+    assert ws.line_changes["pkg/b.py"][0]["at"] == first["at"]
+    assert ws.line_changes["pkg/b.py"][0]["ranges"] == [[2, 2, "add"]]
+    assert ws.changes["pkg/b.py"]["at"] == ws.line_changes["pkg/b.py"][-1]["at"]
+    assert ws.changes["pkg/b.py"]["at"] != first["at"]
+
+
+def test_touch_does_not_refresh_line_age(ws, tree):
+    ws.scan()
+    p = tree / "pkg" / "b.py"
+    p.write_text("x = 1\ny = 2\n")
+    past = time.time() - 200
+    os.utime(p, (past, past))
+    ws.scan()
+    at = ws.line_changes["pkg/b.py"][0]["at"]
+    os.utime(p, None)
+    ws.scan()
+    assert ws.line_changes["pkg/b.py"][0]["at"] == at
+    assert ws.changes["pkg/b.py"]["at"] == at
+
+
+def test_history_reloads_and_plot_is_file_level(ws, tree):
+    (tree / "fig.png").write_bytes(PNG)
+    ws.scan()
+    p = tree / "pkg" / "b.py"
+    p.write_text("x = 1\ny = 2\n")
+    os.utime(p, None)
+    (tree / "fig.png").write_bytes(PNG + b"\n")
+    os.utime(tree / "fig.png", None)
+    ws.scan()
+    assert ws.history_path.is_file()
+    assert "fig.png" not in ws.line_changes
+    again = _ws(str(tree), "", [], False)
+    assert again.line_changes["pkg/b.py"][-1]["ranges"] == [[2, 2, "add"]]
+    assert again.changes["pkg/b.py"]["by"] == "agent"
+    assert any(e["path"] == "fig.png" and e["ranges"] == [] for e in again.history())
+    again.scan()  # a restart's first look is a baseline: it must not record the same edit twice
+    assert len(again.line_changes["pkg/b.py"]) == len(ws.line_changes["pkg/b.py"])
 
 
 def test_version_changes(ws, tree):

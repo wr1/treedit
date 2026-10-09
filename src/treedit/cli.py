@@ -8,9 +8,10 @@ treedit - edit and annotate a directory tree in your browser.
 
 What it does
   * Shows PATH as a tree (line/word counts, symlink targets, empty folders);
-    names are coloured by document size: word count ranked among all files (folders among folders)
-    (in the browser and in `treedit print` on a terminal). The header box filters that tree;
-    Enter searches inside the files (the same files the tree shows).
+    names are coloured by document size: word count ranked among all files (folders among folders).
+    The window can instead colour by recency, open feedback or annotation length, and can list
+    recent files. `treedit print` on a terminal stays on document size. The header box filters
+    that tree; Enter searches inside the files (the same files the tree shows).
   * Edit any text file; Ctrl/Cmd+S saves. Symlinked files edit their target.
   * Plot files (png, jpg, gif, webp, bmp, tiff, avif, svg, pdf) open in a viewer.
     SVG can still be edited as source.
@@ -21,7 +22,9 @@ What it does
     PATH/.treenotes.json: a flat {"relative/path": "annotation"} map, or
     {"notes": {...}, "feedback": [...]} once there is feedback.
   * Watches the disk: when an agent (or anything else) changes the tree, the
-    view refreshes. An open file reloads silently if you have no unsaved edits;
+    view refreshes. Line ages follow the content (a later edit does not restart
+    the fade of lines it left alone) and are kept for an hour, including across
+    a restart. An open file reloads silently if you have no unsaved edits;
     otherwise you get a conflict banner with compare / load disk / overwrite.
   * Saves are atomic and check that the file hasn't changed since you opened it.
   * Create, rename/move and delete files and folders; notes follow renames.
@@ -323,7 +326,10 @@ class Workspace:
         self._text_bytes = 0
         self.line_changes: dict = {}  # path -> [{"at", "by", "ranges": [[first, last, add|chg|del], ...]}]
         state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "treedit"
-        self.drafts_path = state / f"{hashlib.sha1(str(self.root).encode()).hexdigest()[:16]}-drafts.json"
+        digest = hashlib.sha1(str(self.root).encode()).hexdigest()[:16]
+        self.drafts_path = state / f"{digest}-drafts.json"
+        self.history_path = state / f"{digest}-history.jsonl"  # one JSON event per line, kept for CHANGE_TTL
+        self._load_history()
 
     # ---------- paths ----------
     def ignored(self, name: str) -> bool:
@@ -451,8 +457,10 @@ class Workspace:
                     kept.append([min(moved), max(moved), kind])
             if kept:
                 events.append({**ev, "ranges": kept})
-        events.append({"at": at, "by": self._by(rel), "ranges": ranges})
+        by = self._by(rel)
+        events.append({"at": at, "by": by, "ranges": ranges})
         self.line_changes[rel] = [e for e in events if time.time() - e["at"] < self.CHANGE_TTL][-20:]
+        self._append_history(rel, at, by, ranges)
 
     def text_info(self, path: Path, st, rel: str = "") -> dict:
         key = (str(path), st.st_mtime_ns, st.st_size)
@@ -538,10 +546,102 @@ class Workspace:
         return tree
 
     CHANGE_TTL = 3600.0  # seconds a change is remembered (the page fades it out sooner)
+    HISTORY_CAP = 256 * 1024  # rewrite the log once it passes this many bytes
+    HISTORY_KEEP = 2000
+
+    def _parse_history(self, line: str):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            return None
+        if not isinstance(rec, dict):
+            return None
+        path, at = rec.get("path"), rec.get("at")
+        if not isinstance(path, str) or not path or ".." in path.split("/") or isinstance(at, bool):
+            return None
+        if not isinstance(at, (int, float)):
+            return None
+        by = rec.get("by") if rec.get("by") in ("you", "agent") else "agent"
+        ranges = []
+        for item in rec.get("ranges") or []:
+            if (
+                isinstance(item, (list, tuple))
+                and len(item) == 3
+                and isinstance(item[0], int)
+                and not isinstance(item[0], bool)
+                and isinstance(item[1], int)
+                and not isinstance(item[1], bool)
+                and item[2] in ("add", "chg", "del")
+            ):
+                ranges.append([item[0], item[1], item[2]])
+        return {"path": path, "at": float(at), "by": by, "ranges": ranges}
+
+    def _load_history(self) -> None:
+        """Bring the last hour of edits back after a restart. Line numbers are as of each edit."""
+        now = time.time()
+        try:
+            lines = self.history_path.read_text("utf-8").splitlines()
+        except OSError:
+            return
+        kept = [rec for line in lines if (rec := self._parse_history(line)) and now - rec["at"] < self.CHANGE_TTL]
+        for rec in kept[-self.HISTORY_KEEP :]:
+            if rec["ranges"]:
+                self.line_changes.setdefault(rec["path"], []).append(
+                    {"at": rec["at"], "by": rec["by"], "ranges": rec["ranges"]}
+                )
+            prev = self.changes.get(rec["path"])
+            if prev is None or rec["at"] >= prev["at"]:
+                self.changes[rec["path"]] = {"at": rec["at"], "by": rec["by"]}
+        for path, evs in list(self.line_changes.items()):
+            fresh = [e for e in evs if now - e["at"] < self.CHANGE_TTL]
+            self.line_changes[path] = fresh[-20:] if fresh else []
+            if not fresh:
+                del self.line_changes[path]
+            else:
+                newest = max(fresh, key=lambda e: e["at"])
+                self.changes[path] = {"at": newest["at"], "by": newest["by"]}
+
+    def _append_history(self, rel: str, at: float, by: str, ranges: list) -> None:
+        rec = {"path": rel, "at": at, "by": by, "ranges": ranges}
+        try:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.history_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            if self.history_path.stat().st_size > self.HISTORY_CAP:
+                self._compact_history()
+        except OSError:
+            return
+
+    def _compact_history(self) -> None:
+        now = time.time()
+        try:
+            lines = self.history_path.read_text("utf-8").splitlines()
+        except OSError:
+            return
+        kept = [rec for line in lines if (rec := self._parse_history(line)) and now - rec["at"] < self.CHANGE_TTL]
+        data = "".join(json.dumps(rec, ensure_ascii=False) + "\n" for rec in kept[-self.HISTORY_KEEP :]).encode()
+        try:
+            atomic_write(self.history_path, data)
+        except OSError:
+            return
+
+    def history(self) -> list:
+        """Edits still in memory: line events, plus file-level marks for plots and other non-text."""
+        out = []
+        for path, evs in self.line_changes.items():
+            for ev in evs:
+                out.append({"path": path, "at": ev["at"], "by": ev["by"], "ranges": ev["ranges"]})
+        for path, c in self.changes.items():
+            if path not in self.line_changes:
+                out.append({"path": path, "at": c["at"], "by": c["by"], "ranges": []})
+        out.sort(key=lambda e: e["at"])
+        return out
 
     def _track(self, tree: dict) -> None:
         """Compare file mtimes/sizes with the previous scan and remember what changed, and who did it:
-        writes made through the editor are "you", anything else (the agent, another editor) "agent"."""
+        writes made through the editor are "you", anything else (the agent, another editor) "agent".
+        A text file's age is its newest surviving line event, so a later edit does not restart the
+        fade of lines it left alone. Plots and other files with no line text keep the mtime."""
         now, cur = time.time(), {}
 
         def walk(n: dict) -> None:
@@ -553,17 +653,25 @@ class Workspace:
         walk(tree)
         with self.lock:
             if self._seen is not None:
-                ui = {k: t for k, t in self._ui.items() if now - t < 15}
+                self._ui = {k: t for k, t in self._ui.items() if now - t < 15}
                 for path, sig in cur.items():
-                    if self._seen.get(path) != sig:
-                        mine = self._by(path) == "you"
+                    if self._seen.get(path) == sig:
+                        continue
+                    events = self.line_changes.get(path)
+                    if events:
+                        newest = max(events, key=lambda e: e["at"])
+                        self.changes[path] = {"at": newest["at"], "by": newest["by"]}
+                    else:
+                        by = "you" if self._by(path) == "you" else "agent"
                         at = min(now, sig[0] or now)  # when it happened, even if nobody was looking
-                        self.changes[path] = {"at": at, "by": "you" if mine else "agent"}
-                self._ui = ui
+                        self.changes[path] = {"at": at, "by": by}
+                        self._append_history(path, at, by, [])
             self._seen = cur
             self.changes = {k: v for k, v in self.changes.items() if k in cur and now - v["at"] < self.CHANGE_TTL}
             self.line_changes = {
-                k: [e for e in v if now - e["at"] < self.CHANGE_TTL] for k, v in self.line_changes.items() if k in cur
+                k: fresh
+                for k, v in self.line_changes.items()
+                if k in cur and (fresh := [e for e in v if now - e["at"] < self.CHANGE_TTL])
             }
             for k in [k for k in self._texts if k not in cur]:  # gone (or renamed): forget its text
                 self._text_bytes -= len(self._texts.pop(k))
@@ -1408,6 +1516,14 @@ class Mounts:
     def line_changes(self) -> dict:
         return self._prefix_map(lambda w: w.line_changes)
 
+    def history(self) -> list:
+        out = []
+        for name, w in self.mounts.items():
+            for ev in w.history():
+                out.append({**ev, "path": self._pre(name, ev["path"])})
+        out.sort(key=lambda e: e["at"])
+        return out
+
     def changes_for(self, root: str):
         """(root, changes) of the opened folder at ROOT, for `treedit edits` in that folder."""
         w = next((w for w in self.mounts.values() if str(w.root) == root), None)
@@ -1637,6 +1753,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/changes":
             root, changes = ws.changes_for(q.get("root", "")) if isinstance(ws, Mounts) else (str(ws.root), ws.changes)
             return self.send_json(200, {"root": root, "changes": changes, "now": time.time()})
+        if method == "GET" and path == "/api/history":
+            return self.send_json(200, {"events": ws.history(), "now": time.time()})
         if method == "GET" and path == "/api/context":
             return self.send_json(200, Handler.context)
         if method == "GET" and path == "/api/version":
