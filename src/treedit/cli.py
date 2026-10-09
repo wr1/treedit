@@ -19,7 +19,8 @@ What it does
     which it reads but never writes. Leave feedback
     for an agent on a path, on lines of a file, or on several paths; it is open or
     done and the agent replies via `treedit fb`. Everything lives in
-    PATH/.treenotes.json: a flat {"relative/path": "annotation"} map, or
+    PATH/.treenotes.json, or PATH/notes/.treenotes.json when a notes folder is
+    present: a flat {"relative/path": "annotation"} map, or
     {"notes": {...}, "feedback": [...]} once there is feedback.
   * Watches the disk: when an agent (or anything else) changes the tree, the
     view refreshes. Line ages follow the content (a later edit does not restart
@@ -81,6 +82,31 @@ DEFAULT_IGNORE = [
 ]
 NOTES_NAME = ".treenotes.json"
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
+
+
+def notes_file(root: Path) -> Path:
+    """Where ROOT keeps annotations and feedback.
+
+    A notes/ folder is usually its own git repo, ignored by the product. The file lives there when
+    that folder is present, so it is not at the product root. A file already at the root moves across
+    when notes/ has none yet. When both files exist, the root one stays in use.
+    """
+    folder = root / "notes"
+    home = folder / NOTES_NAME
+    legacy = root / NOTES_NAME
+    if not folder.is_dir():
+        return legacy
+    if legacy.is_file() and not home.exists():
+        try:
+            legacy.rename(home)
+        except OSError:
+            return legacy
+        return home
+    if legacy.is_file():
+        return legacy
+    return home
+
+
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
 RAW_MAX = 64 * 1024 * 1024  # a plot larger than this is listed, but not sent to the viewer
 GREP_LIMIT = 200  # content-search hits returned in one go
@@ -1412,7 +1438,7 @@ class Mounts:
         self.top = (
             same[0]
             if same
-            else Workspace(self.root, self.root / NOTES_NAME, w0.ignore, w0.follow_outside, w0.gitignore, w0.show)
+            else Workspace(self.root, notes_file(self.root), w0.ignore, w0.follow_outside, w0.gitignore, w0.show)
         )
         self.own_top = not same
         self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces + ([self.top] if self.own_top else []))
@@ -1943,7 +1969,7 @@ def _ws(
     r = Path(root).expanduser()
     if not r.is_dir():
         sys.exit(f"treedit: {r} is not a folder")
-    n = Path(notes).expanduser() if notes else r / NOTES_NAME
+    n = Path(notes).expanduser() if notes else notes_file(r)
     return Workspace(
         r,
         n,
@@ -2459,7 +2485,7 @@ Reviewing with the user (they see the tree, your replies and every file change l
    also the `# ...` comments in `treedit print`). Read them as context and instructions. Never add,
    edit or move them: they are the user's channel to you, not a place to describe the tree.
    Answer through `treedit fb reply` instead.
-Annotations and feedback live in .treenotes.json; use the CLI rather than editing that file.
+Annotations and feedback live in .treenotes.json (under notes/ when that folder is present); use the CLI rather than editing that file.
 
 Agent roll - when the user asks you to "roll" (pick up their manual edits and act on them):
 1. `git status` and `treedit edits`; commit the user's saved edits as theirs first (3b).
@@ -2519,7 +2545,12 @@ SHARED = [
         help="paths kept visible though .gitignore hides them",
     ),
     option(flags=["--no-gitignore"], flag=True, help="show what .gitignore hides"),
-    option(flags=["--notes"], arg_type=str, default="", help=f"notes file (empty: ROOT/{NOTES_NAME})"),
+    option(
+        flags=["--notes"],
+        arg_type=str,
+        default="",
+        help=f"notes file (empty: notes/{NOTES_NAME} when a notes folder is present, else ROOT/{NOTES_NAME})",
+    ),
     option(flags=["--ignore"], arg_type=str, nargs="*", default=[], help="extra name globs to hide"),
     option(flags=["--follow-outside"], flag=True, help="allow symlink targets outside the root"),
 ]

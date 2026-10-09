@@ -50,7 +50,7 @@ Reviewing with the user (they see the tree, your replies and every file change l
    also the `# ...` comments in `treedit print`). Read them as context and instructions. Never add,
    edit or move them: they are the user's channel to you, not a place to describe the tree.
    Answer through `treedit fb reply` instead.
-Annotations and feedback live in .treenotes.json; use the CLI rather than editing that file.
+Annotations and feedback live in .treenotes.json (under notes/ when that folder is present); use the CLI rather than editing that file.
 
 Agent roll - when the user asks you to "roll" (pick up their manual edits and act on them):
 1. `git status` and `treedit edits`; commit the user's saved edits as theirs first (3b).

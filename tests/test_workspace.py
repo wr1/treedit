@@ -5,7 +5,7 @@ import time
 import pytest
 
 from conftest import git
-from treedit.cli import HTTPError, Workspace, _ws
+from treedit.cli import HTTPError, Mounts, Workspace, _ws
 
 
 def names(node):
@@ -441,3 +441,57 @@ def test_custom_notes_path(tree, tmp_path):
     ws = Workspace(tree, tmp_path / "elsewhere.json", [], False)
     ws.set_note("pkg", "x")
     assert (tmp_path / "elsewhere.json").exists()
+
+
+def test_notes_folder_holds_the_file(tree):
+    (tree / "notes").mkdir()
+    (tree / ".treenotes.json").write_text('{"pkg": "keep"}\n')
+    ws = _ws(str(tree), "", [], False)
+    assert ws.notes_path == (tree / "notes" / ".treenotes.json").resolve()
+    assert json.loads(ws.notes_path.read_text()) == {"pkg": "keep"}
+    assert not (tree / ".treenotes.json").exists()
+    assert find(ws.scan(), "notes/.treenotes.json") is None
+
+
+def test_new_notes_go_into_the_notes_folder(tree):
+    (tree / "notes").mkdir()
+    ws = _ws(str(tree), "", [], False)
+    assert not ws.notes_path.exists()
+    ws.set_note(".", "hi")
+    assert ws.notes_path == (tree / "notes" / ".treenotes.json").resolve()
+    assert not (tree / ".treenotes.json").exists()
+
+
+def test_both_notes_files_keep_the_root_one(tree):
+    (tree / "notes").mkdir()
+    (tree / ".treenotes.json").write_text('{".": "root"}\n')
+    (tree / "notes" / ".treenotes.json").write_text('{".": "inner"}\n')
+    ws = _ws(str(tree), "", [], False)
+    assert ws.notes_path == (tree / ".treenotes.json").resolve()
+    assert ws.read_notes() == {".": "root"}
+
+
+def test_explicit_notes_path_ignores_the_notes_folder(tree, tmp_path):
+    (tree / "notes").mkdir()
+    ws = _ws(str(tree), str(tmp_path / "elsewhere.json"), [], False)
+    ws.set_note("pkg", "x")
+    assert (tmp_path / "elsewhere.json").is_file()
+    assert not (tree / "notes" / ".treenotes.json").exists()
+
+
+def test_product_git_does_not_see_the_notes_file(repo):
+    ws = _ws(str(repo), "", [], False)
+    ws.set_note("pkg", "x")
+    assert ".treenotes.json" not in git(repo, "status", "--short")
+
+
+def test_shared_top_notes_follow_a_notes_folder(tree, tmp_path):
+    (tmp_path / "notes").mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "a.txt").write_text("a\n")
+    mounts = Mounts([_ws(str(tree), "", [], False), _ws(str(other), "", [], False)])
+    mounts.set_note("", "together")
+    assert (tmp_path / "notes" / ".treenotes.json").is_file()
+    assert not (tmp_path / ".treenotes.json").exists()
+    assert mounts.read_notes()["."] == "together"
