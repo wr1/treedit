@@ -9,7 +9,7 @@ import pytest
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="needs node")
-FUNCS = ["lineDiff", "remapEvents", "unifiedDiff", "applyPatch", "lineHunks", "merge3"]
+FUNCS = ["lineDiff", "unsavedChars", "remapEvents", "unifiedDiff", "applyPatch", "lineHunks", "merge3"]
 
 
 def js_function(src: str, name: str) -> str:
@@ -88,6 +88,29 @@ def test_remap_follows_an_insert_above(page_lib):
     events = [{"at": 10, "by": "agent", "ranges": [[2, 2, "chg"]]}]
     out = js(page_lib, "remapEvents", "a\nb\nc", "a\nX\nb\nc", events)
     assert out == [{"at": 10, "by": "agent", "ranges": [[3, 3, "chg"]]}]
+
+
+def test_unsaved_chars(page_lib):
+    def n(a, b):
+        return js(page_lib, "unsavedChars", a, b)
+
+    assert n("same", "same") == 0
+    assert n("a", "ab") == 1
+    assert n("ab", "a") == 1
+    assert n("cat", "cot") == 2
+    assert n("ac", "abc") == 1
+    assert n(None, "a") == 0
+    assert n("a", None) == 0
+    assert n("a\nb\nc", "a\nB\nc") == 2
+    assert n("a\nb", "a\nX\nb") == 2
+    assert n("a\nb\nc", "a\nc") == 2
+    assert n("a\nb", "a") == 2
+    assert n("a", "a\nb") == 2
+    assert n("a\nb", "a\nB") == 2
+    assert n("a\nb\nc", "A\nb\nC") == 4
+    assert n("hello\nworld", "heXlo\nworYd") == 4
+    assert n("hello", "hel\nlo") == 1
+    assert n("a\n", "a") == 1
 
 
 def test_remap_drops_a_deleted_line(page_lib):

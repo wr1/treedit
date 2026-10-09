@@ -257,6 +257,8 @@ body.wrap #editor{overflow-x:hidden}
 .sedit:not(.hl) .shl{display:none}
 .sedit textarea{position:relative;display:block;width:100%;margin:0;border:0;resize:none;padding:10px 16px;font:calc(13px * var(--ez, 1))/1.5 var(--mono);white-space:pre;overflow-x:auto;overflow-y:hidden;background:transparent;color:var(--text);outline:none}
 .sedit textarea:focus{box-shadow:inset 3px 0 0 var(--accent)}
+.unchars{padding:0 16px 8px;font:600 11px/1.4 var(--mono);color:var(--note);background:var(--bg)}
+.unchars:empty{display:none}
 .sedit.hl textarea{color:transparent;caret-color:var(--text)}
 .sedit.hl textarea::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
 .mfile .mh button{padding:1px 8px;font-size:12px;font-family:var(--sans)}
@@ -289,8 +291,9 @@ body.wrap #editor{overflow-x:hidden}
 #dirinfo td:first-child{font-family:var(--mono);white-space:nowrap;cursor:pointer;color:var(--accent);width:1%}
 #dirinfo td.n{color:var(--note);font-style:italic;white-space:pre-wrap}
 #dirinfo td.c{color:var(--dim);font-size:12px;white-space:nowrap;width:1%}
-.status{display:flex;gap:12px;align-items:center;padding:6px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
+.status{display:flex;gap:12px;row-gap:4px;align-items:center;flex-wrap:wrap;padding:6px 14px;border-top:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
 #filestate.dirty{color:var(--note);font-weight:600}
+#unsaved{color:var(--note);font-weight:600;font-variant-numeric:tabular-nums}
 dialog{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);width:min(1000px,92vw);max-height:86vh;padding:0}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 .mhead{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
@@ -380,7 +383,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <div id="plotview" hidden><div id="plotstage"></div></div>
       <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div>
       <div id="dirinfo" hidden></div>
-      <div class="status"><span id="pos"></span><span id="filestate"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
+      <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
     <div id="findbar" hidden><input id="findq" placeholder="Find" spellcheck="false" autocomplete="off"><span id="findn"></span>
       <button id="find-prev" title="Previous (Shift+Enter, Shift+F3)">↑</button><button id="find-next" title="Next (Enter, F3)">↓</button>
@@ -1116,7 +1119,7 @@ function sectionBody(st, n, f) {
         const img = document.createElement('img'); img.alt = f.path; img.draggable = false; img.src = src; box.append(img);
       }
       if (st.body) st.body.replaceWith(box); else st.sec.append(box);
-      st.body = box; st.ta = null; st.plot = true; st.disk = f.hash; st.lang = null;
+      st.body = box; st.ta = null; st.unchars = null; st.plot = true; st.disk = f.hash; st.lang = null;
       box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
     }
     return;
@@ -1126,7 +1129,7 @@ function sectionBody(st, n, f) {
     const kids = (n.children || []).map(c => c.name + (c.type === 'dir' ? '/' : '')).join('   ');
     const m = el('div', 'msg', f?.error || (n.type === 'dir' ? (n.linked ? 'linked folder' : kids || 'empty folder') : countText(n) || n.type));
     if (st.body) st.body.replaceWith(m); else st.sec.append(m);
-    st.body = m; st.ta = null; return;
+    st.body = m; st.ta = null; st.unchars = null; return;
   }
   if (!st.ta) {
     const body = el('div', 'sedit'), b = resumeBuf(st.path, f);
@@ -1153,7 +1156,9 @@ function sectionBody(st, n, f) {
       if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault(); indentBlock(st.ta, st.path, e.shiftKey);
     });
-    body.append(st.hlp, st.ta);
+    st.unchars = el('div', 'unchars');
+    st.unchars.title = 'Characters added or removed since the last save';
+    body.append(st.hlp, st.ta, st.unchars);
     if (st.body) st.body.replaceWith(body); else st.sec.append(body);
     st.body = body;
     paintSection(st);
@@ -1248,6 +1253,10 @@ function sectionState(st) {
   const d = sDirty(st);
   if (!!st.conflict !== !!st.hadConflict || d !== !!st.wasDirty) { st.hadConflict = !!st.conflict; st.wasDirty = d; setTimeout(renderTree); }
   st.h.classList.toggle('dirty', d);
+  if (st.unchars) {
+    const n = st.ta && typeof st.original === 'string' ? unsavedChars(st.original, st.ta.value) : 0;
+    st.unchars.textContent = n ? String(n) : '';
+  }
   if (st.saveBtn) st.saveBtn.hidden = !d && !st.conflict;
   if (st.banner) { st.banner.remove(); st.banner = null; }
   if (st.conflict && st.ta) {
@@ -1389,6 +1398,7 @@ function syncChrome() {
   $('#plotbar').hidden = !plotFile;
   $('#save').hidden = !isFile || plotView;
   $('#pos').hidden = !isFile || plotView;
+  if (!isFile || plotView) $('#unsaved').hidden = true;
   $('#filestate').hidden = !isFile;
   for (const id of ['b-wrap', 'b-undo', 'b-redo']) $('#' + id).hidden = plotView;
   if (!plotFile) return;
@@ -1435,6 +1445,9 @@ function updateFileState() {
   const d = isDirty(), fs = $('#filestate');
   fs.textContent = !S.file ? '' : S.file.plot && !Plot.source ? (S.file.mime === 'application/pdf' ? 'pdf' : 'plot') : S.file.kind !== 'text' ? S.file.kind : d ? '● unsaved changes' : 'saved';
   fs.className = d ? 'dirty' : '';
+  const u = $('#unsaved'), n = d ? unsavedChars(S.file.original, editor.value) : 0;
+  u.textContent = n ? String(n) : '';
+  u.hidden = !n;
   $('#save').disabled = !d && !S.conflict;
   if (d !== S.lastDirty) { S.lastDirty = d; renderTree(); }
   document.title = (d ? '● ' : '') + (S.rootName || 'treedit') + ' — treedit';
@@ -2299,6 +2312,55 @@ function lineDiff(a, b) {
   while (i < n && j < m) { if (A[i] === B[j]) { out.push([' ', A[i++]]); j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) out.push(['-', A[i++]]); else out.push(['+', B[j++]]); }
   while (i < n) out.push(['-', A[i++]]); while (j < m) out.push(['+', B[j++]]);
   return out;
+}
+function unsavedChars(saved, now) {
+  // Characters added plus characters removed since the save. Each changed run of lines is counted on
+  // its own, so two edits do not drag the text between them into the total. A very large file, or a
+  // run too long to compare character by character, counts one span: exact for a single edit.
+  function spanChars(a, b) {
+    if (a === b) return 0;
+    let i = 0;
+    const n = a.length, m = b.length, lim = n < m ? n : m;
+    while (i < lim && a[i] === b[i]) i++;
+    let j = 0;
+    while (j < lim - i && a[n - 1 - j] === b[m - 1 - j]) j++;
+    return (n - i - j) + (m - i - j);
+  }
+  function lineStarts(s) {
+    const starts = [0];
+    for (let p = 0; p < s.length; p++) if (s[p] === '\n') starts.push(p + 1);
+    starts.push(s.length);
+    return starts;
+  }
+  function editChars(a, b) {
+    if (a === b) return 0;
+    const n = a.length, m = b.length;
+    if (n * m > 160000) return spanChars(a, b);
+    const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let x = n - 1; x >= 0; x--) for (let y = m - 1; y >= 0; y--) dp[x][y] = a[x] === b[y] ? dp[x + 1][y + 1] + 1 : Math.max(dp[x + 1][y], dp[x][y + 1]);
+    return n + m - 2 * dp[0][0];
+  }
+  if (typeof saved !== 'string' || typeof now !== 'string' || saved === now) return 0;
+  const A = saved.split('\n'), B = now.split('\n');
+  if (A.length * B.length > 160000) return spanChars(saved, now);
+  const d = lineDiff(saved, now);
+  if (!d) return spanChars(saved, now);
+  const as = lineStarts(saved), bs = lineStarts(now);
+  let total = 0, i = 0, j = 0, k = 0;
+  while (k < d.length) {
+    if (d[k][0] === ' ') { i++; j++; k++; continue; }
+    const i0 = i, j0 = j;
+    while (k < d.length && d[k][0] !== ' ') {
+      if (d[k][0] === '-') i++; else j++;
+      k++;
+    }
+    let a0 = as[i0], a1 = as[i], b0 = bs[j0], b1 = bs[j];
+    // a last line does not carry its own newline; the break sits on the line before it
+    if (i === A.length && a0 > 0 && saved[a0 - 1] === '\n') a0--;
+    if (j === B.length && b0 > 0 && now[b0 - 1] === '\n') b0--;
+    total += editChars(saved.slice(a0, a1), now.slice(b0, b1));
+  }
+  return total;
 }
 function openModal(title, content, actions = []) {
   $('#mtitle').textContent = title; $('#mbody').textContent = ''; $('#mbody').append(content);
