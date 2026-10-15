@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `treedit new PATH...`: create files (or folders with `--dir`) at any depth with every missing parent,
+  printing each entry created; existing paths error unless `--exist-ok`; `--dry-run` previews.
+
 ## 0.1.0 - 2026-10-06
 
 First release.

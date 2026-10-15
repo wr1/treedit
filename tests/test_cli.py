@@ -89,3 +89,45 @@ def test_module_entry(tree):
         [sys.executable, "-m", "treedit", "print", str(tree), "--no-counts"], capture_output=True, text=True, check=True
     )
     assert "pkg/" in r.stdout
+
+
+def test_new_at_depth(capsys, tree):
+    r = str(tree)
+    out = run(capsys, "new", "-C", r, "a/b/c/file.ext", "--dry-run")
+    assert out.split("\n")[0] == "would create dir  a/" and "would create file a/b/c/file.ext" in out
+    assert not (tree / "a").exists()
+    out = run(capsys, "new", "-C", r, "a/b/c/file.ext", "a/b/other.md", "pkg/sub/x.py")
+    assert out.splitlines() == [
+        "created      dir  a/",
+        "created      dir  a/b/",
+        "created      dir  a/b/c/",
+        "created      file a/b/c/file.ext",
+        "created      file a/b/other.md",
+        "created      dir  pkg/sub/",
+        "created      file pkg/sub/x.py",
+    ]
+    assert (tree / "a/b/c/file.ext").read_text() == ""
+    assert run(capsys, "new", "-C", r, "d/e", "--dir") == "created      dir  d/\ncreated      dir  d/e/\n"
+    assert (tree / "d/e").is_dir()
+
+
+def test_new_existing(capsys, tree):
+    r = str(tree)
+    (tree / "README.md").write_text("keep\n")
+    with pytest.raises(SystemExit, match="README.md already exists"):
+        main(["new", "-C", r, "README.md"])
+    assert run(capsys, "new", "-C", r, "README.md", "-e") == "exists       file README.md\n"
+    assert (tree / "README.md").read_text() == "keep\n"
+    assert run(capsys, "new", "-C", r, "pkg", "--dir", "-e") == "exists       dir  pkg/\n"
+    with pytest.raises(SystemExit, match="pkg exists as a folder"):
+        main(["new", "-C", r, "pkg", "-e"])
+    with pytest.raises(SystemExit, match="README.md is a file, not a folder"):
+        main(["new", "-C", r, "README.md/x"])
+    with pytest.raises(SystemExit, match="both a file and a folder"):
+        main(["new", "-C", r, "z", "z/y"])
+    with pytest.raises(SystemExit):
+        main(["new", "-C", r, "../out.txt"])
+    # nothing half-done: a failing later path leaves the earlier ones uncreated
+    with pytest.raises(SystemExit):
+        main(["new", "-C", r, "fresh/one", "README.md/x"])
+    assert not (tree / "fresh").exists() and not (tree.parent / "out.txt").exists()

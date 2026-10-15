@@ -2298,6 +2298,69 @@ def note_ls(
         print(f"{k}\t{(v.strip().splitlines() or [''])[0]}{gone}")
 
 
+def new_paths(
+    paths: List[str],
+    dir: bool,
+    exist_ok: bool,
+    dry_run: bool,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
+    """Create each PATH (a file, or a folder with --dir) and every missing parent folder in one go.
+    Prints one line per entry it creates, 'created dir  a/' or 'created file a/b.txt' ('would create'
+    with --dry-run). An existing PATH is an error unless --exist-ok (then 'exists ...'); a parent that
+    is a file is always an error. Everything is checked before anything is written."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    plan: list = []  # (kind, rel) in creation order, no repeats
+    seen: set = set()
+    for raw in paths:
+        rel = ws.norm(raw)
+        if not rel:
+            sys.exit("treedit: a path is required")
+        parts = rel.split("/")
+        for i in range(1, len(parts) + 1):
+            sub = "/".join(parts[:i])
+            last = i == len(parts)
+            kind = "dir" if (dir or not last) else "file"
+            p = ws.node_path(sub)
+            if (kind, sub) in seen:
+                continue
+            if os.path.lexists(p):
+                is_dir = p.is_dir()
+                if not last and not is_dir:
+                    sys.exit(f"treedit: {sub} is a file, not a folder")
+                if last:
+                    if is_dir != (kind == "dir"):
+                        sys.exit(f"treedit: {sub} exists as a {'folder' if is_dir else 'file'}")
+                    if not exist_ok:
+                        sys.exit(f"treedit: {sub} already exists (--exist-ok to accept)")
+                    plan.append(("exists", kind, sub))
+                    seen.add((kind, sub))
+                continue
+            if (("file" if kind == "dir" else "dir"), sub) in seen:
+                sys.exit(f"treedit: {sub} is asked for as both a file and a folder")
+            plan.append(("create", kind, sub))
+            seen.add((kind, sub))
+    verb = "would create" if dry_run else "created"
+    for action, kind, sub in plan:
+        shown = sub + "/" if kind == "dir" else sub
+        if action == "exists":
+            print(f"exists       {kind:<4} {shown}")
+            continue
+        if not dry_run:
+            p = ws.node_path(sub)
+            if kind == "dir":
+                p.mkdir()
+            else:
+                with open(p, "x", encoding="utf-8"):
+                    pass
+        print(f"{verb:<12} {kind:<4} {shown}")
+
+
 def fb_ls(
     all: bool, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
 ) -> None:
@@ -2620,6 +2683,19 @@ app = cli(
                     arguments=[argument(name="src", arg_type=str), argument(name="dst", arg_type=str)],
                 ),
                 command(name="ls", help="List all annotations.", callback=note_ls),
+            ],
+        ),
+        cli(
+            name="new",
+            help="Create files (or folders) at any depth, with every missing parent.",
+            callback=new_paths,
+            arguments=[argument(name="paths", arg_type=str, nargs="+", help="paths relative to the root")],
+            options=[
+                NOTE_ROOT,
+                *SHARED,
+                option(flags=["--dir", "-d"], flag=True, help="create folders, not files"),
+                option(flags=["--exist-ok", "-e"], flag=True, help="an existing path is fine, not an error"),
+                option(flags=["--dry-run", "-n"], flag=True, help="only print what would be created"),
             ],
         ),
         cli(
