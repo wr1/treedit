@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Three more window themes: GitHub light, Gruvbox and Evening (a warm dark).
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes
   (wrapping around). In the tree pane, Ctrl+Shift+Up/Down or plain Up/Down move the selection and
   Enter opens a file or folds a folder.

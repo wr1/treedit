@@ -11,7 +11,7 @@
 <script>
 try {
   var themeChoice = JSON.parse(localStorage.getItem('treedit:theme') || '"system"');
-  document.documentElement.dataset.theme = { paper: 1, ink: 1, dusk: 1, leaf: 1 }[themeChoice] ? themeChoice : 'system';
+  document.documentElement.dataset.theme = { paper: 1, ink: 1, dusk: 1, leaf: 1, github: 1, gruvbox: 1, evening: 1 }[themeChoice] ? themeChoice : 'system';
 } catch (e) { document.documentElement.dataset.theme = 'system'; }
 </script>
 <style>
@@ -51,6 +51,27 @@ html[data-theme="leaf"]{
   --accent:#2c6b4a; --note:#6b5420; --note-bg:#f4efd8; --sel:#dce8dc; --danger:#a33b32; --ok:#2a7a45; --heat:#b56a0e; --heat2:#c4322a;
   --fb:#9d2468; --agentc:#1c7560;
   --t-k:#7a3e9a; --t-s:#217848; --t-c:#7a877c; --t-n:#9a5810; --t-f:#245a86; --t-t:#0d686c; --t-d:#8a5430;
+}
+html[data-theme="github"]{
+  color-scheme: light; --scheme: light;
+  --bg:#ffffff; --panel:#f6f8fa; --line:#d0d7de; --text:#1f2328; --dim:#656d76;
+  --accent:#0969da; --note:#9a6700; --note-bg:#fff8c5; --sel:#ddf4ff; --danger:#cf222e; --ok:#1a7f37; --heat:#bf8700; --heat2:#cf222e;
+  --fb:#bf3989; --agentc:#1a7f37;
+  --t-k:#cf222e; --t-s:#0a3069; --t-c:#6e7781; --t-n:#0550ae; --t-f:#8250df; --t-t:#116329; --t-d:#953800;
+}
+html[data-theme="gruvbox"]{
+  color-scheme: dark; --scheme: dark;
+  --bg:#282828; --panel:#3c3836; --line:#504945; --text:#ebdbb2; --dim:#928374;
+  --accent:#83a598; --note:#d79921; --note-bg:#3c3836; --sel:#423d38; --danger:#fb4934; --ok:#b8bb26; --heat:#fabd2f; --heat2:#fb4934;
+  --fb:#d3869b; --agentc:#8ec07c;
+  --t-k:#fb4934; --t-s:#b8bb26; --t-c:#928374; --t-n:#d3869b; --t-f:#8ec07c; --t-t:#fabd2f; --t-d:#d79921;
+}
+html[data-theme="evening"]{
+  color-scheme: dark; --scheme: dark;
+  --bg:#211c28; --panel:#2b2433; --line:#3d3548; --text:#ece6f2; --dim:#9b93a8;
+  --accent:#e0a96d; --note:#e6c07a; --note-bg:#3a2f22; --sel:#3a3145; --danger:#e07a5f; --ok:#8fbf8a; --heat:#e6a863; --heat2:#e07a5f;
+  --fb:#d98bb0; --agentc:#7fc4a8;
+  --t-k:#c9a0dc; --t-s:#9ec97f; --t-c:#9b93a8; --t-n:#e6a863; --t-f:#82b4e0; --t-t:#7ec9c0; --t-d:#d9a066;
 }
 :root{
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -352,6 +373,9 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <option value="ink">ink</option>
       <option value="dusk">dusk</option>
       <option value="leaf">leaf</option>
+      <option value="github">github</option>
+      <option value="gruvbox">gruvbox</option>
+      <option value="evening">evening</option>
     </select>
   </label>
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
@@ -3083,7 +3107,7 @@ $('#shownotes').checked = load('shownotes', true); $('#showcounts').checked = lo
 setColour(load('colour', null) || (load('heat', true) ? 'size' : 'off'));
 setOrder(load('order', 'name'));
 setTimeline(load('timeline', false));
-const THEMES = ['system', 'paper', 'ink', 'dusk', 'leaf'];
+const THEMES = ['system', 'paper', 'ink', 'dusk', 'leaf', 'github', 'gruvbox', 'evening'];
 function setTheme(name) {
   const t = THEMES.includes(name) ? name : 'system';
   document.documentElement.dataset.theme = t; store('theme', t);
