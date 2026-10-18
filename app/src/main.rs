@@ -67,11 +67,23 @@ fn main() {
     tauri::Builder::default()
         .manage(Server(Mutex::new(child)))
         .setup(move |app| {
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
+            // Fill the work area and keep the title bar. Fullscreen would cover the desktop bar.
+            // 1400×900 is the size after un-maximizing. GTK sometimes ignores the creation
+            // flag until the window is mapped, so ask again once the loop is running.
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("treedit")
                 .icon(tauri::include_image!("icons/icon.png"))?
                 .inner_size(1400.0, 900.0)
+                .maximized(true)
+                .decorations(true)
+                .fullscreen(false)
                 .build()?;
+            let _ = window.maximize();
+            let mapped = window.clone();
+            std::thread::spawn(move || {
+                sleep(Duration::from_millis(60));
+                let _ = mapped.maximize();
+            });
             // when the server we started exits (Ctrl+W / Ctrl+Q in the page), close the window too
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {

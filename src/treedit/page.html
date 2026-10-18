@@ -55,8 +55,8 @@ html[data-theme="leaf"]{
 :root{
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --tree-w: 440px;
-  --term-w: 560px;
+  --tree-w: min(22vw, 460px);
+  --term-w: min(30vw, 720px);
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -223,6 +223,9 @@ body.wrap #editor{overflow-x:hidden}
 .compose .ctitle{font-size:12px;color:var(--fb);font-weight:600;margin-bottom:4px;font-family:var(--mono)}
 .compose textarea{width:100%;font:13.5px/1.45 var(--sans);border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg);color:var(--text);resize:vertical}
 .compose .cbtns{display:flex;gap:8px;margin-top:6px}
+.newex{min-width:min(64vw,520px)}
+.newex .nlabel{color:var(--dim);font-family:var(--sans);font-size:12.5px;margin-bottom:6px}
+.newex textarea{width:100%;font:13.5px/1.5 var(--mono);border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--bg);color:var(--text);resize:vertical}
 #fball.hot{border-color:var(--fb);color:var(--fb);font-weight:600}
 .fball{padding:4px 14px 12px}
 .fball .msg{color:var(--dim);padding:12px 0}
@@ -268,6 +271,9 @@ body.wrap #editor{overflow-x:hidden}
 .sbanner b{color:var(--danger)}
 .unsaved,.conflict,.agentmark{font-size:11px;flex:none}
 .unsaved{color:var(--note)} .conflict{color:var(--danger)} .agentmark{color:var(--agentc)} .youmark{color:var(--accent)}
+.harnesses{display:inline-flex;gap:3px;flex:none;align-items:center}
+.hchip{font:11px var(--sans);padding:0 6px;border-radius:8px;color:var(--dim);line-height:1.5}
+.hchip.live{color:var(--agentc);border-color:color-mix(in srgb, var(--agentc) 55%, var(--line))}
 #tl{display:none;position:relative;margin:4px 8px 6px;padding:4px 6px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);user-select:none}
 #tl.on{display:block}
 .tlane{display:flex;align-items:center;gap:6px;height:16px}
@@ -305,13 +311,17 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 #toast{position:fixed;right:16px;bottom:44px;background:var(--text);color:var(--bg);padding:7px 12px;border-radius:7px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:60vw}
 #toast.show{opacity:.95}
 #toast.err{background:var(--danger);color:#fff}
+#ctx{position:fixed;z-index:40;min-width:220px;padding:4px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 28px #0004}
+#ctx button{display:flex;width:100%;justify-content:space-between;gap:16px;align-items:center;text-align:left;border:0;background:none;border-radius:5px;padding:6px 10px}
+#ctx button:hover:not(:disabled){background:var(--sel)}
+#ctx kbd{font:11px var(--sans);color:var(--dim)}
 @media (max-width:700px){ main{flex-direction:column} aside,#termpane{width:auto;max-width:none;max-height:42vh} #divider,#divider2{display:none} }
 </style>
 </head>
 <body>
 <header>
   <img id="logo" src="/logo.svg" alt="treedit" title="treedit">
-  <strong id="rootname">…</strong><span class="path" id="rootpath"></span>
+  <strong id="rootname">…</strong><span id="hchips"></span><span class="path" id="rootpath"></span>
   <input type="search" id="filter" placeholder="Filter the tree — Enter searches files" title="Filters by path, annotation or feedback as you type. Enter searches inside files.">
   <label title="Show your annotations in the tree"><input type="checkbox" id="shownotes" checked> annotations</label>
   <label><input type="checkbox" id="showcounts" checked> counts</label>
@@ -344,6 +354,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </label>
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
+  <button id="b-open" title="Open another folder as its own tree">Open tree</button>
   <button id="fball" title="All feedback for the agent">Feedback</button>
   <button id="b-log" title="Git history of the selected file or folder">History</button>
   <button id="b-term" hidden title="Terminal / agent pane on the right">Agent</button>
@@ -364,7 +375,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </aside>
   <div id="divider"></div>
   <section id="detail">
-    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row, or Ctrl/Cmd+C, to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
@@ -400,7 +411,6 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <button id="t-sel" title="Type a reference to what you selected in the tree or editor">Selection</button>
       <button id="t-roll" title="Agent roll: pick up your edits, commit them as yours, tidy up (frontmatter, names, spelling, doubled text), then work through the feedback">Roll</button>
       <button id="t-loop" title="Loop roll: an agent roll every 3 minutes, picking up and tidying your changes and answering feedback as it comes (Claude Code: /loop 3m)">Loop roll</button>
-      <button id="t-fb" title="Ask the agent to work through the open feedback">Open feedback</button>
       <button id="t-ext" title="Open the agent in a separate Ptyxis window">Ptyxis</button>
       <button id="t-add" title="Add a terminal below: a shell, or an agent such as claude or 'hermes --skills treedit'">+</button>
       <button id="t-close" title="Hide the pane to the right (the sessions keep running)">›</button></div>
@@ -408,6 +418,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </aside>
 </main>
 <dialog id="modal"><div class="mhead"><strong id="mtitle"></strong><span class="spacer"></span><span id="mactions"></span><button id="mclose">Close</button></div><div class="mbody" id="mbody"></div></dialog>
+<div id="ctx" hidden></div>
 <div id="toast"></div>
 <script>
 "use strict";
@@ -419,6 +430,55 @@ const $ = s => document.querySelector(s);
 const editor = $('#editor'), hlEl = $('#hl');
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem('treedit:' + k)); return v ?? d; } catch { return d; } };
 const store = (k, v) => { try { localStorage.setItem('treedit:' + k, JSON.stringify(v)); } catch {} };
+// Saved pane widths, or null until the user drags a divider. A number means they chose it.
+let wantTree = load('treew', null), wantTerm = load('termw', null);
+// The editor is the wide column: at least 46% of the row, and at least as wide as either side pane.
+function layoutPanes(avail, wantTree, wantTerm, termOn) {
+  const minTree = 220, minTerm = 280, num = (v, d) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : d;
+  let tree = Math.max(minTree, Math.round(num(wantTree, 320)));
+  let term = termOn ? Math.max(minTerm, Math.round(num(wantTerm, 440))) : 0;
+  const floor = Math.round(avail * 0.46);
+  if (termOn) {
+    const capTerm = () => { term = Math.max(minTerm, Math.min(term, avail - tree - floor, Math.floor((avail - tree) / 2))); };
+    const capTree = () => { tree = Math.max(minTree, Math.min(tree, avail - term - floor, Math.floor((avail - term) / 2))); };
+    capTerm(); capTree(); capTerm();
+  } else {
+    tree = Math.min(tree, Math.max(0, avail - floor), Math.floor(avail / 2));
+    tree = Math.max(Math.min(minTree, Math.max(0, avail)), tree);
+  }
+  if (tree + term > avail) {
+    const over = tree + term - avail;
+    if (termOn) { const cut = Math.min(over, Math.max(0, term)); term -= cut; tree = Math.max(0, tree - (over - cut)); }
+    else tree = Math.max(0, avail);
+  }
+  tree = Math.round(tree); term = Math.round(term);
+  return { tree, term, editor: avail - tree - term };
+}
+function preferredPanes(avail, wantTree, wantTerm, termOn) {
+  const custom = v => typeof v === 'number' && isFinite(v) && v > 0;
+  const tree = custom(wantTree) ? wantTree : Math.round(Math.min(460, Math.max(280, avail * 0.22)));
+  const term = !termOn ? 0 : (custom(wantTerm) ? wantTerm : Math.round(Math.min(720, Math.max(360, avail * 0.30))));
+  return layoutPanes(avail, tree, term, termOn);
+}
+function fitPanes() {
+  const main = document.querySelector('main');
+  if (!main) return;
+  const termOn = !$('#termpane').hidden;
+  const avail = Math.round(main.clientWidth - (5 + (termOn ? 5 : 0)));
+  if (!(avail > 80)) return;
+  const lay = preferredPanes(avail, wantTree, wantTerm, termOn);
+  document.documentElement.style.setProperty('--tree-w', lay.tree + 'px');
+  if (termOn) document.documentElement.style.setProperty('--term-w', lay.term + 'px');
+}
+function dragPane(kind, px) {
+  const n = Math.max(kind === 'tree' ? 220 : 280, Math.round(px));
+  if (kind === 'tree') wantTree = n; else wantTerm = n;
+  fitPanes();
+  const applied = parseFloat(document.documentElement.style.getPropertyValue(kind === 'tree' ? '--tree-w' : '--term-w'));
+  if (!Number.isFinite(applied)) return;
+  if (kind === 'tree') wantTree = applied; else wantTerm = applied;
+  store(kind === 'tree' ? 'treew' : 'termw', applied);
+}
 const noteKey = p => p || '.';
 const S = {
   tree: null, notes: {}, version: null, byPath: new Map(), rootName: '',
@@ -428,6 +488,7 @@ const S = {
   multi: new Set(), anchor: null, order: [], mcache: new Map(), feedback: [], draft: null, modalFb: false, bufs: new Map(), msec: new Map(), lastDirty: false,
   drafts: {}, draftSent: new Map(), stuck: {}, hydrated: new Set(), changes: {}, dirFresh: new Map(), skew: 0, showDone: load('showdone', false),
   hitsOn: false, colour: 'size', orderMode: 'name', brush: null, gitCommits: [],
+  rootPath: '', terms: [], termSig: '',
 };
 
 async function api(method, url, body) {
@@ -587,6 +648,7 @@ function elideChain(segs, max) {  // keep the first folder and as much of the ta
 function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
   const n = chain[0], leaf = chain[chain.length - 1], paths = chain.map(x => x.path);
   const r = el('div', 'row' + (paths.some(picked) ? ' sel' : '') + (leaf.type === 'broken' ? ' broken' : '') + (S.flashPaths.has(leaf.path) ? ' flash' : ''));
+  r.dataset.path = leaf.path;
   const indent = 8 + depth * 16;
   r.style.paddingLeft = indent + 'px';
   const room = Math.max(16, Math.floor(($('#treepane').clientWidth - indent - 128) / 7.8));  // characters that fit
@@ -594,6 +656,7 @@ function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
   for (const sg of elideChain(chain.map(x => ({ text: x.name + (x.type === 'dir' ? '/' : ''), node: x })), room)) {
     if (sg.gap) { name.append(el('span', 'gap', sg.text)); continue; }
     const sp = el('span', 'seg' + (sg.node.type === 'dir' ? ' dir' : ''), sg.text);
+    sp.dataset.path = sg.node.path;
     sp.title = sg.node.type === 'dir' ? `Select the folder ${sg.node.path}/ (to leave feedback on it)` : sg.node.path;
     sp.onclick = e => {
       if (e.ctrlKey || e.metaKey || e.shiftKey) return;  // let the row handle multi-select
@@ -601,6 +664,10 @@ function chainRow(chain, depth, picked, showNotes, showCounts, heat) {
       if (S.multi.size) leaveMulti(sg.node.path); else select(sg.node.path);
     };
     name.append(sp);
+    if (n.mount && sg.node === n) {  // the chip belongs to the opened folder, not the file it collapses with
+      const chips = harnessChips(n.mount);
+      if (chips) name.append(chips);
+    }
   }
   r.append(el('span', 'caret', ''), name);
   rowMarks(r, leaf.path, false);
@@ -652,6 +719,7 @@ function renderRecent(f) {
   for (const n of files) {
     S.order.push(n.path);
     const r = el('div', 'row' + (picked(n.path) ? ' sel' : '') + (S.flashPaths.has(n.path) ? ' flash' : ''));
+    r.dataset.path = n.path;
     r.append(el('span', 'caret', ''), el('span', 'name', n.path));
     rowMarks(r, n.path, false);
     if (heat && n.rank != null) { r.classList.add('heat'); r.style.setProperty('--hc', heatColor(n.rank)); }
@@ -666,6 +734,27 @@ function renderRecent(f) {
   }
   S.flashPaths.clear();
   renderOrphans();
+  renderHeaderChips();
+}
+function harnessChips(root) {  // one chip per agent session started in this folder
+  const terms = (S.terms || []).filter(t => t.root === root);
+  if (!terms.length) return null;
+  const box = el('span', 'harnesses');
+  for (const t of terms) {
+    const b = el('button', 'hchip' + (t.alive ? ' live' : ''), t.label || 'shell');
+    b.type = 'button';
+    b.title = `${t.agent || t.label || 'shell'}\n${t.root}\n${t.alive ? 'live' : 'ended'}`;
+    b.onclick = e => { e.stopPropagation(); focusTerm(t.id); };
+    box.append(b);
+  }
+  return box;
+}
+function renderHeaderChips() {  // a single folder has no mount row, so its sessions sit by the root name
+  const box = $('#hchips'); if (!box) return;
+  box.textContent = '';
+  if (!S.tree || S.tree.multi || !S.rootPath) return;
+  const chips = harnessChips(S.rootPath);
+  if (chips) box.append(chips);
 }
 function renderTree() {
   const f = S.hitsOn ? '' : $('#filter').value.trim().toLowerCase();
@@ -691,10 +780,13 @@ function renderTree() {
     const open = expandable && (f ? true : S.expanded.has(n.path));
     S.order.push(n.path);
     const r = el('div', 'row' + (picked(n.path) ? ' sel' : '') + (n.type === 'broken' ? ' broken' : '') + (S.flashPaths.has(n.path) ? ' flash' : ''));
+    r.dataset.path = n.path;
     r.style.paddingLeft = (8 + depth * 16) + 'px';
     const caret = el('span', 'caret', expandable ? (open ? '▾' : '▸') : (isDir ? '·' : ''));
     caret.onclick = e => { e.stopPropagation(); if (expandable) toggle(n.path); };
     r.append(caret, el('span', 'name' + (isDir ? ' dir' : ''), (n.path === '' ? S.rootName : n.name) + (isDir ? '/' : '')));
+    const chips = n.mount ? harnessChips(n.mount) : null;
+    if (chips) r.append(chips);
     rowMarks(r, n.path, isDir);
     if (n.link) r.append(el('span', 'link', '→ ' + n.link));
     const note = S.notes[noteKey(n.path)];
@@ -727,6 +819,7 @@ function renderTree() {
   box.append(frag);
   S.flashPaths.clear();
   renderOrphans();
+  renderHeaderChips();
 }
 function multiClick(path, range, additive) {
   if (!S.multi.size && S.sel !== null && S.byPath.has(S.sel)) S.multi.add(S.sel);
@@ -966,6 +1059,7 @@ async function loadTree() {
   const d = await api('GET', '/api/tree');
   const prev = S.byPath, firstLoad = !S.tree;
   S.tree = d.tree; S.notes = d.notes; S.feedback = d.feedback || []; S.version = d.version; S.rootName = d.root;
+  S.rootPath = d.rootPath || '';
   S.changes = d.changes || {}; S.drafts = d.drafts || {}; S.lines = d.lines || {}; S.skills = !!d.tree.skills; S.skew = (d.now || Date.now() / 1000) - Date.now() / 1000;
   S.dirFresh = new Map();  // folder -> {at, by} of the freshest change inside it
   for (const [p, c] of Object.entries(S.changes)) {
@@ -990,6 +1084,7 @@ async function loadTree() {
   updateFbHeader();
   if ($('#timeline').checked) { renderTimeline(); loadGitLane(); }
   if (S.modalFb && $('#modal').open) showAllFb();
+  retitleTerms();
 }
 let polling = false;
 async function poll(force) {
@@ -999,6 +1094,7 @@ async function poll(force) {
     const { version } = await api('GET', '/api/version');
     setLive('on');
     if (force || version !== S.version) await loadTree();
+    await pollTerms();
   } catch (e) { setLive('off'); }
   finally { polling = false; }
 }
@@ -1007,6 +1103,38 @@ setInterval(() => { if (!document.hidden && $('#auto').checked) poll(); }, 1500)
 window.addEventListener('focus', () => { if ($('#auto').checked) poll(); });
 $('#auto').onchange = e => { setLive(e.target.checked ? 'on' : 'paused'); store('auto', e.target.checked); if (e.target.checked) poll(); };
 $('#refresh').onclick = () => poll(true).then(() => toast('Refreshed from disk'));
+function prefixPaths(name) {  // one folder became several: every local path gains that folder's name
+  const p = k => (k ? `${name}/${k}` : name);
+  const remap = m => { const n = new Map(); for (const [k, v] of m) n.set(p(k), v); return n; };
+  S.expanded = new Set([...S.expanded].map(k => (k === '' ? '' : p(k))));
+  S.expanded.add(''); S.expanded.add(name); store('expanded', [...S.expanded]);
+  if (S.sel) S.sel = p(S.sel);
+  if (S.anchor) S.anchor = p(S.anchor);
+  S.multi = new Set([...S.multi].map(p));
+  S.bufs = remap(S.bufs); S.draftSent = remap(S.draftSent);
+  if (S.file && S.file.path) S.file.path = p(S.file.path);
+  const msec = new Map();
+  for (const [k, st] of S.msec) { st.path = p(k); msec.set(st.path, st); }
+  S.msec = msec;
+  const stuck = {}; for (const [k, v] of Object.entries(S.stuck)) stuck[p(k)] = v; S.stuck = stuck;
+  S.hydrated = new Set([...S.hydrated].map(p));
+  const hist = new Map(); for (const [k, v] of HIST) hist.set(p(k), v); HIST.clear();
+  for (const [k, v] of hist) HIST.set(k, v);
+  if (S.sel) history.replaceState(null, '', '#' + encodeURIComponent(S.sel));
+}
+async function openAnotherTree() {
+  const path = prompt('Folder to open as another tree:', '');
+  if (!path) return;
+  try {
+    const r = await api('POST', '/api/mount', { path });
+    if (r.promoted) prefixPaths(r.promoted);
+    if (r.name) S.expanded.add(r.name);
+    store('expanded', [...S.expanded]);
+    await loadTree();
+    toast('Opened ' + r.name);
+  } catch (e) { toast(e.message, true); }
+}
+$('#b-open').onclick = openAnotherTree;
 
 /* ---------- selection & detail ---------- */
 async function select(path) {
@@ -2145,9 +2273,15 @@ function termTheme() {
     selectionBackground: dark ? 'rgba(127,167,224,.35)' : 'rgba(63,111,181,.25)', ...(dark ? {} : LIGHT_ANSI) };
 }
 const termFont = () => getComputedStyle(document.documentElement).getPropertyValue('--mono');
+function sessionTitle(info) {  // "claude · proj" once several trees are open
+  const base = info.base || info.label || info.agent || 'shell';
+  return S.tree && S.tree.multi && info.mount ? `${base} · ${info.mount}` : base;
+}
+function retitleTerms() { for (const P of T.list) P.lab.textContent = sessionTitle(P); }
 function termMake(info) {  // the pane, the xterm and (once shown) the socket of one server terminal
-  const P = { id: info.id, agent: info.agent, ws: null, retry: 0, queue: [], closed: false };
-  P.el = el('div', 'tsess'); P.dot = el('span', 'tdot'); P.lab = el('b', null, info.label); P.body = el('div', 'tbody');
+  const P = { id: info.id, agent: info.agent, mount: info.mount || '', root: info.root || '', base: info.label,
+    ws: null, retry: 0, queue: [], closed: false };
+  P.el = el('div', 'tsess'); P.dot = el('span', 'tdot'); P.lab = el('b', null, sessionTitle(P)); P.body = el('div', 'tbody');
   const restart = btn('↻', () => { if (confirm(`End "${P.lab.textContent}" and start it again?`)) termSend(P, { t: 'restart' }); });
   restart.title = 'End this session and start a new one';
   const close = btn('×', () => termClose(P)); close.title = 'Close this terminal (ends its session)';
@@ -2159,7 +2293,7 @@ function termMake(info) {  // the pane, the xterm and (once shown) the socket of
   P.fit = new FitAddon.FitAddon(); P.term.loadAddon(P.fit);
   P.term.onData(d => termSend(P, { t: 'in', d }));
   P.term.attachCustomKeyEventHandler(e => {  // Ctrl+Shift+C / V copy and paste, as in Ptyxis
-    if (CFG.app && e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyQ') return false;  // quit, handled above
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyQ') return false;  // quit, handled above
     if (e.type !== 'keydown' || !e.ctrlKey || !e.shiftKey) return true;
     if (e.code === 'KeyC') { const t = P.term.getSelection(); if (t) navigator.clipboard?.writeText(t).catch(() => {}); return false; }
     if (e.code === 'KeyV') { navigator.clipboard?.readText().then(t => P.term.paste(t)).catch(() => toast('Paste blocked — try middle-click', true)); return false; }
@@ -2205,7 +2339,7 @@ function termConnect(P) {
   ws.onmessage = ev => {
     if (typeof ev.data !== 'string') { P.term.write(new Uint8Array(ev.data)); return; }
     const m = JSON.parse(ev.data);
-    if (m.t === 'hello') { P.term.reset(); P.lab.textContent = m.label; }
+    if (m.t === 'hello') { P.term.reset(); P.base = m.label; P.lab.textContent = sessionTitle(P); }
     else if (m.t === 'reset') { P.term.reset(); termState(P, 'live'); }
     else if (m.t === 'exit') termState(P, 'ended');
     else if (m.t === 'closed') termLoad();  // closed in another window
@@ -2218,26 +2352,69 @@ function termConnect(P) {
   };
 }
 async function termLoad() {
-  try { termSync((await api('GET', '/api/terms')).terms); } catch (e) { toast(e.message, true); }
+  try {
+    const terms = (await api('GET', '/api/terms')).terms;
+    S.terms = terms; S.termSig = JSON.stringify(terms);
+    termSync(terms); retitleTerms();
+    if (S.tree) { renderHeaderChips(); renderTree(); }
+  } catch (e) { toast(e.message, true); }
+}
+function treeForNewTerm() {  // the folder this new session belongs to; null if the user cancels
+  if (!S.tree || !S.tree.multi) return S.rootPath || '';
+  const mounts = S.tree.children || [];
+  const sel = S.sel || '';
+  const hit = mounts.find(m => sel === m.path || sel.startsWith(m.path + '/'));
+  if (hit) return hit.mount;
+  const names = mounts.map(m => m.name).join(', ');
+  const pick = prompt(`Which tree should this agent start in? (${names})`, mounts[0] ? mounts[0].name : '');
+  if (pick === null) return null;
+  const m = mounts.find(x => x.name === pick.trim() || x.mount === pick.trim());
+  if (!m) { toast('That tree is not open', true); return null; }
+  return m.mount;
 }
 async function termAdd() {
+  const root = treeForNewTerm();
+  if (root === null) return;
   const cmd = prompt('Command for the new terminal - empty for a shell (e.g. claude, hermes --skills treedit):', '');
   if (cmd === null) return;
   try {
-    const r = await api('POST', '/api/term/new', { agent: cmd });
-    termSync(r.terms);
+    const r = await api('POST', '/api/term/new', { agent: cmd, root });
+    S.terms = r.terms; S.termSig = JSON.stringify(r.terms);
+    termSync(r.terms); retitleTerms(); renderHeaderChips(); if (S.tree) renderTree();
     const P = T.list.find(x => x.id === r.id);
     if (P) { termActive(P); requestAnimationFrame(() => P.term.focus()); }
   } catch (e) { toast(e.message, true); }
 }
+async function focusTerm(id) {
+  if (!CFG.term) return;
+  if (!T.open) await openTerm(true);
+  const P = T.list.find(x => x.id === id);
+  if (!P) return;
+  termActive(P); P.term.focus();
+}
+async function pollTerms() {
+  if (!CFG.term || !S.tree) return;
+  let terms;
+  try { terms = (await api('GET', '/api/terms')).terms; } catch { return; }
+  const sig = JSON.stringify(terms);
+  if (sig === S.termSig) return;
+  S.termSig = sig; S.terms = terms;
+  if (T.open) { termSync(terms); retitleTerms(); }
+  renderHeaderChips(); renderTree();
+}
 async function termClose(P) {
   if (!confirm(`Close "${P.lab.textContent}"? Its session ends.`)) return;
-  try { termSync((await api('POST', '/api/term/close', { id: P.id })).terms); } catch (e) { toast(e.message, true); }
+  try {
+    const terms = (await api('POST', '/api/term/close', { id: P.id })).terms;
+    S.terms = terms; S.termSig = JSON.stringify(terms);
+    termSync(terms); renderHeaderChips(); if (S.tree) renderTree();
+  } catch (e) { toast(e.message, true); }
 }
 async function openTerm(open) {
   T.open = open; store('term', open);
   $('#termpane').hidden = $('#divider2').hidden = !open;
   $('#b-term').classList.toggle('on', open);
+  fitPanes();
   if (!open) return;
   await termLoad();
   T.list.forEach(termConnect);
@@ -2286,16 +2463,17 @@ if (CFG.term) {
     const quiet = ' If nothing changed since the last roll and no feedback is open, say so in one line and do nothing else.';
     sendToAgent(/^claude\b/.test(T.active?.agent ?? CFG.agent ?? '') ? `/loop 3m ${ROLL}${quiet}` : `Every 3 minutes until I say stop: ${ROLL.replace('Do a', 'do a')}${quiet}`, true);
   };
-  $('#t-fb').onclick = () => sendToAgent('Work through the open treedit feedback (`treedit fb ls`) and answer each item with `treedit fb reply ID "…" --done`.', true);
   $('#t-ext').hidden = !CFG.ptyxis;
-  $('#t-ext').onclick = async () => { try { await api('POST', '/api/term/external', {}); toast('Opened in a new terminal window'); } catch (e) { toast(e.message, true); } };
-  (() => {  // resizable from its left edge
-    const d = $('#divider2'), w = load('termw', null);
-    if (w) document.documentElement.style.setProperty('--term-w', w + 'px');
+  $('#t-ext').onclick = async () => {
+    try { await api('POST', '/api/term/external', { root: T.active?.root || '' }); toast('Opened in a new terminal window'); }
+    catch (e) { toast(e.message, true); }
+  };
+  (() => {  // resizable from its left edge; the editor stays the wide column
+    const d = $('#divider2');
     d.onmousedown = e => {
       const x0 = e.clientX, w0 = $('#termpane').offsetWidth; document.body.style.userSelect = 'none';
-      const mv = ev => { const nw = Math.max(280, w0 - (ev.clientX - x0)); document.documentElement.style.setProperty('--term-w', nw + 'px'); store('termw', nw); };
-      const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.style.userSelect = ''; };
+      const mv = ev => dragPane('term', w0 - (ev.clientX - x0));
+      const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.style.userSelect = ''; if (S.tree) renderTree(); };
       document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
     };
   })();
@@ -2386,13 +2564,44 @@ function showDiff(mine, disk) {
 }
 /* ---------- structure edits ---------- */
 function baseDir() { const n = S.byPath.get(S.sel ?? ''); if (!n) return ''; return n.type === 'dir' && !n.linked ? n.path : parentOf(n.path); }
-async function newEntry(kind) {
-  const base = baseDir();
-  const name = prompt(`New ${kind === 'dir' ? 'folder' : 'file'} in ${base || S.rootName}/\nName (may include subfolders, e.g. scripts/run.py):`);
-  if (!name || !name.trim()) return;
-  const path = (base ? base + '/' : '') + name.trim().replace(/^\/+|\/+$/g, '');
-  try { const r = await api('POST', '/api/new', { path, kind }); if (r.git) toast(`Created ${path} (staged in git)`); expandTo(path); if (kind === 'dir') S.expanded.add(path); await loadTree(); await select(path); if (kind === 'file') editor.focus(); }
-  catch (e) { toast(e.message, true); }
+function parseNames(text) {  // several names from one box: a line or a comma each, trimmed, deduped
+  const seen = new Set(), out = [];
+  for (const raw of String(text || '').split(/[\n,]/)) {
+    const name = raw.trim().replace(/^\/+|\/+$/g, '');
+    if (name && !seen.has(name)) { seen.add(name); out.push(name); }
+  }
+  return out;
+}
+function newEntries(kind) {
+  const base = baseDir(), what = kind === 'dir' ? 'folder' : 'file';
+  const ta = el('textarea', 'newnames');
+  ta.rows = 7; ta.spellcheck = false; ta.placeholder = kind === 'dir' ? 'scripts/data\nassets/img' : 'scripts/run.py\npkg/a.py';
+  const box = el('div', 'newex');
+  box.append(el('div', 'nlabel', `New ${what}s in ${base || S.rootName + '/'} — one name per line (a comma also works); subfolders are fine.`), ta);
+  const cancel = el('button'); cancel.textContent = 'Cancel'; cancel.onclick = () => $('#modal').close();
+  const create = el('button', 'primary'); create.textContent = 'Create';
+  const run = async () => {
+    const names = parseNames(ta.value);
+    if (!names.length) { toast('Enter at least one name', true); return; }
+    const paths = names.map(n => base ? base + '/' + n : n);
+    try {
+      const r = await api('POST', '/api/new', { paths, kind });
+      const made = r.created || [], skipped = r.skipped || [];
+      $('#modal').close();
+      if (!made.length) { toast(`Nothing created — ${skipped.length} already ${skipped.length === 1 ? 'exists' : 'exist'}`, true); return; }
+      const label = `${made.length} ${what}${made.length === 1 ? '' : 's'}`;
+      toast(skipped.length ? `Created ${label} · ${skipped.length} already there` : `Created ${label}`);
+      if (kind === 'dir') for (const p of made) S.expanded.add(p);
+      expandTo(made[0]);
+      await loadTree();
+      await select(made[0]);
+      if (kind === 'file' && made.length === 1) editor.focus();
+    } catch (e) { toast(e.message, true); }
+  };
+  create.onclick = run;
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
+  openModal(`New ${what}s`, box, [cancel, create]);
+  ta.focus();
 }
 async function renameSel() {
   const p = S.sel; if (!p) return;
@@ -2424,24 +2633,215 @@ async function deleteSel() {
     await loadTree();
   } catch (e) { toast(e.message, true); }
 }
-$('#b-newfile').onclick = () => newEntry('file');
-$('#b-newdir').onclick = () => newEntry('dir');
+$('#b-newfile').onclick = () => newEntries('file');
+$('#b-newdir').onclick = () => newEntries('dir');
 $('#b-rename').onclick = renameSel;
 $('#b-delete').onclick = deleteSel;
 
+/* ---------- copy a subtree: skill folders join their SKILL.md files, parent first ---------- */
+const COPY_FILES = 400, COPY_CHARS = 1500000;
+function copyRoots(paths, order) {  // a selected folder already covers the rows inside it
+  const set = new Set(paths);
+  if (set.has('')) return [''];
+  const roots = [];
+  for (const p of set) {
+    let under = false;
+    for (const o of set) if (o !== p && p.startsWith(o + '/')) { under = true; break; }
+    if (!under) roots.push(p);
+  }
+  const rank = new Map();
+  (order || []).forEach((p, i) => { if (!rank.has(p)) rank.set(p, i); });
+  roots.sort((a, b) => (rank.has(a) ? rank.get(a) : 1e9) - (rank.has(b) ? rank.get(b) : 1e9) || (a < b ? -1 : a > b ? 1 : 0));
+  return roots;
+}
+function skillFiles(node) {  // SKILL.md files under node; a folder's own skill comes before the skills inside it
+  const out = [];
+  (function walk(n) {
+    if (!n || n.type === 'broken') return;
+    if (n.type !== 'dir') {
+      if (n.name === 'SKILL.md' && n.kind === 'text') out.push({ path: n.path, name: n.name });
+      return;
+    }
+    const kids = n.children || [];
+    let entry = null;
+    for (const c of kids) if (c.type === 'file' && c.name === 'SKILL.md' && c.kind === 'text') { entry = c; break; }
+    if (entry) out.push({ path: entry.path, name: entry.name });
+    for (const c of kids) if (c !== entry) walk(c);
+  })(node);
+  return out;
+}
+function textFiles(node) {
+  const out = [];
+  (function walk(n) {
+    if (!n || n.type === 'broken' || n.kind === 'outside') return;
+    if (n.type !== 'dir') {
+      if (n.kind === 'text') out.push({ path: n.path, name: n.name });
+      return;
+    }
+    for (const c of n.children || []) walk(c);
+  })(node);
+  return out;
+}
+function dedupeFiles(files) {
+  const seen = new Set(), out = [];
+  for (const f of files) if (!seen.has(f.path)) { seen.add(f.path); out.push(f); }
+  return out;
+}
+function filesForCopy(nodes) {  // skills when the subtree has any; otherwise the text files
+  const skills = [], texts = [];
+  for (const n of nodes) {
+    for (const f of skillFiles(n)) skills.push(f);
+    for (const f of textFiles(n)) texts.push(f);
+  }
+  const got = dedupeFiles(skills);
+  if (got.length) return { kind: 'skill', files: got };
+  return { kind: 'text', files: dedupeFiles(texts) };
+}
+function copyHeading(path) {
+  const tail = '/SKILL.md';
+  if (path.endsWith(tail)) return path.slice(0, -tail.length);
+  return path;
+}
+function joinClipboard(files) {  // one file stays verbatim; several are headed so a chat can tell them apart
+  if (!files.length) return '';
+  if (files.length === 1) return files[0].text;
+  return files.map(f => '## ' + copyHeading(f.path) + '\n\n' + String(f.text).replace(/\s+$/, '')).join('\n\n');
+}
+function nodesFor(paths) { return paths.map(p => S.byPath.get(p)).filter(Boolean); }
+function copyPlan(paths) { return filesForCopy(nodesFor(copyRoots(paths, S.order))); }
+function copyLabel(plan) {
+  const n = plan.files.length;
+  if (!n) return 'Nothing to copy';
+  if (plan.kind === 'skill') return n === 1 ? 'Copy skill' : `Copy ${n} skills`;
+  return n === 1 ? 'Copy file' : `Copy ${n} files`;
+}
+function pathLabel(path) {
+  if (!path) return (S.rootName || '.') + '/';
+  const n = S.byPath.get(path);
+  return path + (n && n.type === 'dir' ? '/' : '');
+}
+async function writeClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* the page may not be allowed; the hidden box below still works on localhost */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+  document.body.append(ta); ta.focus(); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+async function copySubtrees(paths) {
+  const plan = copyPlan(paths);
+  if (!plan.files.length) { toast('Nothing to copy', true); return; }
+  let list = plan.files, truncated = list.length > COPY_FILES;
+  if (truncated) list = list.slice(0, COPY_FILES);
+  const texts = new Array(list.length);
+  const dirty = dirtyBuffers();
+  const missing = [];
+  list.forEach((f, i) => { const b = dirty.get(f.path); if (b) texts[i] = b.value; else missing.push(i); });
+  try {
+    if (missing.length) {
+      const r = await api('POST', '/api/texts', { paths: missing.map(i => list[i].path) });
+      const got = new Map((r.files || []).map(f => [f.path, f]));
+      for (const i of missing) { const f = got.get(list[i].path); if (f && f.content != null) texts[i] = f.content; }
+    }
+  } catch (e) { toast(e.message || 'Copy failed', true); return; }
+  const files = [];
+  let chars = 0, skipped = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (texts[i] == null) { skipped++; continue; }
+    if (files.length && chars + texts[i].length > COPY_CHARS) { truncated = true; break; }
+    files.push({ path: list[i].path, text: texts[i] });
+    chars += texts[i].length;
+  }
+  if (!files.length) { toast('Nothing to copy', true); return; }
+  const text = joinClipboard(files);
+  if (!await writeClipboard(text)) { toast('Copy failed — the browser blocked the clipboard', true); return; }
+  const what = plan.kind === 'skill'
+    ? (files.length === 1 ? '1 skill' : `${files.length} skills`)
+    : (files.length === 1 ? files[0].path : `${files.length} files`);
+  const extra = (dirty.size && list.some(f => dirty.has(f.path)) ? ', with unsaved edits' : '')
+    + (skipped ? `, ${skipped} unreadable left out` : '') + (truncated ? ' (truncated)' : '');
+  toast(`Copied ${what}${extra} · ~${fmtTok(Math.ceil(text.length / 4))} tok`);
+}
+let ctxPaths = null;  // what the open menu will copy; Ctrl+C uses it while the menu is up
+function hideCtx() { ctxPaths = null; const m = $('#ctx'); if (m) m.hidden = true; }
+function openCtx(x, y, path) {
+  const menu = $('#ctx'), paths = (S.multi.size > 1 && S.multi.has(path)) ? [...S.multi] : [path];
+  ctxPaths = paths;
+  const plan = copyPlan(paths);
+  menu.textContent = '';
+  const copy = el('button'); copy.type = 'button';
+  copy.append(el('span', '', copyLabel(plan)), el('kbd', '', 'Ctrl+C'));
+  copy.disabled = !plan.files.length;
+  copy.title = plan.kind === 'skill'
+    ? 'Join each SKILL.md in the subtree, parent skill first. Unsaved edits are included.'
+    : 'Copy the text files in the subtree. Unsaved edits are included.';
+  copy.onclick = () => { hideCtx(); copySubtrees(paths); };
+  const cp = el('button'); cp.type = 'button';
+  cp.append(el('span', '', 'Copy path'));
+  cp.onclick = async () => { hideCtx(); const ok = await writeClipboard(pathLabel(path)); toast(ok ? 'Copied path' : 'Copy failed', !ok); };
+  menu.append(copy, cp);
+  menu.hidden = false; menu.style.left = '0px'; menu.style.top = '0px';
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  menu.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px';
+  menu.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px';
+}
+function rowPath(e) {
+  const seg = e.target.closest && e.target.closest('.seg');
+  if (seg && seg.dataset.path != null) return seg.dataset.path;
+  const row = e.target.closest && e.target.closest('.row');
+  if (row && row.dataset.path != null) return row.dataset.path;
+  return null;
+}
+function copyKeyBlocked(e) {  // a real text selection still belongs to the editor
+  const t = e.target;
+  const field = t && t.closest && t.closest('textarea, input, select, [contenteditable="true"]');
+  if (field && field.selectionStart != null && field.selectionStart !== field.selectionEnd) return true;
+  const sel = window.getSelection && window.getSelection();
+  return !!(sel && String(sel));
+}
+$('#treepane').addEventListener('contextmenu', e => {
+  const path = rowPath(e);
+  if (path == null) return;
+  e.preventDefault();
+  openCtx(e.clientX, e.clientY, path);
+});
+$('#treepane').addEventListener('scroll', hideCtx);
+document.addEventListener('pointerdown', e => { if (!(e.target.closest && e.target.closest('#ctx'))) hideCtx(); });
+window.addEventListener('resize', () => {
+  hideCtx();
+  const before = document.documentElement.style.getPropertyValue('--tree-w');
+  fitPanes();
+  if (S.tree && document.documentElement.style.getPropertyValue('--tree-w') !== before) renderTree();
+});
+function selectionPaths() {
+  if (S.multi.size) return [...S.multi];
+  if (S.sel != null && S.byPath.has(S.sel)) return [S.sel];
+  return [];
+}
+
 /* ---------- misc ui ---------- */
-async function quitApp() {  // Ctrl+W / Ctrl+Q in the app window
+async function quitApp() {  // Ctrl+W / Ctrl+Q: stop the server, so the app window or browser tab can go
   const unsaved = isDirty() || S.bufs.size > 0 || [...S.msec.values()].some(sDirty);
   if (unsaved && !confirm('Quit with unsaved changes? They will be lost.')) return;
-  try { await api('POST', '/api/quit', {}); } catch {}
+  try { await fetch('/api/quit', { method: 'POST', headers: { 'X-Treedit': '1' }, keepalive: true }); } catch {}
+  if (!CFG.app) { try { window.close(); } catch { /* the browser only closes a tab it opened */ } }
 }
 document.addEventListener('keydown', e => {
   const inTerm = !!(e.target.closest && e.target.closest('#termpane'));
-  if (CFG.app && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();  // in the terminal Ctrl+W stays the shell's delete-word
     if (k === 'q' || (k === 'w' && !inTerm)) { e.preventDefault(); quitApp(); return; }
   }
   if (inTerm) return;  // keys belong to the shell / agent
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'c' && !copyKeyBlocked(e)) {
+    const paths = (!$('#ctx').hidden && ctxPaths) ? ctxPaths : selectionPaths();
+    if (paths.length) { e.preventDefault(); hideCtx(); copySubtrees(paths); return; }
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     const st = document.activeElement && document.activeElement._st;
@@ -2452,6 +2852,7 @@ document.addEventListener('keydown', e => {
     if (ta) { e.preventDefault(); openFind(ta); return; }
   }
   if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyZ') { e.preventDefault(); setWrap(!document.body.classList.contains('wrap')); return; }
+  if (e.key === 'Escape' && !$('#ctx').hidden) { hideCtx(); return; }
   if (e.key === 'Escape' && S.hitsOn && !$('#modal').open) { closeSearch(true); return; }
   if (e.key === 'Escape' && S.multi.size && !$('#modal').open) clearMulti();
   if (e.key === 'F2' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement?.tagName || '')) renameSel();
@@ -2618,12 +3019,13 @@ setTheme(load('theme', document.documentElement.dataset.theme || 'system'));
 if (!$('#auto').checked) setLive('paused');
 (() => {
   const d = $('#divider'); let x0, w0;
-  const w = load('treew', null); if (w) document.documentElement.style.setProperty('--tree-w', w + 'px');
   d.onmousedown = e => { x0 = e.clientX; w0 = $('#treepane').offsetWidth; document.body.style.userSelect = 'none';
-    const mv = ev => { const nw = Math.max(220, w0 + ev.clientX - x0); document.documentElement.style.setProperty('--tree-w', nw + 'px'); store('treew', nw); };
+    const mv = ev => dragPane('tree', w0 + ev.clientX - x0);
     const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.style.userSelect = ''; renderTree(); };
     document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); };
 })();
+fitPanes();
+requestAnimationFrame(fitPanes);  // clientWidth is 0 until the first layout
 setInterval(() => {  // let highlights and change bars fade
   if (!Object.keys(S.changes).length) return;
   renderTree(); renderMarks(); for (const st of S.msec.values()) if (st.ta) sectionMarks(st);
@@ -2631,6 +3033,7 @@ setInterval(() => {  // let highlights and change bars fade
 loadTree().then(() => {
   const h = decodeURIComponent(location.hash.slice(1));
   if (h && S.byPath.has(h)) { expandTo(h); renderTree(); select(h); }
+  return pollTerms();
 }).catch(e => { setLive('off'); toast('Could not load tree: ' + e.message, true); });
 </script>
 </body>

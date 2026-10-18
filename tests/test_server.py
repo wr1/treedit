@@ -88,6 +88,14 @@ def test_history_endpoint(server, tree):
     assert ev[-1]["ranges"] == [[2, 2, "add"]] and ev[-1]["by"] == "agent"
 
 
+def test_new_many(server, tree):
+    status, out = call(server, "POST", "/api/new", {"paths": ["m/a.txt", "m/b.txt", "README.md"], "kind": "file"})
+    assert status == 200 and out["created"] == ["m/a.txt", "m/b.txt"] and out["skipped"] == ["README.md"]
+    assert (tree / "m" / "a.txt").is_file() and (tree / "m" / "b.txt").is_file()
+    assert call(server, "POST", "/api/new", {"paths": ["m"], "kind": "dir"})[1]["skipped"] == ["m"]
+    assert call(server, "POST", "/api/new", {"path": "solo.txt"})[1] == {"ok": True, "git": False}
+
+
 def test_mutations(server, tree):
     assert call(server, "POST", "/api/new", {"path": "d/n.txt"})[1] == {"ok": True, "git": False}
     assert call(server, "POST", "/api/new", {"path": "d2", "kind": "dir"})[0] == 200
@@ -129,6 +137,31 @@ def test_grep_endpoint(server):
     assert out["truncated"] is False
     assert call(server, "GET", "/api/grep?q=")[0] == 400
     assert call(server, "GET", "/api/grep?q=" + quote("RETURN 1") + "&case=1")[1]["hits"] == []
+
+
+def test_texts_batch(server, tree):
+    (tree / "skills" / "one").mkdir(parents=True)
+    (tree / "skills" / "two").mkdir()
+    (tree / "skills" / "one" / "SKILL.md").write_text("---\nname: one\n---\n\nDo one.\n")
+    (tree / "skills" / "two" / "SKILL.md").write_text("---\nname: two\n---\n\nDo two.\n")
+    status, body = call(
+        server,
+        "POST",
+        "/api/texts",
+        {"paths": ["skills/one/SKILL.md", "skills/two/SKILL.md", "blob.bin", "missing.md", "../x"]},
+    )
+    assert status == 200
+    assert body["files"][0]["content"].startswith("---\nname: one")
+    assert body["files"][1] == {
+        "path": "skills/two/SKILL.md",
+        "kind": "text",
+        "content": "---\nname: two\n---\n\nDo two.\n",
+    }
+    assert body["files"][2]["kind"] == "binary" and "content" not in body["files"][2]
+    assert body["files"][3]["error"]
+    assert ".." in body["files"][4]["error"]
+    assert call(server, "POST", "/api/texts", {"paths": "nope"})[0] == 400
+    assert call(server, "POST", "/api/texts", {"paths": ["a"] * 401})[0] == 400
 
 
 def test_git_endpoints(server, repo):
@@ -255,7 +288,9 @@ def test_open_headless(tree, monkeypatch, capsys):
 def test_terminal_sessions(server, monkeypatch, tree):
     terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "PS1": "$ "}, "")
     monkeypatch.setattr(Handler, "terms", terms)
-    assert call(server, "GET", "/api/terms")[1]["terms"] == [{"id": "1", "label": "sh", "agent": "", "alive": False}]
+    assert call(server, "GET", "/api/terms")[1]["terms"] == [
+        {"id": "1", "label": "sh", "agent": "", "alive": False, "root": str(tree), "mount": "proj"}
+    ]
     status, out = call(server, "POST", "/api/term/new", {"agent": "echo second-pane"})
     assert status == 200 and out["id"] == "2" and [t["label"] for t in out["terms"]] == ["sh", "echo second-pane"]
     host, port = server.removeprefix("http://").split(":")
@@ -282,6 +317,51 @@ def test_terminal_sessions(server, monkeypatch, tree):
     s.close()
     assert call(server, "POST", "/api/term/close", {"id": "2"})[0] == 404
     assert call(server, "GET", "/api/term?id=9&token=" + Handler.token)[0] == 404
+    terms.stop()
+
+
+def test_mount_from_the_page(server, tree, tmp_path):
+    assert call(server, "PUT", "/api/note", {"path": "pkg", "note": "package"})[0] == 200
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.md").write_text("x\n")
+    status, body = call(server, "POST", "/api/mount", {"path": str(other)})
+    assert status == 200 and body["promoted"] == "proj" and body["name"] == "other"
+    assert body["mounts"] == [
+        {"name": "proj", "root": str(tree.resolve())},
+        {"name": "other", "root": str(other.resolve())},
+    ]
+    t = call(server, "GET", "/api/tree")[1]
+    assert t["tree"]["multi"] and t["root"] == "proj + other" and t["notes"]["proj/pkg"] == "package"
+    assert (tree / ".treenotes.json").exists()
+    third = tmp_path / "third"
+    third.mkdir()
+    again = call(server, "POST", "/api/mount", {"path": str(third)})[1]
+    assert again["promoted"] is None and [m["name"] for m in again["mounts"]] == ["proj", "other", "third"]
+    assert call(server, "POST", "/api/mount", {"path": str(other)})[0] == 400
+    assert call(server, "POST", "/api/mount", {"path": str(tmp_path / "missing")})[0] == 400
+    assert call(server, "POST", "/api/mount", {})[0] == 400
+
+
+def test_terminal_belongs_to_a_tree(server, monkeypatch, tree, tmp_path):
+    terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "TREEDIT_ROOT": str(tree)}, "")
+    monkeypatch.setattr(Handler, "terms", terms)
+    other = tmp_path / "other"
+    other.mkdir()
+    assert call(server, "POST", "/api/mount", {"path": str(other)})[0] == 200
+    status, out = call(server, "POST", "/api/term/new", {"agent": "echo on-other", "root": "other"})
+    assert status == 200
+    second = next(t for t in out["terms"] if t["id"] == "2")
+    assert second["root"] == str(other.resolve()) and second["mount"] == "other" and second["alive"] is False
+    assert terms.get("2").cwd == str(other.resolve())
+    assert terms.get("2").env["TREEDIT_ROOT"] == str(other.resolve())
+    assert terms.get("2").env["TREEDIT_NOTES"] == str(other.resolve() / ".treenotes.json")
+    assert str(tree.resolve()) in terms.get("2").env["TREEDIT_ROOTS"].split(os.pathsep)
+    assert str(other.resolve()) in terms.get("2").env["TREEDIT_ROOTS"].split(os.pathsep)
+    assert terms.get("1").env["TREEDIT_ROOT"] == str(tree)  # already running: its env stays
+    assert call(server, "POST", "/api/term/new", {"agent": "x", "root": "nope"})[0] == 400
+    first = next(t for t in call(server, "GET", "/api/terms")[1]["terms"] if t["id"] == "1")
+    assert first["root"] == str(tree) and first["mount"] == "proj"
     terms.stop()
 
 

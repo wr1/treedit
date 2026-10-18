@@ -91,6 +91,12 @@ def test_mutations_and_drafts(two, tree, tmp_path):
     assert two.changes_for("/nowhere")[0] == "proj + other"
 
 
+def test_create_many_across_folders(two, tmp_path):
+    out = two.create_many(["proj/a.txt", "other/docs/b.txt", "proj/a.txt"], "file")
+    assert out == {"created": ["proj/a.txt", "other/docs/b.txt"], "skipped": ["proj/a.txt"]}
+    assert (tmp_path / "proj" / "a.txt").is_file() and (tmp_path / "other" / "docs" / "b.txt").is_file()
+
+
 def test_git_per_folder(two, repo):
     log = two.git_log("proj/README.md", False, 5)
     assert log["scope"] == "proj/README.md" and log["commits"][0]["subject"] == "init"
@@ -155,6 +161,32 @@ def test_top_level_and_cross_folder(two, tree, tmp_path, capsys):
     two.delete_feedback("*:2")
     with pytest.raises(HTTPError):
         two.delete_feedback("*:2")
+
+
+def test_add_keeps_names_and_notes(two, tree, tmp_path):
+    two.set_note("proj/pkg", "package")
+    kept = two.mounts["other"]
+    extra = tmp_path / "sub" / "other"
+    extra.mkdir(parents=True)
+    (extra / "n.txt").write_text("n\n")
+    name = two.add(_ws(str(extra), "", [], False))
+    assert name == "sub-other"
+    assert two.mounts["other"] is kept and two.read_notes()["proj/pkg"] == "package"
+    assert two.read_file("sub-other/n.txt")["content"] == "n\n"
+    with pytest.raises(HTTPError, match="already open"):
+        two.add(kept)
+
+
+def test_add_leaves_the_old_top_notes_file(two, tmp_path, tmp_path_factory):
+    two.set_note("", "both projects")
+    old = two.top.notes_path
+    assert old.is_file() and "both projects" in old.read_text()
+    side = tmp_path_factory.mktemp("side") / "z"
+    side.mkdir()
+    two.add(_ws(str(side), "", [], False))
+    assert two.root != tmp_path and two.top.root == two.root
+    assert old.is_file() and "both projects" in old.read_text()
+    assert two.read_notes().get(".") != "both projects"
 
 
 def test_parent_opened_with_child_shares_notes(tree):

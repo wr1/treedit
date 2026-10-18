@@ -250,11 +250,14 @@ class Sessions:
         self.next = 1
         self.add(agent)
 
-    def add(self, agent: str = "") -> str:
+    def add(self, agent: str = "", cwd: str | None = None, env_extra: dict | None = None) -> str:
+        """A new session. CWD defaults to the window's first folder. ENV_EXTRA overlays the shared env,
+        so a session can carry its own TREEDIT_ROOT without changing the ones already running."""
         with self.lock:
             sid = str(self.next)
             self.next += 1
-            self.terms[sid] = Terminal(self.cwd, self.env, agent.strip())
+            env = {**self.env, **(env_extra or {})}
+            self.terms[sid] = Terminal(cwd or self.cwd, env, agent.strip())
             return sid
 
     def get(self, sid: str):
@@ -273,7 +276,8 @@ class Sessions:
 
     def list(self) -> list:
         return [
-            {"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive} for sid, t in list(self.terms.items())
+            {"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive, "root": t.cwd}
+            for sid, t in list(self.terms.items())
         ]
 
     def stop(self) -> None:

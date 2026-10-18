@@ -306,6 +306,14 @@ def test_create_rename_delete(ws, tree):
         ws.delete("")
 
 
+def test_create_many_skips_existing_names(ws, tree):
+    out = ws.create_many(["a.txt", "sub/b.txt", "README.md", "a.txt", "  "], "file")
+    assert out == {"created": ["a.txt", "sub/b.txt"], "skipped": ["README.md", "a.txt"]}
+    assert (tree / "a.txt").is_file() and (tree / "sub" / "b.txt").is_file()
+    assert ws.create_many(["out", "out"], "dir") == {"created": ["out"], "skipped": ["out"]}
+    assert (tree / "out").is_dir()
+
+
 def test_drafts(ws):
     assert ws.read_drafts() == {}
     ws.set_draft("a.txt", {"diff": "-a\n+b\n"})

@@ -12,7 +12,8 @@ What it does
     The window can instead colour by recency, open feedback or annotation length, and can list
     recent files. `treedit print` on a terminal stays on document size. The header box filters
     that tree; Enter searches inside the files (the same files the tree shows).
-  * Edit any text file; Ctrl/Cmd+S saves. Symlinked files edit their target.
+  * Edit any text file; Ctrl/Cmd+S saves, Ctrl+W / Ctrl+Q stops the server (closing the window or
+    tab). Symlinked files edit their target.
   * Plot files (png, jpg, gif, webp, bmp, tiff, avif, svg, pdf) open in a viewer.
     SVG can still be edited as source.
   * Annotate any file or folder (including the root): your standing comments for the agent,
@@ -28,7 +29,8 @@ What it does
     a restart. An open file reloads silently if you have no unsaved edits;
     otherwise you get a conflict banner with compare / load disk / overwrite.
   * Saves are atomic and check that the file hasn't changed since you opened it.
-  * Create, rename/move and delete files and folders; notes follow renames.
+  * Create one or several files and folders in a go (one name per line), rename/move and delete
+    them; notes follow renames.
     Notes whose path disappeared are listed so you can reattach or drop them.
 
 Built on treeparse (Python 3.12+): `treedit --stub` / `-j` describe it. Binds to 127.0.0.1 by default.
@@ -110,6 +112,7 @@ def notes_file(root: Path) -> Path:
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
 RAW_MAX = 64 * 1024 * 1024  # a plot larger than this is listed, but not sent to the viewer
 GREP_LIMIT = 200  # content-search hits returned in one go
+TEXT_BATCH = 400  # files one clipboard copy may ask for
 PLOT_MIME = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -269,6 +272,27 @@ def skill_tokens(tree: dict) -> None:
 
 def fmt_tokens(n: int) -> str:
     return f"{n}" if n < 1000 else f"{n / 1000:.1f}k" if n < 10000 else f"{round(n / 1000)}k"
+
+
+def text_batch(ws, paths) -> list:
+    """Text of each path, in order, for a clipboard copy. Binary and plots come back without content.
+    A missing or forbidden path is an error item, so one bad path does not drop the rest."""
+    if not isinstance(paths, list) or any(not isinstance(p, str) for p in paths):
+        raise HTTPError(400, "paths must be a list of strings")
+    if len(paths) > TEXT_BATCH:
+        raise HTTPError(400, f"at most {TEXT_BATCH} paths")
+    out = []
+    for rel in paths:
+        try:
+            f = ws.read_file(rel)
+        except HTTPError as e:
+            out.append({"path": rel, "error": e.msg})
+            continue
+        item = {"path": f["path"], "kind": f.get("kind")}
+        if f.get("kind") == "text":
+            item["content"] = f.get("content", "")
+        out.append(item)
+    return out
 
 
 def word_totals(tree: dict) -> dict:
@@ -1272,7 +1296,7 @@ class Workspace:
         return r.returncode == 0
 
     def create(self, rel: str, kind: str) -> bool:
-        rel = self.norm(rel)
+        rel = self.norm(rel.strip())
         if not rel:
             raise HTTPError(400, "a name is required")
         p = self.node_path(rel)
@@ -1287,6 +1311,24 @@ class Workspace:
                 pass
             return self.git_add(rel)
         return False
+
+    def create_many(self, paths, kind: str = "file") -> dict:
+        """Create several files or folders in one request.
+
+        A path that already exists is skipped rather than failing the whole batch; empty names are
+        dropped. Returns {"created": [...], "skipped": [...]} in the order they were asked for.
+        """
+        created, skipped = [], []
+        for rel in paths:
+            rel = self.norm(str(rel).strip())
+            if not rel:
+                continue
+            if os.path.lexists(self.node_path(rel)):
+                skipped.append(rel)
+                continue
+            self.create(rel, kind)
+            created.append(rel)
+        return {"created": created, "skipped": skipped}
 
     def rename(self, src: str, dst: str) -> None:
         src, dst = self.norm(src), self.norm(dst)
@@ -1410,14 +1452,19 @@ def mount_names(roots: list) -> list:
     """A unique top-level name per root: its folder name, then parent/name, then a -2, -3 suffix."""
     out: list = []
     for r in roots:
-        name = r.name or "root"
-        if name in out:
-            name = f"{r.parent.name}/{name}".replace("/", "-")
-        base, i = name, 2
-        while name in out:
-            name, i = f"{base}-{i}", i + 1
-        out.append(name)
+        out.append(fresh_mount_name(out, r))
     return out
+
+
+def fresh_mount_name(used, root: Path) -> str:
+    """A name for ROOT that is not already in USED. Same rule as mount_names, for one new folder."""
+    name = root.name or "root"
+    if name in used:
+        name = f"{root.parent.name}/{name}".replace("/", "-")
+    base, i = name, 2
+    while name in used:
+        name, i = f"{base}-{i}", i + 1
+    return name
 
 
 class Mounts:
@@ -1425,23 +1472,41 @@ class Mounts:
     "name/path/in/root"; every call goes to that root's Workspace, so each keeps its own notes file,
     gitignore, drafts and change tracking. Feedback ids become "name:N".
     The top level, and feedback on paths in several folders, go to the notes file of the folders'
-    common parent (where the agent pane starts), with paths relative to it and ids "*:N"."""
+    common parent, with paths relative to it and ids "*:N". Each agent session starts in one folder."""
 
     TOP = "*"
 
     def __init__(self, workspaces: list):
         self.mounts = dict(zip(mount_names([w.root for w in workspaces]), workspaces, strict=True))
-        self.root = Path(os.path.commonpath([str(w.root) for w in workspaces]))  # where the terminal starts
+        self.top = None
+        self.own_top = False
+        self._rebind()
+
+    def _rebind(self) -> None:
+        """Label, common parent, and the top notes file, after the set of folders changes.
+        A wider common parent gets a new notes file. The previous parent's file stays on disk."""
         self.label = " + ".join(self.mounts)
-        w0 = workspaces[0]
-        same = [w for w in workspaces if w.root == self.root]  # a folder holding the others: share its notes
-        self.top = (
-            same[0]
-            if same
-            else Workspace(self.root, notes_file(self.root), w0.ignore, w0.follow_outside, w0.gitignore, w0.show)
-        )
-        self.own_top = not same
-        self.notes_path = os.pathsep.join(str(w.notes_path) for w in workspaces + ([self.top] if self.own_top else []))
+        self.root = Path(os.path.commonpath([str(w.root) for w in self.mounts.values()]))
+        w0 = next(iter(self.mounts.values()))
+        same = [w for w in self.mounts.values() if w.root == self.root]  # a folder holding the others
+        if same:
+            self.top, self.own_top = same[0], False
+        elif self.top is not None and self.own_top and self.top.root == self.root:
+            pass
+        else:
+            self.top = Workspace(self.root, notes_file(self.root), w0.ignore, w0.follow_outside, w0.gitignore, w0.show)
+            self.own_top = True
+        tops = [self.top] if self.own_top else []
+        self.notes_path = os.pathsep.join(str(w.notes_path) for w in (*self.mounts.values(), *tops))
+
+    def add(self, ws: Workspace) -> str:
+        """Open WS beside the folders already here. Existing names stay. Returns the new name."""
+        if any(w.root == ws.root for w in self.mounts.values()):
+            raise HTTPError(400, "that folder is already open")
+        name = fresh_mount_name(set(self.mounts), ws.root)
+        self.mounts[name] = ws
+        self._rebind()
+        return name
 
     @staticmethod
     def _pre(name: str, rel: str) -> str:
@@ -1660,6 +1725,16 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.create(sub, kind)
 
+    def create_many(self, paths, kind: str = "file") -> dict:
+        """Create paths across the opened folders; each path names the folder it belongs to."""
+        created, skipped = [], []
+        for rel in paths:
+            name, w, sub = self.split(str(rel))
+            out = w.create_many([sub], kind)
+            created.extend(self._pre(name, p) for p in out["created"])
+            skipped.extend(self._pre(name, p) for p in out["skipped"])
+        return {"created": created, "skipped": skipped}
+
     def rename(self, src: str, dst: str) -> None:
         _, w, (s, d) = self._one([src, dst])
         if not s:
@@ -1765,7 +1840,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/term":
             return self.terminal(q)
         if method == "GET" and path == "/api/terms":
-            return self.send_json(200, {"terms": self.sessions().list()})
+            return self.send_json(200, {"terms": self.term_list()})
         if method == "GET" and path == "/api/git/log":
             return self.send_json(200, ws.git_log(q.get("path", ""), q.get("whole") == "1", int(q.get("n", "150"))))
         if method == "GET" and path == "/api/git/show":
@@ -1819,6 +1894,8 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         b = self.body()
+        if method == "POST" and path == "/api/texts":
+            return self.send_json(200, {"files": text_batch(ws, b.get("paths"))})
         if method == "PUT" and path == "/api/draft":
             draft = {k: b[k] for k in ("base_hash", "diff", "full", "base") if b.get(k) is not None}
             ws.set_draft(b.get("path", ""), draft if ("diff" in draft or "full" in draft) else None)
@@ -1848,20 +1925,21 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/context":
             Handler.context = {k: b[k] for k in ("paths", "lines", "quote", "focus") if b.get(k)}
             return self.send_json(200, {"ok": True})
+        if method == "POST" and path == "/api/mount":
+            return self.send_json(200, self.add_mount(str(b.get("path") or "")))
         if method == "POST" and path == "/api/term/new":
-            sid = self.sessions().add(str(b.get("agent") or ""))
-            return self.send_json(200, {"id": sid, "terms": self.sessions().list()})
+            _, w = self.resolve_root(str(b.get("root") or ""))
+            sid = self.sessions().add(str(b.get("agent") or ""), str(w.root), self.term_env(w))
+            return self.send_json(200, {"id": sid, "terms": self.term_list()})
         if method == "POST" and path == "/api/term/close":
             if not self.sessions().close(str(b.get("id", ""))):
                 raise HTTPError(404, "no such terminal")
-            return self.send_json(200, {"terms": self.sessions().list()})
+            return self.send_json(200, {"terms": self.term_list()})
         if method == "POST" and path == "/api/term/external":
+            _, w = self.resolve_root(str(b.get("root") or ""))
+            base = self.terms.env if self.terms else dict(os.environ)
             return self.send_json(
-                200,
-                {
-                    "ok": True,
-                    "cmd": external_terminal(ws.root, self.terms.env if self.terms else dict(os.environ), self.agent),
-                },
+                200, {"ok": True, "cmd": external_terminal(w.root, {**base, **self.term_env(w)}, self.agent)}
             )
         if method == "POST" and path == "/api/feedback":
             return self.send_json(
@@ -1881,6 +1959,9 @@ class Handler(BaseHTTPRequestHandler):
             ws.move_notes(b.get("from", ""), b.get("to", ""))
             return self.send_json(200, {"ok": True})
         if method == "POST" and path == "/api/new":
+            paths = b.get("paths")
+            if isinstance(paths, list):
+                return self.send_json(200, {"ok": True, **ws.create_many(paths, b.get("kind", "file"))})
             return self.send_json(200, {"ok": True, "git": ws.create(b.get("path", ""), b.get("kind", "file"))})
         if method == "POST" and path == "/api/rename":
             ws.rename(b.get("from", ""), b.get("to", ""))
@@ -1893,6 +1974,75 @@ class Handler(BaseHTTPRequestHandler):
     def fid(self, b: dict):
         """A feedback id from a request: N, or "name:N" when several folders are open."""
         return str(b.get("id", "")) if isinstance(self.ws, Mounts) else int(b.get("id", 0))
+
+    def open_folders(self) -> list:
+        """(mount name, workspace) for every folder this window has open."""
+        ws = self.ws
+        if isinstance(ws, Mounts):
+            return list(ws.mounts.items())
+        return [(ws.root.name, ws)]
+
+    def resolve_root(self, root: str):
+        """The open folder named ROOT, or whose path is ROOT. Empty means the first one."""
+        opened = self.open_folders()
+        if not root:
+            return opened[0]
+        try:
+            want = Path(root).expanduser().resolve()
+        except OSError:
+            want = None
+        for name, w in opened:
+            if root == name or (want is not None and want == w.root):
+                return name, w
+        raise HTTPError(400, "that folder is not open")
+
+    def term_env(self, w) -> dict:
+        """TREEDIT_* for a session that belongs to W. ROOTS lists every folder open right now."""
+        return {
+            "TREEDIT_ROOT": str(w.root),
+            "TREEDIT_NOTES": str(w.notes_path),
+            "TREEDIT_ROOTS": os.pathsep.join(str(x.root) for _, x in self.open_folders()),
+        }
+
+    def term_list(self) -> list:
+        """Sessions, with `mount` filled from the folder that path belongs to now."""
+        names = {str(w.root): n for n, w in self.open_folders()}
+        out = self.sessions().list()
+        for t in out:
+            t["mount"] = names.get(t["root"], "")
+        return out
+
+    def add_mount(self, path: str) -> dict:
+        """Open PATH as another top-level folder. One folder becomes a Mounts; names already shown stay."""
+        if not path.strip():
+            raise HTTPError(400, "path is required")
+        try:
+            root = Path(path).expanduser().resolve()
+        except OSError as e:
+            raise HTTPError(400, str(e)) from e
+        if not root.is_dir():
+            raise HTTPError(400, f"{root} is not a folder")
+        current = self.ws
+        opened = list(current.mounts.values()) if isinstance(current, Mounts) else [current]
+        if any(w.root == root for w in opened):
+            raise HTTPError(400, "that folder is already open")
+        src = opened[0]
+        new = Workspace(root, notes_file(root), src.ignore, src.follow_outside, src.gitignore, src.show)
+        new.scan()  # baseline, so the first refresh does not mark every file as a change
+        if isinstance(current, Mounts):
+            name, mounts, promoted = current.add(new), current, None
+        else:
+            mounts = Mounts([current, new])
+            promoted = next(n for n, w in mounts.mounts.items() if w is current)
+            name = next(n for n, w in mounts.mounts.items() if w is new)
+            Handler.ws = mounts
+        return {
+            "ok": True,
+            "name": name,
+            "root": str(new.root),
+            "promoted": promoted,
+            "mounts": [{"name": n, "root": str(w.root)} for n, w in mounts.mounts.items()],
+        }
 
     def sessions(self) -> Sessions:
         if self.terms is None:
@@ -2192,10 +2342,10 @@ def open_editor(
             "COLORTERM": "truecolor",
             "TREEDIT_ROOT": str(roots[0].root),
             "TREEDIT_ROOTS": os.pathsep.join(str(w.root) for w in roots),
-            "TREEDIT_NOTES": str(ws.notes_path),
+            "TREEDIT_NOTES": str(roots[0].notes_path),
             "TREEDIT_URL": url,
         }
-        Handler.terms = Sessions(str(ws.root), env, agent)
+        Handler.terms = Sessions(str(roots[0].root), env, agent)
         print(f"  agent  {agent or 'shell'} (right pane)")
     exe = None if headless or browser else find_app()
     Handler.app = bool(exe) or os.environ.get("TREEDIT_IN_APP") == "1"
