@@ -10,3 +10,4 @@ app/gen/
 coverage.xml
 htmlcov/
 .pytest_cache/
+notes/

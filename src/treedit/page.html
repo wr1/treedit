@@ -94,6 +94,8 @@ aside{width:var(--tree-w);min-width:220px;max-width:75vw;overflow:auto;backgroun
 #divider,#divider2{width:5px;cursor:col-resize;background:var(--line);flex:none}
 #divider:hover,#divider2:hover{background:var(--accent)}
 #divider2[hidden],#termpane[hidden],#b-term[hidden]{display:none}
+#treepane,#detail{outline:none}
+#treepane.pane-focus,#detail.pane-focus,#termpane.pane-focus{outline:2px solid color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:-2px}
 #termpane{width:var(--term-w);min-width:280px;max-width:72vw;flex:none;display:flex;flex-direction:column;background:var(--bg)}
 .tbar{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12.5px;flex-wrap:wrap}
 .tbar b{font-family:var(--mono)}
@@ -364,7 +366,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <div id="searchhits"></div>
 </div>
 <main>
-  <aside id="treepane">
+  <aside id="treepane" tabindex="-1">
     <div id="tl">
       <div class="tlane"><b>you</b><div class="track" id="lane-you"></div></div>
       <div class="tlane"><b>agent</b><div class="track" id="lane-agent"></div></div>
@@ -374,8 +376,8 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <div id="tree"></div><div id="orphans"></div>
   </aside>
   <div id="divider"></div>
-  <section id="detail">
-    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row, or Ctrl/Cmd+C, to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+  <section id="detail" tabindex="-1">
+    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Shift+←/→ moves between the tree, editor and agent panes · in the tree, ↑/↓ move and Enter opens<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row, or Ctrl/Cmd+C, to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
@@ -488,7 +490,7 @@ const S = {
   multi: new Set(), anchor: null, order: [], mcache: new Map(), feedback: [], draft: null, modalFb: false, bufs: new Map(), msec: new Map(), lastDirty: false,
   drafts: {}, draftSent: new Map(), stuck: {}, hydrated: new Set(), changes: {}, dirFresh: new Map(), skew: 0, showDone: load('showdone', false),
   hitsOn: false, colour: 'size', orderMode: 'name', brush: null, gitCommits: [],
-  rootPath: '', terms: [], termSig: '',
+  rootPath: '', terms: [], termSig: '', pane: null,
 };
 
 async function api(method, url, body) {
@@ -2288,12 +2290,13 @@ function termMake(info) {  // the pane, the xterm and (once shown) the socket of
   const head = el('div', 'thead'); head.append(P.dot, P.lab, el('span', 'spacer'), restart, close);
   head.onclick = e => { if (e.target === head || e.target === P.lab) { termActive(P); P.term.focus(); } };
   P.el.append(head, P.body);
-  P.el.addEventListener('focusin', () => termActive(P)); P.el.addEventListener('mousedown', () => termActive(P));
+  P.el.addEventListener('focusin', () => { termActive(P); markPane('term'); }); P.el.addEventListener('mousedown', () => termActive(P));
   P.term = new Terminal({ fontFamily: termFont(), fontSize: 13, lineHeight: 1.15, cursorBlink: true, scrollback: 5000, theme: termTheme() });
   P.fit = new FitAddon.FitAddon(); P.term.loadAddon(P.fit);
   P.term.onData(d => termSend(P, { t: 'in', d }));
   P.term.attachCustomKeyEventHandler(e => {  // Ctrl+Shift+C / V copy and paste, as in Ptyxis
     if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyQ') return false;  // quit, handled above
+    if (e.type === 'keydown' && e.ctrlKey && e.shiftKey && !e.altKey && /^Arrow(Left|Right|Up|Down)$/.test(e.code)) return false;  // pane focus, handled by the page
     if (e.type !== 'keydown' || !e.ctrlKey || !e.shiftKey) return true;
     if (e.code === 'KeyC') { const t = P.term.getSelection(); if (t) navigator.clipboard?.writeText(t).catch(() => {}); return false; }
     if (e.code === 'KeyV') { navigator.clipboard?.readText().then(t => P.term.paste(t)).catch(() => toast('Paste blocked — try middle-click', true)); return false; }
@@ -2390,7 +2393,7 @@ async function focusTerm(id) {
   if (!T.open) await openTerm(true);
   const P = T.list.find(x => x.id === id);
   if (!P) return;
-  termActive(P); P.term.focus();
+  termActive(P); P.term.focus(); markPane('term');
 }
 async function pollTerms() {
   if (!CFG.term || !S.tree) return;
@@ -2824,6 +2827,68 @@ function selectionPaths() {
   return [];
 }
 
+/* ---------- keyboard: pane focus and tree navigation ---------- */
+function paneList() {  // the panes in the order they are laid out, left to right
+  const list = ['tree', 'detail'];
+  if (!$('#termpane').hidden) list.push('term');
+  return list;
+}
+function nextPane(list, current, dir) {  // wrap around; the first/last one when no pane is focused yet
+  if (!list.length) return null;
+  const i = list.indexOf(current);
+  if (i < 0) return dir < 0 ? list[list.length - 1] : list[0];
+  return list[(i + dir + list.length) % list.length];
+}
+function paintPaneFocus() {
+  for (const name of ['tree', 'detail', 'term']) {
+    const node = name === 'tree' ? $('#treepane') : name === 'detail' ? $('#detail') : $('#termpane');
+    node.classList.toggle('pane-focus', name === S.pane);
+  }
+}
+const markPane = name => { S.pane = name; paintPaneFocus(); };
+function setPane(name) {  // put real keyboard focus where the pane keeps it
+  if (!name) return;
+  markPane(name);
+  if (name === 'tree') $('#treepane').focus({ preventScroll: true });
+  else if (name === 'detail') {
+    const ta = S.multi.size > 1 ? (S.lastSec && S.lastSec.ta) : (S.file && S.file.kind === 'text' ? editor : null);
+    (ta || $('#detail')).focus({ preventScroll: true });
+  } else if (name === 'term') {
+    if (!T.active && T.list.length) termActive(T.list[0]);
+    if (T.active) T.active.term.focus();
+  }
+}
+function movePane(dir) { setPane(nextPane(paneList(), S.pane, dir)); }
+function treeStep(order, sel, dir) {  // the next row in visual order; stops at the ends
+  if (!order || !order.length) return null;
+  const i = order.indexOf(sel);
+  if (i < 0) return dir < 0 ? order[order.length - 1] : order[0];
+  return order[Math.min(order.length - 1, Math.max(0, i + dir))];
+}
+const isTyping = () => {
+  const a = document.activeElement;
+  return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+};
+function treeMove(dir) {
+  if (S.pane !== 'tree' || S.multi.size) return false;
+  const path = treeStep(S.order, S.sel, dir);
+  if (path == null) return false;
+  if (path !== S.sel) select(path);
+  const row = [...$('#tree').querySelectorAll('.row')].find(r => r.dataset.path === path);
+  if (row) row.scrollIntoView({ block: 'nearest' });
+  return true;
+}
+function treeOpen() {
+  if (S.pane !== 'tree' || S.multi.size || S.sel == null) return false;
+  const n = S.byPath.get(S.sel);
+  if (!n) return false;
+  if (n.type === 'dir' && !n.linked && (n.children || []).length) { toggle(S.sel); return true; }
+  select(S.sel);
+  return true;
+}
+$('#treepane').addEventListener('pointerdown', () => { if (S.pane !== 'tree') setPane('tree'); });
+$('#detail').addEventListener('pointerdown', () => { if (S.pane !== 'detail') markPane('detail'); });
+
 /* ---------- misc ui ---------- */
 async function quitApp() {  // Ctrl+W / Ctrl+Q: stop the server, so the app window or browser tab can go
   const unsaved = isDirty() || S.bufs.size > 0 || [...S.msec.values()].some(sDirty);
@@ -2833,6 +2898,17 @@ async function quitApp() {  // Ctrl+W / Ctrl+Q: stop the server, so the app wind
 }
 document.addEventListener('keydown', e => {
   const inTerm = !!(e.target.closest && e.target.closest('#termpane'));
+  const chord = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey;  // pane focus / tree navigation
+  if (chord && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+    e.preventDefault(); movePane(e.code === 'ArrowRight' ? 1 : -1); return;
+  }
+  if (chord && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+    e.preventDefault(); treeMove(e.code === 'ArrowDown' ? 1 : -1); return;
+  }
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isTyping() && !$('#modal').open && S.pane === 'tree') {
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); treeMove(e.code === 'ArrowDown' ? 1 : -1); return; }
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); treeOpen(); return; }
+  }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();  // in the terminal Ctrl+W stays the shell's delete-word
     if (k === 'q' || (k === 'w' && !inTerm)) { e.preventDefault(); quitApp(); return; }
