@@ -306,6 +306,26 @@ def test_create_rename_delete(ws, tree):
         ws.delete("")
 
 
+def test_delete_stages_a_tracked_file(repo):
+    ws = _ws(str(repo), "", [], False)
+    assert ws.delete("README.md") is True
+    assert not (repo / "README.md").exists()
+    assert "D  README.md" in git(repo, "status", "--short")
+
+
+def test_delete_of_an_untracked_file_is_not_staged(ws, tree):
+    assert ws.delete("pkg/b.py") is False
+    assert not (tree / "pkg" / "b.py").exists()
+
+
+def test_delete_takes_a_tracked_folder_out_of_git(repo):
+    ws = _ws(str(repo), "", [], False)
+    (repo / "pkg" / "scratch.log").write_text("noise\n")  # *.log is gitignored, so this stays untracked
+    assert ws.delete("pkg") is True
+    assert not (repo / "pkg").exists()
+    assert "D  pkg/a.py" in git(repo, "status", "--short")
+
+
 def test_create_many_skips_existing_names(ws, tree):
     out = ws.create_many(["a.txt", "sub/b.txt", "README.md", "a.txt", "  "], "file")
     assert out == {"created": ["a.txt", "sub/b.txt"], "skipped": ["README.md", "a.txt"]}

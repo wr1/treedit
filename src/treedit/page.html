@@ -401,7 +401,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </aside>
   <div id="divider"></div>
   <section id="detail" tabindex="-1">
-    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Shift+←/→ moves between the tree, editor and agent panes · in the tree, ↑/↓ move and Enter opens<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row, or Ctrl/Cmd+C, to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Shift+←/→ moves between the tree, editor and agent panes · in the tree, ↑/↓ move and Enter opens<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row to copy or delete it (a tracked file goes with git rm), or Ctrl/Cmd+C to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
@@ -2645,21 +2645,34 @@ async function renameSel() {
     await loadTree();
   } catch (e) { toast(e.message, true); }
 }
-async function deleteSel() {
-  const n = S.byPath.get(S.sel); if (!n || n.path === '') return;
-  let what = n.path;
-  if (n.link) what = `the link ${n.path} (its target is kept)`;
-  else if (n.type === 'dir') { const s = stats(n); what = `the folder ${n.path} and everything in it (${pl(s.files, 'file')}, ${pl(s.dirs, 'folder')})`; }
-  if (!confirm(`Delete ${what}?\nThis cannot be undone. Annotations on it are removed too.`)) return;
-  try {
-    await api('POST', '/api/delete', { path: n.path });
-    if (S.file && (S.file.path === n.path || S.file.path.startsWith(n.path + '/'))) S.file = null;
-    for (const k of [...S.bufs.keys()]) if (k === n.path || k.startsWith(n.path + '/')) S.bufs.delete(k);
-    for (const k of [...S.draftSent.keys()]) if (k === n.path || k.startsWith(n.path + '/')) S.draftSent.delete(k);
-    S.sel = parentOf(n.path); hideBanner();
-    await loadTree();
-  } catch (e) { toast(e.message, true); }
+function deleteWhat(p) {
+  const n = S.byPath.get(p);
+  if (n && n.link) return `the link ${p} (its target is kept)`;
+  if (n && n.type === 'dir') { const s = stats(n); return `the folder ${p} and everything in it (${pl(s.files, 'file')}, ${pl(s.dirs, 'folder')})`; }
+  return `the file ${p}`;
 }
+async function deletePaths(paths) {  // the Delete button, the F2/del path, and the tree's context menu
+  const roots = copyRoots(paths.filter(p => p !== ''), S.order);  // a folder already covers what is inside it
+  if (!roots.length) return;
+  const what = roots.map(deleteWhat);
+  const q = roots.length === 1 ? `Delete ${what[0]}?` : `Delete these ${roots.length} items?\n  ${what.join('\n  ')}`;
+  if (!confirm(`${q}\nThis cannot be undone. Annotations on them are removed too.`)) return;
+  let staged = false, failed = 0;
+  for (const p of roots) {
+    try { const r = await api('POST', '/api/delete', { path: p }); staged = staged || !!(r && r.git); }
+    catch (e) { failed++; toast(e.message, true); }
+  }
+  const gone = p => roots.some(r => p === r || p.startsWith(r + '/'));
+  if (S.file && gone(S.file.path)) S.file = null;
+  for (const k of [...S.bufs.keys()]) if (gone(k)) S.bufs.delete(k);
+  for (const k of [...S.draftSent.keys()]) if (gone(k)) S.draftSent.delete(k);
+  for (const k of [...S.expanded]) if (gone(k)) S.expanded.delete(k);
+  if (S.sel && gone(S.sel)) S.sel = parentOf(roots[0]);
+  hideBanner();
+  await loadTree();
+  if (!failed) toast(`Deleted ${roots.length === 1 ? roots[0] : `${roots.length} items`}${staged ? ' · staged in git' : ''}`);
+}
+function deleteSel() { if (S.sel) deletePaths([S.sel]); }
 $('#b-newfile').onclick = () => newEntries('file');
 $('#b-newdir').onclick = () => newEntries('dir');
 $('#b-rename').onclick = renameSel;
@@ -2812,6 +2825,14 @@ function openCtx(x, y, path) {
   cp.append(el('span', '', 'Copy path'));
   cp.onclick = async () => { hideCtx(); const ok = await writeClipboard(pathLabel(path)); toast(ok ? 'Copied path' : 'Copy failed', !ok); };
   menu.append(copy, cp);
+  const del = copyRoots(paths.filter(p => p !== ''), S.order);
+  if (del.length) {
+    const rm = el('button', 'danger'); rm.type = 'button';
+    rm.append(el('span', '', del.length > 1 ? `Delete ${del.length} items` : 'Delete'));
+    rm.title = 'Remove from disk, and from git when the file is tracked';
+    rm.onclick = () => { hideCtx(); deletePaths(del); };
+    menu.append(rm);
+  }
   menu.hidden = false; menu.style.left = '0px'; menu.style.top = '0px';
   const w = menu.offsetWidth, h = menu.offsetHeight;
   menu.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 4)) + 'px';
@@ -2932,6 +2953,7 @@ document.addEventListener('keydown', e => {
   if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isTyping() && !$('#modal').open && S.pane === 'tree') {
     if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); treeMove(e.code === 'ArrowDown' ? 1 : -1); return; }
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); treeOpen(); return; }
+    if (e.key === 'Delete') { e.preventDefault(); deletePaths(selectionPaths()); return; }
   }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
     const k = e.key.toLowerCase();  // in the terminal Ctrl+W stays the shell's delete-word

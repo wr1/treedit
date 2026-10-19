@@ -1295,6 +1295,25 @@ class Workspace:
             return False
         return r.returncode == 0
 
+    def git_rm(self, rel: str) -> bool:
+        """Take REL out of the index too, in the repository that holds it (a nested notes/ repo answers
+        for itself). Untracked paths are left for the caller to unlink. True when git ran in a work tree,
+        whether or not the path was tracked."""
+        p = self.node_path(self.norm(rel))
+        cwd = p.parent
+        if not self._inside_git(cwd):
+            return False
+        try:
+            subprocess.run(
+                ["git", "-C", str(cwd), "rm", "-q", "-r", "-f", "--ignore-unmatch", "--", p.name],
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return True
+
     def create(self, rel: str, kind: str) -> bool:
         rel = self.norm(rel.strip())
         if not rel:
@@ -1351,21 +1370,28 @@ class Workspace:
                 self.set_draft(dst + k[len(src) :], {x: y for x, y in drafts[k].items() if x != "at"})
                 self.set_draft(k, None)
 
-    def delete(self, rel: str) -> None:
+    def delete(self, rel: str) -> bool:
+        """Remove REL from disk. A path git tracks also leaves the index (`git rm`), so the deletion
+        shows up as staged rather than as a file that vanished; True when it was staged."""
         rel = self.norm(rel)
         if not rel:
             raise HTTPError(400, "cannot delete the root")
         p = self.node_path(rel)
         with self.lock:
-            if p.is_symlink() or p.is_file():
-                p.unlink()
-            elif p.is_dir():
-                shutil.rmtree(p)
-            else:
+            staged = self.git_rm(rel)
+            if os.path.lexists(p):
+                if p.is_symlink() or p.is_file():
+                    p.unlink()
+                elif p.is_dir():
+                    shutil.rmtree(p)
+                else:
+                    raise HTTPError(404, f"{rel} not found")
+            elif not staged:
                 raise HTTPError(404, f"{rel} not found")
             self.drop_notes(rel)
             for k in [k for k in self.read_drafts() if k == rel or k.startswith(rel + "/")]:
                 self.set_draft(k, None)  # deleting in the editor was confirmed, drafts included
+        return staged
 
     # ---------- export ----------
     def export(self, counts: bool = True, color: bool = False) -> str:
@@ -1741,11 +1767,11 @@ class Mounts:
             raise HTTPError(400, "an opened folder cannot be moved from treedit")
         w.rename(s, d)
 
-    def delete(self, rel: str) -> None:
+    def delete(self, rel: str) -> bool:
         _, w, sub = self.split(rel)
         if not sub:
             raise HTTPError(400, "an opened folder cannot be deleted from treedit")
-        w.delete(sub)
+        return w.delete(sub)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1967,8 +1993,7 @@ class Handler(BaseHTTPRequestHandler):
             ws.rename(b.get("from", ""), b.get("to", ""))
             return self.send_json(200, {"ok": True})
         if method == "POST" and path == "/api/delete":
-            ws.delete(b.get("path", ""))
-            return self.send_json(200, {"ok": True})
+            return self.send_json(200, {"ok": True, "git": bool(ws.delete(b.get("path", "")))})
         raise HTTPError(404, "no such endpoint")
 
     def fid(self, b: dict):
