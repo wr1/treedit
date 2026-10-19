@@ -2655,8 +2655,9 @@ async function deletePaths(paths) {  // the Delete button, the F2/del path, and 
   const roots = copyRoots(paths.filter(p => p !== ''), S.order);  // a folder already covers what is inside it
   if (!roots.length) return;
   const what = roots.map(deleteWhat);
-  const q = roots.length === 1 ? `Delete ${what[0]}?` : `Delete these ${roots.length} items?\n  ${what.join('\n  ')}`;
-  const hint = `This cannot be undone. Annotations on ${roots.length === 1 ? 'it' : 'them'} are removed; feedback is kept.`;
+  const many = roots.length !== 1;
+  const q = many ? `Delete these ${roots.length} items?\n  ${what.join('\n  ')}` : `Delete ${what[0]}?`;
+  const hint = `Annotations on ${many ? 'them' : 'it'} are removed and feedback is kept. A tracked file comes back from git history; an untracked one is gone.`;
   if (!confirm(`${q}\n${hint}`)) return;
   let staged = false, failed = 0;
   for (const p of roots) {
