@@ -2656,7 +2656,8 @@ async function deletePaths(paths) {  // the Delete button, the F2/del path, and 
   if (!roots.length) return;
   const what = roots.map(deleteWhat);
   const q = roots.length === 1 ? `Delete ${what[0]}?` : `Delete these ${roots.length} items?\n  ${what.join('\n  ')}`;
-  if (!confirm(`${q}\nThis cannot be undone. Annotations on them are removed too.`)) return;
+  const hint = `This cannot be undone. Annotations on ${roots.length === 1 ? 'it' : 'them'} are removed; feedback is kept.`;
+  if (!confirm(`${q}\n${hint}`)) return;
   let staged = false, failed = 0;
   for (const p of roots) {
     try { const r = await api('POST', '/api/delete', { path: p }); staged = staged || !!(r && r.git); }
