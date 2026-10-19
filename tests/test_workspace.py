@@ -326,6 +326,26 @@ def test_delete_takes_a_tracked_folder_out_of_git(repo):
     assert "D  pkg/a.py" in git(repo, "status", "--short")
 
 
+def test_delete_info_marks_what_git_cannot_bring_back(repo):
+    ws = _ws(str(repo), "", [], False)
+    (repo / "new.txt").write_text("x\n")
+    assert ws.git_tracked("README.md") is True
+    assert ws.git_tracked("pkg") is True  # a folder counts when it holds tracked files
+    assert ws.git_tracked("debug.log") is False  # gitignored
+    assert ws.git_tracked("new.txt") is False  # untracked
+    ws.set_note("README.md", "keep an eye")
+    assert ws.delete_info("README.md") == {"tracked": True, "annotated": True}
+    assert ws.delete_info("new.txt") == {"tracked": False, "annotated": False}
+
+
+def test_delete_info_outside_git_always_asks(ws, tree):
+    assert ws.delete_info("README.md") == {"tracked": False, "annotated": False}
+    ws.set_note("pkg/a.py", "note")
+    assert ws.delete_info("pkg/a.py")["annotated"] is True
+    assert ws.delete_info("pkg")["annotated"] is True  # a folder covers the annotation inside it
+    assert ws.delete_info("pkg/b.py")["annotated"] is False
+
+
 def test_create_many_skips_existing_names(ws, tree):
     out = ws.create_many(["a.txt", "sub/b.txt", "README.md", "a.txt", "  "], "file")
     assert out == {"created": ["a.txt", "sub/b.txt"], "skipped": ["README.md", "a.txt"]}

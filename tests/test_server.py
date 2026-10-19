@@ -110,6 +110,10 @@ def test_mutations(server, tree):
     assert call(server, "PUT", "/api/draft", {"path": "e/n.txt", "base_hash": "x", "diff": "+y"})[0] == 200
     assert "e/n.txt" in call(server, "GET", "/api/tree")[1]["drafts"]
     assert call(server, "POST", "/api/draft-drop", {"path": "e/n.txt"})[0] == 200
+    assert call(server, "POST", "/api/delete-check", {"paths": ["e", "e/n.txt"]})[1]["info"] == [
+        {"tracked": False, "annotated": True},
+        {"tracked": False, "annotated": False},
+    ]
     assert call(server, "POST", "/api/delete", {"path": "e"})[0] == 200
     assert not (tree / "e").exists()
     assert call(server, "POST", "/api/log", {"msg": "page error"})[0] == 200

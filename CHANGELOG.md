@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Delete from the tree: the row's right-click menu, the Delete button, or Del on a focused row removes
-  the selection. A file git tracks is removed with `git rm`, so it leaves the index too.
+  the selection. A file git tracks is removed with `git rm`, so it leaves the index too. It asks first
+  only when the deletion cannot be undone: an untracked path, or one whose annotation would be dropped.
 - Three more window themes: GitHub light, Gruvbox and Evening (a warm dark).
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes
   (wrapping around). In the tree pane, Ctrl+Shift+Up/Down or plain Up/Down move the selection and

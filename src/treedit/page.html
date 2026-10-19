@@ -2651,14 +2651,26 @@ function deleteWhat(p) {
   if (n && n.type === 'dir') { const s = stats(n); return `the folder ${p} and everything in it (${pl(s.files, 'file')}, ${pl(s.dirs, 'folder')})`; }
   return `the file ${p}`;
 }
-async function deletePaths(paths) {  // the Delete button, the F2/del path, and the tree's context menu
+async function deleteCost(roots) {  // roots that git cannot bring back, or that carry a dropped annotation
+  let info = null;
+  try { info = (await api('POST', '/api/delete-check', { paths: roots })).info; } catch { /* ask if unsure */ }
+  return roots.map((p, i) => {
+    const it = (info && info[i]) || { tracked: false, annotated: false };  // unknown: treat as unrecoverable
+    return { path: p, tracked: !!it.tracked, annotated: !!it.annotated };
+  }).filter(r => !r.tracked || r.annotated);
+}
+async function deletePaths(paths) {  // the Delete button, the Del key, and the tree's context menu
   const roots = copyRoots(paths.filter(p => p !== ''), S.order);  // a folder already covers what is inside it
   if (!roots.length) return;
-  const what = roots.map(deleteWhat);
-  const many = roots.length !== 1;
-  const q = many ? `Delete these ${roots.length} items?\n  ${what.join('\n  ')}` : `Delete ${what[0]}?`;
-  const hint = `Annotations on ${many ? 'them' : 'it'} are removed and feedback is kept. A tracked file comes back from git history; an untracked one is gone.`;
-  if (!confirm(`${q}\n${hint}`)) return;
+  const risky = await deleteCost(roots);  // a tracked file with no annotation is recoverable, so no prompt
+  if (risky.length) {
+    const what = roots.map(deleteWhat);
+    const q = roots.length === 1 ? `Delete ${what[0]}?` : `Delete these ${roots.length} items?\n  ${what.join('\n  ')}`;
+    const lines = risky.map(r => (!r.tracked && r.annotated) ? `${r.path} — not tracked, and its annotation goes`
+      : !r.tracked ? `${r.path} — not tracked by git`
+      : `${r.path} — its annotation goes (the file itself is in git)`);
+    if (!confirm(`${q}\nThis cannot be undone:\n  ${lines.join('\n  ')}\nFeedback is kept.`)) return;
+  }
   let staged = false, failed = 0;
   for (const p of roots) {
     try { const r = await api('POST', '/api/delete', { path: p }); staged = staged || !!(r && r.git); }

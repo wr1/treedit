@@ -1314,6 +1314,33 @@ class Workspace:
             return False
         return True
 
+    def git_tracked(self, rel: str) -> bool:
+        """True when git tracks REL (a folder counts when it holds tracked files), in the repository
+        that holds it. False outside git, so deleting there always asks first."""
+        rel = self.norm(rel)
+        if not rel:
+            return False
+        p = self.node_path(rel)
+        if not self._inside_git(p.parent):
+            return False
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(p.parent), "ls-files", "-z", "--", p.name],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return r.returncode == 0 and bool(r.stdout.strip(b"\0"))
+
+    def delete_info(self, rel: str) -> dict:
+        """What deleting REL would cost beyond the file: whether git can bring it back, and whether an
+        annotation under it is dropped (feedback is kept either way). Drives the confirmation."""
+        key = self.norm(rel)
+        annotated = any(k == key or (key != "" and k.startswith(key + "/")) for k in self.read_notes())
+        return {"tracked": self.git_tracked(rel), "annotated": annotated}
+
     def create(self, rel: str, kind: str) -> bool:
         rel = self.norm(rel.strip())
         if not rel:
@@ -1773,6 +1800,10 @@ class Mounts:
             raise HTTPError(400, "an opened folder cannot be deleted from treedit")
         return w.delete(sub)
 
+    def delete_info(self, rel: str) -> dict:
+        _, w, sub = self.split(rel)
+        return w.delete_info(sub)
+
 
 class Handler(BaseHTTPRequestHandler):
     ws: Workspace
@@ -1992,6 +2023,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/rename":
             ws.rename(b.get("from", ""), b.get("to", ""))
             return self.send_json(200, {"ok": True})
+        if method == "POST" and path == "/api/delete-check":
+            return self.send_json(200, {"info": [ws.delete_info(p) for p in (b.get("paths") or [])]})
         if method == "POST" and path == "/api/delete":
             return self.send_json(200, {"ok": True, "git": bool(ws.delete(b.get("path", "")))})
         raise HTTPError(404, "no such endpoint")
