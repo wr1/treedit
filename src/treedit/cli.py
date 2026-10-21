@@ -344,6 +344,16 @@ def heat_ansi(rank, bold: bool) -> str:
     return f"\033[{';'.join(parts)}m" if parts else "\033[0m"
 
 
+def new_report(plan: list, ev: Optional[dict], dry_run: bool) -> dict:
+    """What `treedit new` and the window's New... show: entries, the printed lines and the log entry."""
+    verb = "would create" if dry_run else "created"
+    rows = [{"action": "exists" if a == "exists" else verb, "kind": k, "path": r} for a, k, r in plan]
+    lines = [f"{x['action']:<12} {x['kind']:<4} {x['path'] + ('/' if x['kind'] == 'dir' else '')}" for x in rows]
+    if ev:
+        lines.append(f"logged as #{ev['seq']} (undo: treedit undo {ev['seq']})")
+    return {"op": "new", "dry_run": dry_run, "entries": rows, "lines": lines, "log": ev}
+
+
 def store_diff(old_notes: dict, old_fb: list, new_notes: dict, new_fb: list) -> list:
     """What changed between two states of the store, as change-log entries."""
     on = {k: v for k, v in old_notes.items() if v.strip()}
@@ -1885,6 +1895,15 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.create(sub, kind)
 
+    def create_paths(self, paths: list, is_dir: bool = False, exist_ok: bool = False, dry_run: bool = False):
+        name, w, subs = self._one(paths)
+        plan, ev = w.create_paths(subs, is_dir, exist_ok, dry_run)
+        return [(x, k, self._pre(name, r)) for x, k, r in plan], ev
+
+    def undo(self, seq=None, rel: str = ""):
+        _, w, _ = self.split(rel)
+        return w.undo(seq)
+
     def rename(self, src: str, dst: str) -> None:
         _, w, (s, d) = self._one([src, dst])
         if not s:
@@ -2105,6 +2124,16 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/note-move":
             ws.move_notes(b.get("from", ""), b.get("to", ""))
             return self.send_json(200, {"ok": True})
+        if method == "POST" and path == "/api/create":  # the window's New...: same core as `treedit new`
+            dry = bool(b.get("dry_run"))
+            out = ws.create_paths(
+                [str(x) for x in (b.get("paths") or [])], bool(b.get("dir")), bool(b.get("exist_ok")), dry
+            )
+            return self.send_json(200, new_report(*out, dry))
+        if method == "POST" and path == "/api/undo":
+            seq = int(b["seq"]) if b.get("seq") else None
+            e = ws.undo(seq, str(b.get("path", ""))) if isinstance(ws, Mounts) else ws.undo(seq)
+            return self.send_json(200, {"log": e, "lines": [change_label(c) for c in e["changes"]]})
         if method == "POST" and path == "/api/new":
             return self.send_json(200, {"ok": True, "git": ws.create(b.get("path", ""), b.get("kind", "file"))})
         if method == "POST" and path == "/api/rename":
@@ -2580,15 +2609,8 @@ def new_paths(
     --exist-ok (then 'exists ...'); a parent that is a file is always an error. Everything is checked
     before anything is written."""
     ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
-    plan, ev = ws.create_paths(paths, dir, exist_ok, dry_run)
-    verb = "would create" if dry_run else "created"
-    rows = [{"action": "exists" if a == "exists" else verb, "kind": k, "path": r} for a, k, r in plan]
-    text = "\n".join(
-        f"{x['action']:<12} {x['kind']:<4} {x['path'] + ('/' if x['kind'] == 'dir' else '')}" for x in rows
-    )
-    if ev:
-        text += f"\nlogged as #{ev['seq']} (undo: treedit undo {ev['seq']})"
-    emit(text, {"op": "new", "dry_run": dry_run, "entries": rows, "log": ev})
+    rep = new_report(*ws.create_paths(paths, dir, exist_ok, dry_run), dry_run)
+    emit("\n".join(rep["lines"]), {k: v for k, v in rep.items() if k != "lines"})
 
 
 def log_ls(

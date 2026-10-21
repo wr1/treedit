@@ -354,3 +354,41 @@ def test_open_remote(tree, tmp_path, monkeypatch, capsys):
     assert call(base, "POST", "/api/quit", {})[1] == {"ok": True}
     t.join(10)
     assert not t.is_alive()
+
+
+def test_create_at_depth_matches_cli(server, tree, capsys):
+    from treedit.cli import main
+
+    st, plan = call(server, "POST", "/api/create", {"paths": ["pkg/x/y/z.md"], "dry_run": True})
+    assert st == 200 and plan["log"] is None and not (tree / "pkg/x").exists()
+    assert plan["lines"] == ["would create dir  pkg/x/", "would create dir  pkg/x/y/", "would create file pkg/x/y/z.md"]
+    main(["new", "-C", str(tree), "pkg/x/y/z.md", "-n"])
+    assert capsys.readouterr().out.splitlines() == plan["lines"]  # the CLI and the window say the same
+    st, r = call(server, "POST", "/api/create", {"paths": ["pkg/x/y/z.md"]})
+    assert [e["action"] for e in r["entries"]] == ["created"] * 3 and r["log"]["seq"] == 1
+    assert r["lines"][-1] == "logged as #1 (undo: treedit undo 1)"
+    st, r = call(server, "POST", "/api/create", {"paths": ["pkg/x/y/z.md"]})
+    assert st == 409 and "already exists" in r["error"]
+    st, r = call(server, "POST", "/api/create", {"paths": ["README.md/q"]})
+    assert st == 409 and "is a file, not a folder" in r["error"]
+    st, r = call(server, "POST", "/api/create", {"paths": ["d1/d2"], "dir": True})
+    assert r["lines"][:2] == ["created      dir  d1/", "created      dir  d1/d2/"]
+    st, u = call(server, "POST", "/api/undo", {"seq": 1})
+    assert st == 200 and u["lines"] == ["file pkg/x/y/z.md removed", "dir pkg/x/y removed", "dir pkg/x removed"]
+    assert not (tree / "pkg/x").exists() and (tree / "d1/d2").is_dir()
+    main(["log", "-C", str(tree)])
+    assert "undo #1" in capsys.readouterr().out
+    assert call(server, "POST", "/api/undo", {"seq": 1})[0] == 409
+
+
+def test_create_in_mounts(tmp_path):
+    from treedit.cli import Mounts, _ws, new_report
+
+    for n in ("one", "two"):
+        (tmp_path / n).mkdir()
+    m = Mounts([_ws(str(tmp_path / "one"), "", [], False), _ws(str(tmp_path / "two"), "", [], False)])
+    rep = new_report(*m.create_paths(["two/a/b.txt"]), False)
+    assert rep["lines"][:2] == ["created      dir  two/a/", "created      file two/a/b.txt"]
+    assert (tmp_path / "two/a/b.txt").exists()
+    m.undo(None, "two/a")
+    assert not (tmp_path / "two/a").exists()

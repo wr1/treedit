@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Window: a New… action creates a file or folder at any depth: it previews the dry-run list, asks to
+  confirm, shows and logs exactly what it created (with an Undo button) and selects the new node. It calls
+  the same core as `treedit new` (`/api/create`, `/api/undo`).
 - `treedit new PATH...`: create files (or folders with `--dir`) at any depth with every missing parent,
   printing each entry created; existing paths error unless `--exist-ok`; `--dry-run` previews.
 - Every state-changing command prints a confirmation line; `--json` after a command gives machine output

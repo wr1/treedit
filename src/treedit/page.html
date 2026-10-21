@@ -368,7 +368,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
-        <button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
+        <button id="b-new" title="Create a file (or folder) at any depth, with every missing parent - previews first">New…</button><button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
@@ -2394,6 +2394,36 @@ async function newEntry(kind) {
   try { const r = await api('POST', '/api/new', { path, kind }); if (r.git) toast(`Created ${path} (staged in git)`); expandTo(path); if (kind === 'dir') S.expanded.add(path); await loadTree(); await select(path); if (kind === 'file') editor.focus(); }
   catch (e) { toast(e.message, true); }
 }
+/* New...: create at depth via the same core as `treedit new` - preview (dry run), confirm, create, log */
+function newLines(r) { const pre = el('pre', 'newlist'); pre.textContent = r.lines.join('\n'); return pre; }
+async function newAtDepth() {
+  const base = baseDir();
+  const raw = prompt(`New… in ${base || S.rootName}/\nRelative path, missing folders are created too (e.g. a/b/c/file.ext; end with / for a folder):`);
+  if (!raw || !raw.trim()) return;
+  const dir = /\/\s*$/.test(raw);
+  const path = (base ? base + '/' : '') + raw.trim().replace(/^\/+|\/+$/g, '');
+  const body = { paths: [path], dir, exist_ok: false };
+  let plan;
+  try { plan = await api('POST', '/api/create', { ...body, dry_run: true }); }
+  catch (e) { toast(e.message, true); return; }
+  const box = el('div'); box.append(el('p', '', 'This will create:'), newLines(plan));
+  const go = btn('Create', async () => {
+    let r;
+    try { r = await api('POST', '/api/create', body); } catch (e) { toast(e.message, true); return; }
+    const done = el('div'); done.append(el('p', '', 'Created:'), newLines(r));
+    const acts = [];
+    if (r.log) acts.push(btn(`Undo #${r.log.seq}`, async () => {
+      try { const u = await api('POST', '/api/undo', { seq: r.log.seq, path }); toast(`Undid #${r.log.seq}: ${u.lines.join(', ')}`); $('#modal').close(); await loadTree(); }
+      catch (e) { toast(e.message, true); }
+    }));
+    putModal(`New… ${path}`, done, acts);
+    toast(`Created ${r.entries.filter(x => x.action === 'created').length} entr${r.entries.length === 1 ? 'y' : 'ies'}${r.log ? ` (log #${r.log.seq})` : ''}`);
+    expandTo(path); if (dir) S.expanded.add(path);
+    await loadTree(); await select(path);
+  }, 'primary');
+  openModal(`New… ${path}`, box, [go]);
+  go.focus();
+}
 async function renameSel() {
   const p = S.sel; if (!p) return;
   const to = prompt('Rename / move to (path relative to the root):', p);
@@ -2424,6 +2454,7 @@ async function deleteSel() {
     await loadTree();
   } catch (e) { toast(e.message, true); }
 }
+$('#b-new').onclick = () => newAtDepth();
 $('#b-newfile').onclick = () => newEntry('file');
 $('#b-newdir').onclick = () => newEntry('dir');
 $('#b-rename').onclick = renameSel;
