@@ -51,6 +51,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
    edit or move them: they are the user's channel to you, not a place to describe the tree.
    Answer through `treedit fb reply` instead.
 Annotations and feedback live in .treenotes.json (under notes/ when that folder is present); use the CLI rather than editing that file.
+Every change to them, and every `treedit new`, is appended to .treenotes.log.jsonl: `treedit log` shows who
+changed what (set $TREEDIT_WHO, e.g. agent:claude, to name yourself), `treedit undo [SEQ]` reverts an entry,
+`treedit fb restore ID` brings back removed feedback. Add `--json` to a command for machine output.
 
 Agent roll - when the user asks you to "roll" (pick up their manual edits and act on them):
 1. `git status` and `treedit edits`; commit the user's saved edits as theirs first (3b).

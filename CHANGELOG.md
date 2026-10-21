@@ -4,6 +4,13 @@
 
 - `treedit new PATH...`: create files (or folders with `--dir`) at any depth with every missing parent,
   printing each entry created; existing paths error unless `--exist-ok`; `--dry-run` previews.
+- Every state-changing command prints a confirmation line; `--json` after a command gives machine output
+  (`treedit -j` alone still prints the schema). New `annotation rm`.
+- Strict validation: `annotation mv` with nothing on SRC, `fb add` on a missing path and out-of-range or
+  malformed `--lines` exit non-zero.
+- Append-only change log (`.treenotes.log.jsonl`, who/when/before/after) of annotations, feedback and
+  `treedit new`; `treedit log`, `treedit undo [SEQ]` and `treedit fb restore ID`. Removed feedback ids are
+  not reused. Undoing `new` removes only what it created, while files are still empty and folders empty.
 
 ## 0.1.0 - 2026-10-06
 
