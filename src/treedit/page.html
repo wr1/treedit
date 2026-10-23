@@ -420,7 +420,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
-        <button id="b-new" title="Create a file or folder at any depth - a name with an extension is a file, without one a folder; previews first">New…</button><button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
+        <button id="b-new" title="Create a file or folder at any depth - a name with an extension is a file, without one a folder; previews first">New…</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
@@ -2700,45 +2700,6 @@ function showDiff(mine, disk) {
 }
 /* ---------- structure edits ---------- */
 function baseDir() { const n = S.byPath.get(S.sel ?? ''); if (!n) return ''; return n.type === 'dir' && !n.linked ? n.path : parentOf(n.path); }
-function parseNames(text) {  // several names from one box: a line or a comma each, trimmed, deduped
-  const seen = new Set(), out = [];
-  for (const raw of String(text || '').split(/[\n,]/)) {
-    const name = raw.trim().replace(/^\/+|\/+$/g, '');
-    if (name && !seen.has(name)) { seen.add(name); out.push(name); }
-  }
-  return out;
-}
-function newEntries(kind) {
-  const base = baseDir(), what = kind === 'dir' ? 'folder' : 'file';
-  const ta = el('textarea', 'newnames');
-  ta.rows = 7; ta.spellcheck = false; ta.placeholder = kind === 'dir' ? 'scripts/data\nassets/img' : 'scripts/run.py\npkg/a.py';
-  const box = el('div', 'newex');
-  box.append(el('div', 'nlabel', `New ${what}s in ${base || S.rootName + '/'} — one name per line (a comma also works); subfolders are fine.`), ta);
-  const cancel = el('button'); cancel.textContent = 'Cancel'; cancel.onclick = () => $('#modal').close();
-  const create = el('button', 'primary'); create.textContent = 'Create';
-  const run = async () => {
-    const names = parseNames(ta.value);
-    if (!names.length) { toast('Enter at least one name', true); return; }
-    const paths = names.map(n => base ? base + '/' + n : n);
-    try {
-      const r = await api('POST', '/api/new', { paths, kind });
-      const made = r.created || [], skipped = r.skipped || [];
-      $('#modal').close();
-      if (!made.length) { toast(`Nothing created — ${skipped.length} already ${skipped.length === 1 ? 'exists' : 'exist'}`, true); return; }
-      const label = `${made.length} ${what}${made.length === 1 ? '' : 's'}`;
-      toast(skipped.length ? `Created ${label} · ${skipped.length} already there` : `Created ${label}`);
-      if (kind === 'dir') for (const p of made) S.expanded.add(p);
-      expandTo(made[0]);
-      await loadTree();
-      await select(made[0]);
-      if (kind === 'file' && made.length === 1) editor.focus();
-    } catch (e) { toast(e.message, true); }
-  };
-  create.onclick = run;
-  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
-  openModal(`New ${what}s`, box, [cancel, create]);
-  ta.focus();
-}
 /* New...: create at depth via the same core as `treedit new` - preview (dry run), confirm, create, log */
 function newLines(r) { const pre = el('pre', 'newlist'); pre.textContent = r.lines.join('\n'); return pre; }
 async function newAtDepth() {
@@ -2828,8 +2789,6 @@ async function deletePaths(paths) {  // the Delete button, the Del key, and the 
 }
 function deleteSel() { if (S.sel) deletePaths([S.sel]); }
 $('#b-new').onclick = () => newAtDepth();
-$('#b-newfile').onclick = () => newEntries('file');
-$('#b-newdir').onclick = () => newEntries('dir');
 $('#b-rename').onclick = renameSel;
 $('#b-delete').onclick = deleteSel;
 
