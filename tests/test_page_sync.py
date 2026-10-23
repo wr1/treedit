@@ -109,3 +109,15 @@ def test_outcome_reports_the_exchange(lib):
 def test_outcome_reports_a_conflict(lib):
     got = outcome(lib, [{"ok": False, "conflicts": ["README.md"], "error": "conflict: README.md"}])
     assert got["kind"] == "bad" and got["details"] is True and "README.md" in got["text"]
+
+
+def test_outcome_reports_a_pushed_conflict(lib):
+    got = outcome(
+        lib, [{"ok": True, "published": ["README.md"], "committed": 0, "incoming": 1, "notes": 0, "pushed": 1}]
+    )
+    assert got["kind"] == "warn" and "Conflict pushed for the remote" in got["text"] and "README.md" in got["text"]
+
+
+def test_conflict_state_waits_for_the_remote(lib):
+    got = state(lib, [repo(state="conflict")])
+    assert got["state"] == "conflict" and "remote" in got["title"]

@@ -122,15 +122,29 @@ def test_sync_merges_a_conflicting_notes_file(pair):
     assert [f["text"] for f in fb] == ["do the thing", "from this side", "from the other side"]
 
 
-def test_sync_aborts_on_a_work_file_conflict(pair):
+def test_sync_pushes_a_work_file_conflict(pair):
     a, b = pair
     (a / "README.md").write_text("their version\n")
     git(a, "commit", "-qam", "agent: theirs")
     git(a, "push", "-q")
     (b / "README.md").write_text("my version\n")
     r = sync_repo(b)
-    assert not r["ok"] and r["conflicts"] == ["README.md"]
-    # nothing was forced: the local commit is still there and the file is still mine
+    assert r["ok"] and r["published"] == ["README.md"] and r["conflicts"] == []
+    text = (b / "README.md").read_text()
+    assert "<<<<<<<" in text and "my version" in text and "their version" in text
+    assert git(b, "log", "-1", "--format=%s").startswith("user: sync conflict")
+    assert git(b, "rev-parse", "HEAD") == git(b, "rev-parse", "origin/main")
+    assert sync_info(b)["state"] == "conflict"
+
+
+def test_sync_can_refuse_to_push_a_conflict(pair):
+    a, b = pair
+    (a / "README.md").write_text("their version\n")
+    git(a, "commit", "-qam", "agent: theirs")
+    git(a, "push", "-q")
+    (b / "README.md").write_text("my version\n")
+    r = sync_repo(b, publish=False)
+    assert not r["ok"] and r["conflicts"] == ["README.md"] and r["published"] == []
     assert (b / "README.md").read_text() == "my version\n"
     assert git(b, "status", "--short").strip() == ""
     assert (

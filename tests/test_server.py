@@ -256,7 +256,7 @@ def test_sync_endpoint(server, repo, tmp_path, monkeypatch):
     assert "init" in log and "agent: add c.py" in log and log.count("treedit sync") == 1
 
 
-def test_sync_conflicts_are_reported(server, repo, tmp_path, monkeypatch):
+def test_sync_pushes_conflicts_for_the_remote(server, repo, tmp_path, monkeypatch):
     monkeypatch.setattr(Handler, "ws", _ws(str(repo), "", [], False), raising=False)
     branch = git(repo, "branch", "--show-current").strip()
     bare, other = _remote_setup(repo, tmp_path, branch)
@@ -273,11 +273,13 @@ def test_sync_conflicts_are_reported(server, repo, tmp_path, monkeypatch):
     status, out = call(server, "POST", "/api/sync")
     assert status == 200
     r = out["repos"][0]
-    assert r["ok"] is False
-    assert "README.md" in r["conflicts"] and "conflict" in r["error"]
-    assert r["committed"] == 0 and r["incoming"] == 1 and r["pushed"] == 0
-    # the aborted rebase left the repo as it was
-    assert (repo / "README.md").read_text() == "# proj\n\nuser side.\n"
+    assert r["ok"] is True and r["published"] == ["README.md"] and r["conflicts"] == []
+    assert r["committed"] == 0 and r["incoming"] == 1 and r["pushed"] >= 1
+    text = (repo / "README.md").read_text()
+    assert "<<<<<<<" in text and "user side" in text and "agent side" in text
+    assert any(s.startswith("user: sync conflict") for s in git(bare, "log", "--format=%s").splitlines())
+    # a plain pull mode is still available
+    assert call(server, "POST", "/api/sync", {"publish": "no"})[0] == 400
 
 
 def test_sync_needs_a_remote(server, repo, monkeypatch):

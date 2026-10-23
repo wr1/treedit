@@ -14,7 +14,8 @@ files, lines or the structure, and let the agent answer it from the CLI.
 A [treeparse](https://github.com/wr1/treeparse) toolbox with a native (Tauri) window.
 
 Working with an agent in a clone on another machine: Sync (and `treedit sync`) commits your edits,
-pulls its commits, pushes yours, and merges annotations and feedback changed on both sides.
+pulls its commits, pushes yours, and merges annotations and feedback changed on both sides. A
+work-file conflict is committed with its markers and pushed for the agent to resolve, by default.
 
 Markdown files preview with Mermaid diagrams, and with D2 diagrams through the installed `d2` CLI.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.
