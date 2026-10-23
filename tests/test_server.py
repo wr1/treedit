@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import shutil
 import socket
 import threading
 import time
@@ -132,6 +133,15 @@ def test_guards(server):
         urlopen(req, timeout=5)
     assert e.value.code == 400
     assert call(server, "GET", "/api/term")[0] == 404
+
+
+def test_diagram_endpoint(server):
+    if not shutil.which("d2"):
+        pytest.skip("needs d2")
+    status, out = call(server, "POST", "/api/diagram", {"kind": "d2", "source": "a -> b\n"})
+    assert status == 200 and "<svg" in out["svg"]
+    assert call(server, "POST", "/api/diagram", {"kind": "mermaid", "source": "graph TD; A-->B"})[0] == 400
+    assert call(server, "POST", "/api/diagram", {"source": "  "})[0] == 400
 
 
 def test_grep_endpoint(server):

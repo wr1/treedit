@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="/vendor/xterm.css">
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
+<script src="/vendor/marked.js"></script>
+<script src="/vendor/purify.js"></script>
 <script>
 try {
   var themeChoice = JSON.parse(localStorage.getItem('treedit:theme') || '"system"');
@@ -121,7 +123,19 @@ aside{width:var(--tree-w);min-width:220px;max-width:75vw;overflow:auto;backgroun
 .tbar{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12.5px;flex-wrap:wrap}
 .tbar b{font-family:var(--mono)}
 .tbar button{padding:2px 8px;font-size:12px}
-#t-close,#t-add{font-size:16px;line-height:1;padding:1px 9px 3px}
+#t-close,#t-add,#t-fold{font-size:16px;line-height:1;padding:1px 9px 3px}
+#t-fold{color:var(--dim);margin-right:-2px}
+#t-fold:hover{color:var(--accent)}
+#termstrip{width:14px;min-width:14px;max-width:14px;flex:none;display:flex;flex-direction:column;gap:3px;padding:5px 2px;
+  background:var(--panel);border-left:1px solid var(--line);cursor:pointer;overflow:hidden}
+#termstrip[hidden]{display:none}
+#termstrip:hover{background:var(--sel)}
+#termstrip .tstub{flex:1 1 0;min-height:6px;border-radius:3px;background:color-mix(in srgb,var(--dim) 42%,transparent);transition:background .2s}
+#termstrip .tstub.active{background:var(--ok);box-shadow:0 0 7px color-mix(in srgb,var(--ok) 60%,transparent)}
+#termstrip .tstub.live{background:color-mix(in srgb,var(--ok) 65%,var(--dim))}
+#termstrip .tstub.idle{background:var(--note)}
+#termstrip .tstub.ended{background:var(--dim)}
+#termstrip .tstub.off{background:var(--danger)}
 #terms{flex:1;min-height:0;display:flex;flex-direction:column}
 #terms:empty::after{content:'No terminals — + adds a shell or an agent';color:var(--dim);font-size:12.5px;padding:12px}
 .tsess{flex:1 1 0;min-height:90px;display:flex;flex-direction:column;border-top:1px solid var(--line)}
@@ -202,6 +216,33 @@ body.wrap #editor{overflow-x:hidden}
 #editwrap.hl #editor{color:transparent;caret-color:var(--text)}
 #editwrap.hl #editor::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
 #hl.flash{animation:flash 1.2s ease-out}
+#b-md.on{border-color:var(--accent);color:var(--accent)}
+#mdview{position:absolute;inset:0;z-index:4;overflow:auto;padding:20px 30px 60px;background:var(--bg)}
+#mdview[hidden]{display:none}
+#mdview .md{max-width:900px;margin:0 auto;font-size:14.5px;line-height:1.62}
+#mdview .md>:first-child{margin-top:0}
+#mdview .md h1,#mdview .md h2,#mdview .md h3,#mdview .md h4,#mdview .md h5,#mdview .md h6{
+  line-height:1.25;margin:1.35em 0 .5em;font-weight:650;color:var(--text)}
+#mdview .md h1{font-size:1.72em;border-bottom:1px solid var(--line);padding-bottom:.22em}
+#mdview .md h2{font-size:1.38em;border-bottom:1px solid var(--line);padding-bottom:.16em}
+#mdview .md h3{font-size:1.16em}#mdview .md h4{font-size:1em}
+#mdview .md p,#mdview .md ul,#mdview .md ol,#mdview .md table,#mdview .md blockquote{margin:.75em 0}
+#mdview .md ul,#mdview .md ol{padding-left:1.5em}
+#mdview .md li{margin:.2em 0}
+#mdview .md code{font:0.92em var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+#mdview .md pre{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:10px 12px;overflow:auto}
+#mdview .md pre code{background:none;border:0;padding:0;font-size:.9em;line-height:1.5}
+#mdview .md blockquote{margin-left:0;padding:.1em 1em;border-left:3px solid var(--line);color:var(--dim)}
+#mdview .md a{color:var(--accent)}
+#mdview .md img{max-width:100%;height:auto;border-radius:5px}
+#mdview .md table{border-collapse:collapse}
+#mdview .md th,#mdview .md td{border:1px solid var(--line);padding:4px 10px;text-align:left}
+#mdview .md th{background:var(--panel)}
+#mdview .md hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
+#mdview .md .md-diagram{margin:1em 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:auto;text-align:center}
+#mdview .md .md-diagram img{max-width:100%;height:auto;vertical-align:top}
+#mdview .md .md-diagram.loading{color:var(--dim);font:12.5px var(--sans);text-align:left}
+#mdview .md .md-diagram.bad{color:var(--danger);font:12px/1.5 var(--mono);white-space:pre-wrap;text-align:left}
 #plotbar{display:flex;gap:8px;align-items:center;padding:4px 14px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
 #plotbar[hidden]{display:none}
 #plotbar button{padding:1px 8px;font-size:12px}
@@ -443,9 +484,9 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div>
+      <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><div id="mdview" hidden></div></div>
       <div id="dirinfo" hidden></div>
-      <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
+      <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams rendered">Preview</button><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
     <div id="findbar" hidden><input id="findq" placeholder="Find" spellcheck="false" autocomplete="off"><span id="findn"></span>
       <button id="find-prev" title="Previous (Shift+Enter, Shift+F3)">↑</button><button id="find-next" title="Next (Enter, F3)">↓</button>
@@ -458,7 +499,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </section>
   <div id="divider2" hidden></div>
   <aside id="termpane" hidden>
-    <div class="tbar"><b>Agents</b><span class="spacer"></span>
+    <div class="tbar"><button id="t-fold" title="Fold the agent pane to the right edge (the sessions keep running)">»</button><b>Agents</b><span class="spacer"></span>
       <button id="t-sel" title="Type a reference to what you selected in the tree or editor">Selection</button>
       <button id="t-roll" title="Agent roll: pick up your edits, commit them as yours, tidy up (frontmatter, names, spelling, doubled text), then work through the feedback">Roll</button>
       <button id="t-loop" title="Loop roll: an agent roll every 3 minutes, picking up and tidying your changes and answering feedback as it comes (Claude Code: /loop 3m)">Loop roll</button>
@@ -467,6 +508,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <button id="t-close" title="Hide the pane to the right (the sessions keep running)">›</button></div>
     <div id="terms"></div>
   </aside>
+  <aside id="termstrip" hidden></aside>
 </main>
 <dialog id="modal"><div class="mhead"><strong id="mtitle"></strong><span class="spacer"></span><span id="mactions"></span><button id="mclose">Close</button></div><div class="mbody" id="mbody"></div></dialog>
 <div id="ctx" hidden></div>
@@ -515,7 +557,8 @@ function fitPanes() {
   const main = document.querySelector('main');
   if (!main) return;
   const termOn = !$('#termpane').hidden;
-  const avail = Math.round(main.clientWidth - (5 + (termOn ? 5 : 0)));
+  const stripOn = !$('#termstrip').hidden;
+  const avail = Math.round(main.clientWidth - (5 + (termOn ? 5 : 0) + (stripOn ? 14 : 0)));
   if (!(avail > 80)) return;
   const lay = preferredPanes(avail, wantTree, wantTerm, termOn);
   document.documentElement.style.setProperty('--tree-w', lay.tree + 'px');
@@ -1578,6 +1621,7 @@ async function openFile(path) {
   } catch (e) { toast(e.message, true); }
 }
 function setFile(f, keepView) {
+  if (MDP.on && (!S.file || S.file.path !== f.path)) resetMdPreview();
   const plot = f.kind === 'plot';
   if (!plot) Plot.source = false;
   else if (f.source) Plot.source = true;
@@ -1606,6 +1650,7 @@ function setFile(f, keepView) {
   renderHL(true);
   updateFileState(); updatePos(); renderMarks();
   syncChrome();
+  if (MDP.on) renderMdPreview(++MDP.gen);  // a disk reload or agent edit updates the preview
 }
 const Plot = { source: false, fit: true, scale: 1 };  // the open plot: picture, or SVG source
 S.plotDoc = null;
@@ -1663,6 +1708,9 @@ function syncChrome() {
   $('#pos').hidden = !isFile || plotView;
   if (!isFile || plotView) $('#unsaved').hidden = true;
   $('#filestate').hidden = !isFile;
+  const md = !plotView && !!(S.file && isMarkdown(S.file.path));
+  $('#b-md').hidden = !md;
+  if (!md && MDP.on) resetMdPreview();
   for (const id of ['b-wrap', 'b-undo', 'b-redo']) $('#' + id).hidden = plotView;
   if (!plotFile) return;
   $('#plot-src').hidden = !(S.plotDoc && S.plotDoc.content != null);
@@ -1670,6 +1718,109 @@ function syncChrome() {
   const pdf = !!(S.file && S.file.mime === 'application/pdf') || !!(n && n.mime === 'application/pdf');
   $('#plot-out').hidden = $('#plot-in').hidden = $('#plot-fit').hidden = pdf || Plot.source;
 }
+
+/* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
+const MDP = { on: false, gen: 0 };
+const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
+function resetMdPreview() {
+  MDP.on = false; MDP.gen++;
+  $('#mdview').hidden = true; $('#mdview').replaceChildren();
+  $('#b-md').classList.remove('on'); $('#b-md').textContent = 'Preview';
+}
+function setMdPreview(on) {
+  if (!on) return resetMdPreview();
+  if (!S.file || !isMarkdown(S.file.path)) return;
+  MDP.on = true; MDP.gen++;
+  $('#mdview').hidden = false; $('#b-md').classList.add('on'); $('#b-md').textContent = 'Source';
+  renderMdPreview(MDP.gen);
+}
+function mdPath(href) {  // a relative link in this file, as a tree path
+  const clean = href.split('#')[0].split('?')[0];
+  if (!clean || /^[a-z][\w+.-]*:/i.test(clean)) return '';
+  const dir = (S.file?.path || '').includes('/') ? S.file.path.slice(0, S.file.path.lastIndexOf('/')) : '';
+  const p = clean.startsWith('/') ? clean.slice(1) : (dir ? dir + '/' + clean : clean);
+  return decodeURIComponent(p).replace(/^\.\//, '');
+}
+function rewriteMd(root) {
+  for (const img of root.querySelectorAll('img[src]')) {
+    const s = img.getAttribute('src');
+    if (/^(https?:|data:|blob:|\/\/)/i.test(s)) continue;
+    const p = mdPath(s);
+    if (p) img.src = '/api/raw?path=' + encodeURIComponent(p);
+  }
+  for (const a of root.querySelectorAll('a[href]')) {
+    const h = a.getAttribute('href');
+    if (/^(https?:|mailto:|#)/i.test(h)) { a.target = '_blank'; a.rel = 'noreferrer'; continue; }
+    const p = mdPath(h);
+    if (!p) continue;
+    a.onclick = e => {
+      e.preventDefault();
+      if (S.byPath.has(p)) select(p); else toast('Not in this tree: ' + p, true);
+    };
+  }
+}
+async function loadMermaid() {  // lazy: only a preview with a Mermaid block pays for the library
+  if (window.mermaid) return window.mermaid;
+  if (!loadMermaid.p) {
+    loadMermaid.p = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/vendor/mermaid.js';
+      s.onload = () => window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid did not start'));
+      s.onerror = () => { loadMermaid.p = null; reject(new Error('could not load mermaid')); };
+      document.head.append(s);
+    });
+  }
+  return loadMermaid.p;
+}
+async function renderDiagram(kind, source, box, gen) {
+  try {
+    if (kind === 'mermaid') {
+      const m = await loadMermaid();
+      if (gen !== MDP.gen || !box.isConnected) return;
+      m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: schemeDark() ? 'dark' : 'default' });
+      const { svg } = await m.render('mmd-' + gen + '-' + Math.random().toString(36).slice(2), source);
+      if (gen !== MDP.gen || !box.isConnected) return;
+      box.innerHTML = svg; box.classList.remove('loading');
+    } else {
+      const r = await api('POST', '/api/diagram', { kind: 'd2', source });
+      if (gen !== MDP.gen || !box.isConnected) return;
+      const img = new Image(); img.alt = 'D2 diagram';
+      img.src = URL.createObjectURL(new Blob([r.svg], { type: 'image/svg+xml' }));
+      img.onload = () => URL.revokeObjectURL(img.src);
+      box.replaceChildren(img); box.classList.remove('loading');
+    }
+  } catch (e) {
+    if (gen === MDP.gen) { box.className = 'md-diagram bad'; box.textContent = kind + ': ' + (e.message || e); }
+  }
+}
+function renderMdPreview(gen) {
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+    $('#mdview').replaceChildren(el('div', 'md', 'The Markdown renderer did not load (vendor/marked.js, vendor/purify.js).'));
+    return;
+  }
+  if (editor.value.length > 400000) {
+    $('#mdview').replaceChildren(el('div', 'md', 'This file is too large to preview here.'));
+    return;
+  }
+  const root = el('div', 'md');
+  root.innerHTML = DOMPurify.sanitize(marked.parse(editor.value, { gfm: true }));
+  rewriteMd(root);
+  $('#mdview').replaceChildren(root);
+  const blocks = [...root.querySelectorAll('code.language-mermaid, code.language-d2')];
+  (async () => {
+    for (const code of blocks) {
+      if (gen !== MDP.gen) return;
+      const pre = code.closest('pre');
+      if (!pre) continue;
+      const kind = code.classList.contains('language-d2') ? 'd2' : 'mermaid';
+      const box = el('div', 'md-diagram loading', kind + ' diagram…');
+      pre.replaceWith(box);
+      await renderDiagram(kind, code.textContent, box, gen);
+    }
+  })();
+}
+$('#b-md').onclick = () => setMdPreview(!MDP.on);
+$('#b-md').hidden = true;
 $('#plot-in').onclick = () => zoomPlot(1.25);
 $('#plot-out').onclick = () => zoomPlot(0.8);
 $('#plot-fit').onclick = () => { Plot.fit = true; layoutPlot(); };
@@ -2397,7 +2548,7 @@ $('#b-log').onclick = () => showLog(false);
 $('#modal').addEventListener('close', () => { S.modalFb = false; });
 
 /* ---------- agent terminals (right pane, stacked) ---------- */
-const T = { open: false, list: [], active: null };  // list: one session per server terminal, top to bottom
+const T = { open: false, folded: false, list: [], active: null };  // list: one session per server terminal, top to bottom
 const LIGHT_ANSI = { black: '#2e2b26', red: '#b23b2e', green: '#2f7d4f', yellow: '#946400', blue: '#3f6fb5', magenta: '#8a3ab9',
   cyan: '#0f7b85', white: '#8a857b', brightBlack: '#6b665d', brightRed: '#cf4436', brightGreen: '#38945c', brightYellow: '#b07a00',
   brightBlue: '#4f82cc', brightMagenta: '#a050d0', brightCyan: '#14909e', brightWhite: '#a9a397' };
@@ -2415,7 +2566,7 @@ function sessionTitle(info) {  // "claude · proj" once several trees are open
 function retitleTerms() { for (const P of T.list) P.lab.textContent = sessionTitle(P); }
 function termMake(info) {  // the pane, the xterm and (once shown) the socket of one server terminal
   const P = { id: info.id, agent: info.agent, mount: info.mount || '', root: info.root || '', base: info.label,
-    ws: null, retry: 0, queue: [], closed: false };
+    ws: null, retry: 0, queue: [], closed: false, state: 'off', at: 0 };
   P.el = el('div', 'tsess'); P.dot = el('span', 'tdot'); P.lab = el('b', null, sessionTitle(P)); P.body = el('div', 'tbody');
   const restart = btn('↻', () => { if (confirm(`End "${P.lab.textContent}" and start it again?`)) termSend(P, { t: 'restart' }); });
   restart.title = 'End this session and start a new one';
@@ -2449,36 +2600,66 @@ function termSync(infos) {  // match the panes to the server's terminals: add ne
     if (T.open) termConnect(P);
   }
   if (!T.list.includes(T.active)) termActive(T.list[0] || null);
+  renderTermStrip();
   requestAnimationFrame(() => T.list.forEach(termFit));
 }
 function termDrop(P) {
   P.closed = true; T.list = T.list.filter(x => x !== P);
   try { P.ws?.close(); } catch {}
   P.term.dispose(); P.el.remove();
+  renderTermStrip();
 }
 function termActive(P) {  // the terminal the buttons above type into
   T.active = P;
   for (const x of T.list) x.el.classList.toggle('active', x === P && T.list.length > 1);
 }
 function termFit(P) {
-  if (!T.open || P.closed) return;
+  if (!T.open || T.folded || P.closed) return;
   try { P.fit.fit(); } catch { return; }
   termSend(P, { t: 'resize', rows: P.term.rows, cols: P.term.cols });
 }
 function termSend(P, m) { if (P && P.ws && P.ws.readyState === 1) { P.ws.send(JSON.stringify(m)); return true; } return false; }
-function termState(P, st) { P.dot.className = 'tdot ' + st; P.dot.title = { live: 'connected', ended: 'session ended', off: 'disconnected' }[st] || ''; }
+function termState(P, st) {
+  P.state = st;
+  P.dot.className = 'tdot ' + st;
+  P.dot.title = { live: 'connected', ended: 'session ended', off: 'disconnected' }[st] || '';
+  renderTermStrip();
+}
+function termStubState(P) {  // active: output within the last few seconds; idle: connected but quiet
+  if (P.state === 'ended') return 'ended';
+  if (P.state !== 'live') return 'off';
+  return Date.now() - (P.at || 0) < 4000 ? 'active' : 'idle';
+}
+function renderTermStrip() {
+  const strip = $('#termstrip');
+  if (!strip) return;
+  strip.hidden = !T.folded;
+  if (!T.folded) return;
+  strip.replaceChildren();
+  if (!T.list.length) strip.append(el('div', 'tstub ended'));
+  for (const P of T.list) {
+    const stub = el('div', 'tstub ' + termStubState(P));
+    stub.title = `${sessionTitle(P)} · ${termStubState(P)}`;
+    strip.append(stub);
+  }
+  strip.title = T.list.length
+    ? `${T.list.length} agent${T.list.length === 1 ? '' : 's'} folded — click to open the pane`
+    : 'Agent pane folded — click to open it';
+}
 function termConnect(P) {
   if (P.closed || (P.ws && P.ws.readyState <= 1)) return;
   const ws = new WebSocket(`ws://${location.host}/api/term?token=${encodeURIComponent(CFG.token)}&id=${encodeURIComponent(P.id)}`);
   ws.binaryType = 'arraybuffer'; P.ws = ws;
   ws.onopen = () => { P.retry = 0; termState(P, 'live'); termFit(P); const q = P.queue; P.queue = []; q.forEach(f => f()); };
   ws.onmessage = ev => {
-    if (typeof ev.data !== 'string') { P.term.write(new Uint8Array(ev.data)); return; }
+    P.at = Date.now();
+    if (typeof ev.data !== 'string') { P.term.write(new Uint8Array(ev.data)); renderTermStrip(); return; }
     const m = JSON.parse(ev.data);
     if (m.t === 'hello') { P.term.reset(); P.base = m.label; P.lab.textContent = sessionTitle(P); }
     else if (m.t === 'reset') { P.term.reset(); termState(P, 'live'); }
     else if (m.t === 'exit') termState(P, 'ended');
     else if (m.t === 'closed') termLoad();  // closed in another window
+    renderTermStrip();
   };
   ws.onclose = ev => {
     plog(`terminal ${P.id} socket closed (code ${ev.code})`);
@@ -2523,7 +2704,7 @@ async function termAdd() {
 }
 async function focusTerm(id) {
   if (!CFG.term) return;
-  if (!T.open) await openTerm(true);
+  if (!T.open || T.folded) await openTerm(true);
   const P = T.list.find(x => x.id === id);
   if (!P) return;
   termActive(P); P.term.focus(); markPane('term');
@@ -2547,17 +2728,45 @@ async function termClose(P) {
   } catch (e) { toast(e.message, true); }
 }
 async function openTerm(open) {
+  if (open && T.folded) return unfoldTerm();
   T.open = open; store('term', open);
+  if (!open) { T.folded = false; store('termfold', false); $('#termstrip').hidden = true; }
   $('#termpane').hidden = $('#divider2').hidden = !open;
   $('#b-term').classList.toggle('on', open);
   fitPanes();
+  renderTermStrip();
   if (!open) return;
   await termLoad();
   T.list.forEach(termConnect);
   requestAnimationFrame(() => { T.list.forEach(termFit); T.active?.term.focus(); });
 }
-async function sendToAgent(text, enter) {  // type into the active session (Enter separately, so TUIs don't take it as pasted)
+async function foldTerm() {  // hide the pane body, keep a thin agent strip on the right edge
   if (!T.open) await openTerm(true);
+  T.open = true; T.folded = true; store('term', true); store('termfold', true);
+  $('#termpane').hidden = true; $('#divider2').hidden = true;
+  $('#b-term').classList.add('on');
+  $('#termstrip').hidden = false;
+  fitPanes();
+  await termLoad();
+  T.list.forEach(termConnect);
+  renderTermStrip();
+}
+async function unfoldTerm() {
+  T.folded = false; store('termfold', false);
+  $('#termstrip').hidden = true;
+  if (T.open) { $('#termpane').hidden = false; $('#divider2').hidden = false; }
+  $('#b-term').classList.toggle('on', T.open);
+  fitPanes();
+  if (T.open) {
+    await termLoad();
+    T.list.forEach(termConnect);
+    requestAnimationFrame(() => { T.list.forEach(termFit); T.active?.term.focus(); });
+  }
+  renderTermStrip();
+}
+setInterval(() => { if (T.folded && !document.hidden) renderTermStrip(); }, 2000);
+async function sendToAgent(text, enter) {  // type into the active session (Enter separately, so TUIs don't take it as pasted)
+  if (!T.open || T.folded) await openTerm(true);
   const P = T.active;
   if (!P) return toast('No terminal: + adds one', true);
   const go = () => {
@@ -2589,8 +2798,10 @@ function contextText() {
 }
 if (CFG.term) {
   $('#b-term').hidden = false;
-  $('#b-term').onclick = () => openTerm(!T.open);
+  $('#b-term').onclick = () => { if (T.folded) unfoldTerm(); else openTerm(!T.open); };
   $('#t-close').onclick = () => openTerm(false);
+  $('#t-fold').onclick = () => foldTerm();
+  $('#termstrip').onclick = () => unfoldTerm();
   $('#t-add').onclick = termAdd;
   $('#t-sel').onclick = () => { const t = contextText(); if (!t) return toast('Select something in the tree first', true); sendToAgent(`In treedit I selected ${t} (see \`treedit context\`). `, false); };
   const ROLL = 'Do a treedit agent roll: pick up my edits (`treedit edits`), commit them as mine, do the housekeeping, then work through the open feedback.';
@@ -2613,7 +2824,12 @@ if (CFG.term) {
       document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
     };
   })();
-  if (load('term', !!CFG.agent) || CFG.agent) openTerm(true);
+  if (load('term', !!CFG.agent) || CFG.agent) {
+    (async () => {
+      await openTerm(true);
+      if (load('termfold', false)) await foldTerm();
+    })();
+  }
 }
 
 /* ---------- diff & modal ---------- */

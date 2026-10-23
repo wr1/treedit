@@ -15,7 +15,9 @@ What it does
   * Edit any text file; Ctrl/Cmd+S saves, Ctrl+W / Ctrl+Q stops the server (closing the window or
     tab). Symlinked files edit their target.
   * Plot files (png, jpg, gif, webp, bmp, tiff, avif, svg, pdf) open in a viewer.
-    SVG can still be edited as source.
+    SVG can still be edited as source. Markdown has a preview with Mermaid and D2 diagrams.
+  * The agent pane folds to a thin strip on the right edge, one segment per session, coloured by
+    active, idle, ended or disconnected.
   * Annotate any file or folder (including the root): your standing comments for the agent,
     which it reads but never writes. Leave feedback
     for an agent on a path, on lines of a file, or on several paths; it is open or
@@ -777,6 +779,50 @@ def heat_ansi(rank, bold: bool) -> str:
     code = 240 if rank is None else next(c for lim, c in HEAT_RAMP if rank < lim)
     parts = (["1"] if bold else []) + ([f"38;5;{code}"] if code else [])
     return f"\033[{';'.join(parts)}m" if parts else "\033[0m"
+
+
+DIAGRAM_MAX = 200_000  # source bytes; a diagram bigger than this is not a Markdown illustration
+_diagrams: dict = {}  # sha1(source) -> svg, so re-rendering the same preview is cheap
+
+
+def render_d2(source: str) -> dict:
+    """Render D2 source to SVG with the d2 CLI. The window shows it as an <img>, so the SVG cannot
+    script the treedit origin. Results are cached; a missing CLI is a readable 404, not a crash."""
+    source = str(source or "")
+    if not source.strip():
+        raise HTTPError(400, "a diagram source is required")
+    if len(source) > DIAGRAM_MAX:
+        raise HTTPError(400, "the diagram source is too large")
+    key = sha1(source.encode("utf-8"))
+    if key in _diagrams:
+        return {"svg": _diagrams[key]}
+    exe = shutil.which("d2")
+    if not exe:
+        raise HTTPError(404, "the d2 renderer is not installed")
+    with tempfile.TemporaryDirectory(prefix="treedit-d2-") as tmp:
+        src, out = Path(tmp) / "diagram.d2", Path(tmp) / "diagram.svg"
+        src.write_text(source, "utf-8")
+        try:
+            r = subprocess.run(
+                [exe, "--theme", "0", "--dark-theme", "200", "--pad", "8", "--omit-version", str(src), str(out)],
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise HTTPError(504, "d2 took too long to render") from e
+        except OSError as e:
+            raise HTTPError(500, f"cannot run d2: {e}") from e
+        if r.returncode != 0 or not out.is_file():
+            lines = (r.stderr or r.stdout).decode("utf-8", "replace").strip().splitlines()
+            raise HTTPError(422, "d2: " + (lines[-1] if lines else "could not render this diagram"))
+        svg = out.read_text("utf-8", "replace")
+    if len(svg) > 8_000_000:
+        raise HTTPError(422, "the rendered diagram is too large")
+    if len(_diagrams) >= 32:
+        _diagrams.pop(next(iter(_diagrams)))
+    _diagrams[key] = svg
+    return {"svg": svg}
 
 
 def new_report(plan: list, ev: Optional[dict], dry_run: bool) -> dict:
@@ -2728,6 +2774,10 @@ class Handler(BaseHTTPRequestHandler):
             dry = bool(b.get("dry_run"))
             out = ws.create_paths([str(x) for x in (b.get("paths") or [])], bool(b.get("exist_ok")), dry)
             return self.send_json(200, new_report(*out, dry))
+        if method == "POST" and path == "/api/diagram":
+            if str(b.get("kind") or "d2") != "d2":
+                raise HTTPError(400, "only d2 renders on the server; mermaid renders in the window")
+            return self.send_json(200, render_d2(str(b.get("source") or "")))
         if method == "POST" and path == "/api/undo":
             seq = int(b["seq"]) if b.get("seq") else None
             e = ws.undo(seq, str(b.get("path", ""))) if isinstance(ws, Mounts) else ws.undo(seq)
@@ -2879,6 +2929,9 @@ VENDOR = {
     "xterm.js": "text/javascript; charset=utf-8",
     "xterm.css": "text/css; charset=utf-8",
     "addon-fit.js": "text/javascript; charset=utf-8",
+    "marked.js": "text/javascript; charset=utf-8",
+    "purify.js": "text/javascript; charset=utf-8",
+    "mermaid.js": "text/javascript; charset=utf-8",
 }
 PAGE = (resources.files(__package__) / "page.html").read_text("utf-8")
 

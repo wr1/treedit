@@ -9,6 +9,12 @@
   repository's rebase before pushing and lists the files. `treedit sync --no-commit` is the remote
   side's half: push what is committed, pull the rest. A dot on the Sync button shows whether the
   tree is in sync, ahead, behind, diverged or has uncommitted work.
+- Markdown preview: Preview on a .md file renders it (marked, sanitized with DOMPurify). A
+  ```mermaid block renders in the window; a ```d2 block renders through the installed d2 CLI and
+  is shown as a sandboxed image. Relative images and links follow the file.
+- The agent pane now folds to a thin strip on the right edge (the » chevron at its top left): one
+  segment per session, green when it just wrote, amber when connected but idle, red when
+  disconnected, grey when ended. Click the strip to unfold; sessions keep running while folded.
 - Delete from the tree: the row's right-click menu, the Delete button, or Del on a focused row removes
   the selection. A file git tracks is removed with `git rm`, so it leaves the index too. It asks first
   only when the deletion cannot be undone: an untracked path, or one whose annotation would be dropped.
