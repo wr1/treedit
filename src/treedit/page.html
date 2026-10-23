@@ -285,6 +285,11 @@ body.wrap #editor{overflow-x:hidden}
 #sync-note.busy{color:var(--accent)}
 #sync-note.good{color:var(--ok)}
 #sync-note.bad{color:var(--danger);cursor:pointer;text-decoration:underline dotted}
+.newex{display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.newex .nlabel{color:var(--dim);font-size:12.5px;max-width:68ch}
+.newex textarea.newnames{width:min(680px,78vw);min-height:9.5em;resize:vertical;font:13px/1.45 var(--mono);
+  padding:8px 10px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.newex textarea.newnames:focus{outline:none;border-color:var(--accent)}
 #mcompose{padding:0 14px}
 #mcross{padding:2px 14px 4px;border-bottom:3px solid var(--line)}
 #mcross:empty{display:none}
@@ -2695,36 +2700,51 @@ function showDiff(mine, disk) {
 }
 /* ---------- structure edits ---------- */
 function baseDir() { const n = S.byPath.get(S.sel ?? ''); if (!n) return ''; return n.type === 'dir' && !n.linked ? n.path : parentOf(n.path); }
-/* New...: create at depth via the same core as `treedit new` - preview (dry run), confirm, create, log */
-function newLines(r) { const pre = el('pre', 'newlist'); pre.textContent = r.lines.join('\n'); return pre; }
-async function newAtDepth() {
+/* New: one path per line, created through the same core as `treedit new`; no second dialog */
+function newPaths(text) {  // one path per line (a comma also works), trimmed, deduped
+  const seen = new Set(), out = [];
+  for (const raw of String(text || '').split(/[\n,]/)) {
+    const path = raw.trim().replace(/^\/+/, '');  // keep a trailing /: it asks for a folder (v1.0/)
+    if (path && !seen.has(path)) { seen.add(path); out.push(path); }
+  }
+  return out;
+}
+function newAtDepth() {
   const base = baseDir();
-  const raw = prompt(`New… in ${base || S.rootName}/\nRelative path; a name with an extension is a file (note.md), one without is a folder (notes); missing folders are created too. End with / for a folder that has a dot (v1.0/):`);
-  if (!raw || !raw.trim()) return;
-  const path = (base ? base + '/' : '') + raw.trim().replace(/^\/+|\/+$/g, '');
-  const body = { paths: [path], exist_ok: false };
-  let plan;
-  try { plan = await api('POST', '/api/create', { ...body, dry_run: true }); }
-  catch (e) { toast(e.message, true); return; }
-  const box = el('div'); box.append(el('p', '', 'This will create:'), newLines(plan));
-  const go = btn('Create', async () => {
-    let r;
-    try { r = await api('POST', '/api/create', body); } catch (e) { toast(e.message, true); return; }
-    const done = el('div'); done.append(el('p', '', 'Created:'), newLines(r));
-    const acts = [];
-    if (r.log) acts.push(btn(`Undo #${r.log.seq}`, async () => {
-      try { const u = await api('POST', '/api/undo', { seq: r.log.seq, path }); toast(`Undid #${r.log.seq}: ${u.lines.join(', ')}`); $('#modal').close(); await loadTree(); }
-      catch (e) { toast(e.message, true); }
-    }));
-    putModal(`New… ${path}`, done, acts);
-    const made = r.entries.filter(x => x.action === 'created');
-    toast(`Created ${made.length} entr${made.length === 1 ? 'y' : 'ies'}${r.log ? ` (log #${r.log.seq})` : ''}`);
-    expandTo(path);
-    for (const e of made) if (e.kind === 'dir') S.expanded.add(e.path);
-    await loadTree(); await select(path);
-  }, 'primary');
-  openModal(`New… ${path}`, box, [go]);
-  go.focus();
+  const ta = el('textarea', 'newnames');
+  ta.rows = 8; ta.spellcheck = false; ta.autocomplete = 'off';
+  ta.placeholder = 'notes/todo.md\ndocs/guide.md\nassets/img/\nsrc/pkg';
+  const box = el('div', 'newex');
+  box.append(el('div', 'nlabel', `New in ${base || S.rootName + '/'} — one path per line. `
+    + 'A name with an extension is a file, without one a folder; missing folders are created too. '
+    + 'End a dotted name with / for a folder (v1.0/).'), ta);
+  const run = async () => {
+    const names = newPaths(ta.value);
+    if (!names.length) { toast('Enter at least one path', true); ta.focus(); return; }
+    const paths = names.map(n => base ? base + '/' + n : n);
+    create.disabled = true; create.textContent = 'Creating…';
+    try {
+      const r = await api('POST', '/api/create', { paths });
+      $('#modal').close();
+      const made = (r.entries || []).filter(x => x.action === 'created');
+      if (!made.length) { toast('Nothing created — already there', true); return; }
+      const first = made[0].path;
+      expandTo(first);
+      for (const e of made) if (e.kind === 'dir') S.expanded.add(e.path);
+      await loadTree();
+      await select(first);
+      toast(`Created ${made.length} entr${made.length === 1 ? 'y' : 'ies'}${r.log ? ` (log #${r.log.seq})` : ''}`);
+      if (made.length === 1 && made[0].kind === 'file' && S.file && S.file.path === first) editor.focus();
+    } catch (e) {
+      create.disabled = false; create.textContent = 'Create';
+      toast(e.message, true);
+    }
+  };
+  const cancel = btn('Cancel', () => $('#modal').close());
+  const create = btn('Create', run, 'primary');
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
+  openModal('New', box, [cancel, create]);
+  ta.focus();
 }
 async function renameSel() {
   const p = S.sel; if (!p) return;
