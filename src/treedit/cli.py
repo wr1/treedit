@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import difflib
 import fnmatch
+import getpass
 from bisect import bisect_left, bisect_right
 import hashlib
 import json
@@ -87,6 +88,8 @@ DEFAULT_IGNORE = [
     "target",
 ]
 NOTES_NAME = ".treenotes.json"
+LOG_SUFFIX = ".log.jsonl"  # the change log sits next to the notes file: .treenotes.log.jsonl
+JSON_OUT = False  # set by main() when a command gets --json: machine-readable output
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
 
 
@@ -211,6 +214,49 @@ def merge_notes_text(ours: str, theirs: str, base: str) -> Optional[str]:
     return notes_doc(notes, list(merged.values()))
 
 
+def _log_events(text: str) -> Optional[list]:
+    out = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            return None
+        if not isinstance(event, dict) or not isinstance(event.get("seq"), int):
+            return None
+        out.append(event)
+    return out
+
+
+def merge_notes_log_text(local: str, remote: str) -> Optional[str]:
+    """Merge two conflicting change logs without losing either side's events: the local log keeps
+    its sequence, the remote events it does not already have are appended under fresh numbers (and
+    their `undoes` pointers follow). None when a line is not a log event."""
+    local_events, remote_events = _log_events(local), _log_events(remote)
+    if local_events is None or remote_events is None:
+        return None
+
+    def signature(event: dict) -> str:
+        return json.dumps({k: v for k, v in event.items() if k != "seq"}, sort_keys=True, ensure_ascii=False)
+
+    known = {signature(e): e["seq"] for e in local_events}
+    next_seq, remap, added = max((e["seq"] for e in local_events), default=0) + 1, {}, []
+    for event in remote_events:
+        sig = signature(event)
+        if sig in known:
+            remap[event["seq"]] = known[sig]
+            continue
+        remap[event["seq"]] = next_seq
+        added.append({**event, "seq": next_seq})
+        next_seq += 1
+    for event in added:
+        if event.get("undoes") in remap:
+            event["undoes"] = remap[event["undoes"]]
+    lines = [json.dumps(e, ensure_ascii=False) for e in (*local_events, *added)]
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 GIT_TIMEOUT = 120  # seconds a network operation (fetch, pull, push) may take
 
 
@@ -262,21 +308,31 @@ def _rebasing(top: Path) -> bool:
     return any((p := _git_path(top, name)) is not None and p.exists() for name in ("rebase-merge", "rebase-apply"))
 
 
+def _note_sidecar(name: str) -> bool:
+    """True for the files treedit can merge by itself: the notes store and its change log."""
+    return name == NOTES_NAME or name.endswith(LOG_SUFFIX)
+
+
 def _finish_notes_rebase(top: Path) -> int:
-    """Resolve a rebase stopped on .treenotes.json conflicts and carry it on. Returns how many notes
-    files merged, or -1 when any other file conflicts (the caller aborts, so nothing is lost)."""
+    """Resolve a rebase stopped on .treenotes.json or .treenotes.log.jsonl conflicts and carry it on.
+    Returns how many notes/log files merged, or -1 when any other file conflicts (the caller aborts,
+    so nothing is lost)."""
     merged = 0
     for _ in range(50):
         files = _conflicts(top)
         if not _rebasing(top):
             return merged if not files else -1
-        if not files or any(Path(f).name != NOTES_NAME for f in files):
+        if not files or any(not _note_sidecar(Path(f).name) for f in files):
             return -1
         for f in files:
             _, base, _ = git_run(top, "show", f":1:{f}", timeout=30)
             _, onto, _ = git_run(top, "show", f":2:{f}", timeout=30)
             _, local, _ = git_run(top, "show", f":3:{f}", timeout=30)
-            body = merge_notes_text(local, onto, base)  # in a rebase, stage 3 is the work being applied
+            # in a rebase, stage 3 is the work being applied
+            if Path(f).name == NOTES_NAME:
+                body = merge_notes_text(local, onto, base)
+            else:
+                body = merge_notes_log_text(local, onto)
             if body is None:
                 return -1
             atomic_write(top / f, body.encode("utf-8"))
@@ -413,26 +469,52 @@ def sync_repo(path: Path, commit: bool = True, message: str = "user: treedit syn
 
 
 def sync_info(root: Path) -> dict:
-    """Branch, remotes and upstream of the repository holding ROOT (empty outside git): what the
-    sync button can push to and pull from."""
-    out = {"branch": "", "remotes": [], "upstream": ""}
+    """Branch, remotes, upstream and drift of the repository holding ROOT: what the Sync button
+    can push to and pull from, and whether the tree is in sync right now. Counts use the last
+    fetch, so state is what the local remote-tracking ref knows; syncing fetches first."""
+    out = {
+        "branch": "",
+        "remotes": [],
+        "upstream": "",
+        "ahead": 0,
+        "behind": 0,
+        "dirty": 0,
+        "state": "not-git",
+    }
     top = repo_top(root)
     if top is None:
         return out
+    out["state"] = "no-remote"
     rc, branch, _ = git_run(top, "symbolic-ref", "--short", "-q", "HEAD", timeout=10)
     if rc == 0:
         out["branch"] = branch.strip()
     rc, raw, _ = git_run(top, "remote", timeout=10)
     if rc == 0:
         out["remotes"] = raw.split()
+    rc, raw, _ = git_run(top, "status", "--porcelain", timeout=30)
+    out["dirty"] = len([ln for ln in raw.splitlines() if ln.strip()]) if rc == 0 else 0
     rc, raw, _ = git_run(top, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", timeout=10)
     if rc == 0:
         out["upstream"] = raw.strip()
+        out["ahead"] = _count(top, f"{out['upstream']}..HEAD")
+        out["behind"] = _count(top, f"HEAD..{out['upstream']}")
+    ahead, behind, dirty = out["ahead"], out["behind"], out["dirty"]
+    if (ahead or dirty) and behind:
+        out["state"] = "diverged"
+    elif behind:
+        out["state"] = "behind"
+    elif ahead:
+        out["state"] = "ahead"
+    elif dirty:
+        out["state"] = "dirty"
+    elif out["upstream"]:
+        out["state"] = "in-sync"
     return out
 
 
 def sync_status(ws) -> dict:
-    """Per repository (mount name -> status, "" for a single tree): branch, remotes and upstream."""
+    """Per repository (mount name -> status, "" for a single tree): branch, remotes, upstream and
+    how far it is ahead, behind or dirty. The window's Sync indicator reads this."""
     if isinstance(ws, Mounts):
         out = {name: sync_info(w.root) for name, w in ws.mounts.items()}
         if ws.own_top:
@@ -507,6 +589,21 @@ def atomic_write(path: Path, data: bytes) -> None:
         except OSError:
             pass
         raise
+
+
+def emit(text: str, data) -> None:
+    """Print TEXT for people, or DATA as one JSON document with --json."""
+    if JSON_OUT:
+        print(json.dumps(data, ensure_ascii=False))
+    elif text:
+        print(text)
+
+
+def _whoami() -> str:
+    try:
+        return getpass.getuser()
+    except (KeyError, OSError):  # pragma: no cover - no passwd entry
+        return "unknown"
 
 
 def stamp() -> str:
@@ -682,6 +779,34 @@ def heat_ansi(rank, bold: bool) -> str:
     return f"\033[{';'.join(parts)}m" if parts else "\033[0m"
 
 
+def new_report(plan: list, ev: Optional[dict], dry_run: bool) -> dict:
+    """What `treedit new` and the window's New... show: entries, the printed lines and the log entry."""
+    verb = "would create" if dry_run else "created"
+    rows = [{"action": "exists" if a == "exists" else verb, "kind": k, "path": r} for a, k, r in plan]
+    lines = [f"{x['action']:<12} {x['kind']:<4} {x['path'] + ('/' if x['kind'] == 'dir' else '')}" for x in rows]
+    if ev:
+        lines.append(f"logged as #{ev['seq']} (undo: treedit undo {ev['seq']})")
+    return {"op": "new", "dry_run": dry_run, "entries": rows, "lines": lines, "log": ev}
+
+
+def store_diff(old_notes: dict, old_fb: list, new_notes: dict, new_fb: list) -> list:
+    """What changed between two states of the store, as change-log entries."""
+    on = {k: v for k, v in old_notes.items() if v.strip()}
+    nn = {k: v for k, v in new_notes.items() if v.strip()}
+    out = [
+        {"kind": "note", "key": k, "before": on.get(k), "after": nn.get(k)}
+        for k in sorted(set(on) | set(nn))
+        if on.get(k) != nn.get(k)
+    ]
+    ob, nb = {f["id"]: f for f in old_fb}, {f["id"]: f for f in new_fb}
+    out += [
+        {"kind": "fb", "id": i, "before": ob.get(i), "after": nb.get(i)}
+        for i in sorted(set(ob) | set(nb))
+        if ob.get(i) != nb.get(i)
+    ]
+    return out
+
+
 class Workspace:
     def __init__(
         self,
@@ -711,6 +836,8 @@ class Workspace:
         digest = hashlib.sha1(str(self.root).encode()).hexdigest()[:16]
         self.drafts_path = state / f"{digest}-drafts.json"
         self.history_path = state / f"{digest}-history.jsonl"  # one JSON event per line, kept for CHANGE_TTL
+        self.actor = ""  # who writes the change log; empty: $TREEDIT_WHO, else the login name
+        self.last_log: Optional[dict] = None  # the change-log event of the last logged write
         self._load_history()
 
     # ---------- paths ----------
@@ -1150,11 +1277,204 @@ class Workspace:
         fb = data.get("feedback") if self._wrapped(data) else None
         return [f for f in fb if isinstance(f, dict) and isinstance(f.get("id"), int)] if isinstance(fb, list) else []
 
-    def _save(self, notes: dict, feedback: list) -> None:
+    def _save(self, notes: dict, feedback: list, op: str = "", **extra) -> Optional[dict]:
+        """Write the store; with OP, append what changed (before and after) to the change log."""
         clean = {k: v for k, v in sorted(notes.items()) if v.strip()}
         if not clean and not feedback and not self.notes_path.exists():
-            return
-        atomic_write(self.notes_path, notes_doc(notes, feedback).encode("utf-8"))
+            return None
+        before = (self.read_notes(), self.read_feedback()) if op else None
+        atomic_write(self.notes_path, notes_doc(clean, feedback).encode("utf-8"))
+        if not op:
+            return None
+        changes = store_diff(*before, clean, feedback)
+        return self.log(op, changes, **extra) if changes else None
+
+    # ---------- change log: append-only, one JSON event per line next to the notes file ----------
+    # {"seq", "at", "who", "op", "changes": [...]} with changes {"kind": "note", "key", "before", "after"},
+    # {"kind": "fb", "id", "before", "after"} (whole items, None when absent) or {"kind": "path", "path",
+    # "type": file|dir, "before", "after"} for `treedit new`. An undo is an event with "undoes": seq.
+    @property
+    def log_path(self) -> Path:
+        return self.notes_path.with_name(self.notes_path.stem + LOG_SUFFIX)
+
+    def who(self) -> str:
+        return self.actor or os.environ.get("TREEDIT_WHO") or _whoami()
+
+    def read_log(self) -> list:
+        try:
+            lines = self.log_path.read_text("utf-8").splitlines()
+        except OSError:
+            return []
+        out = []
+        for ln in lines:
+            try:
+                e = json.loads(ln)
+            except ValueError:
+                continue
+            if isinstance(e, dict) and isinstance(e.get("seq"), int):
+                out.append(e)
+        return out
+
+    def log(self, op: str, changes: list, **extra) -> dict:
+        with self.lock:
+            seq = max((e["seq"] for e in self.read_log()), default=0) + 1
+            e = {"seq": seq, "at": stamp(), "who": self.who(), "op": op, **extra, "changes": changes}
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+            self.last_log = e
+            return e
+
+    def undo(self, seq: Optional[int] = None) -> dict:
+        """Revert one logged event (the latest one not yet undone, or SEQ), if what it wrote is still
+        there unchanged; otherwise a 409 and nothing is touched. Logged as an 'undo' event."""
+        with self.lock:
+            events = self.read_log()
+            undone = {e.get("undoes") for e in events}
+            todo = [e for e in events if e.get("op") != "undo" and e["seq"] not in undone]
+            if seq is None:
+                if not todo:
+                    raise HTTPError(404, "nothing to undo")
+                ev = todo[-1]
+            else:
+                ev = next((e for e in events if e["seq"] == seq), None)
+                if ev is None:
+                    raise HTTPError(404, f"no log entry #{seq}")
+                if ev.get("op") == "undo":
+                    raise HTTPError(400, f"#{seq} is an undo itself")
+                if seq in undone:
+                    raise HTTPError(409, f"#{seq} is already undone")
+            paths = [c for c in ev["changes"] if c.get("kind") == "path"]
+            if paths:
+                return self._undo_paths(ev, paths)
+            notes, feedback = self.read_notes(), self.read_feedback()
+            byid = {f["id"]: f for f in feedback}
+            for c in ev["changes"]:
+                now = notes.get(c["key"]) if c["kind"] == "note" else byid.get(c["id"])
+                if now != c["after"]:
+                    what = f"annotation on {c['key']}" if c["kind"] == "note" else f"feedback #{c['id']}"
+                    raise HTTPError(409, f"cannot undo #{ev['seq']}: {what} changed since")
+            for c in ev["changes"]:
+                if c["kind"] == "note":
+                    if c["before"] is None:
+                        notes.pop(c["key"], None)
+                    else:
+                        notes[c["key"]] = c["before"]
+                elif c["before"] is None:
+                    byid.pop(c["id"], None)
+                else:
+                    byid[c["id"]] = c["before"]
+            e = self._save(notes, list(byid.values()), "undo", undoes=ev["seq"])
+            return e or self.log("undo", [], undoes=ev["seq"])
+
+    def _undo_paths(self, ev: dict, paths: list) -> dict:
+        """Remove what `treedit new` created: files only while still empty, folders only while they
+        hold nothing but what this undo removes. All or nothing."""
+        gone: set = set()
+        for c in reversed(paths):
+            rel, p = c["path"], self.node_path(c["path"])
+            if not os.path.lexists(p):
+                gone.add(rel)
+                continue
+            if c["type"] == "file":
+                if p.is_symlink() or not p.is_file() or p.stat().st_size:
+                    raise HTTPError(409, f"cannot undo #{ev['seq']}: {rel} changed since it was created")
+            elif p.is_symlink() or not p.is_dir() or any(f"{rel}/{n}" not in gone for n in os.listdir(p)):
+                raise HTTPError(409, f"cannot undo #{ev['seq']}: {rel}/ is no longer empty")
+            gone.add(rel)
+        done = []
+        for c in reversed(paths):
+            p = self.node_path(c["path"])
+            if not os.path.lexists(p):
+                continue
+            self.mark_ui(c["path"])
+            p.rmdir() if c["type"] == "dir" else p.unlink()
+            done.append({**c, "before": c["type"], "after": None})
+        return self.log("undo", done, undoes=ev["seq"])
+
+    def restore_feedback(self, fid: int) -> dict:
+        """Bring back feedback FID as it was when it was deleted (the log keeps it)."""
+        with self.lock:
+            feedback = self.read_feedback()
+            if any(f["id"] == fid for f in feedback):
+                raise HTTPError(409, f"feedback #{fid} exists")
+            for e in reversed(self.read_log()):
+                c = next((c for c in e["changes"] if c.get("kind") == "fb" and c.get("id") == fid), None)
+                if c and c["before"] is not None and c["after"] is None:
+                    feedback.append(c["before"])
+                    self._save(self.read_notes(), feedback, "fb restore")
+                    return c["before"]
+            raise HTTPError(404, f"no deleted feedback #{fid} in the log")
+
+    # ---------- creating paths at depth (the CLI `new` and the window's New... share this) ----------
+    @staticmethod
+    def new_kind(raw: str) -> str:
+        """Whether PATH asks for a file or a folder: a last name with a dot (`.md`, `.xx`, `.gitignore`)
+        is a file, a last name without one (`pkg`, `a/b`) is a folder. A trailing slash always asks
+        for a folder, which is how a dotted folder (`v1.0/`) is created."""
+        if str(raw).strip().endswith(("/", os.sep)):
+            return "dir"
+        name = str(raw).strip().replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+        return "file" if name not in ("", ".", "..") and "." in name else "dir"
+
+    def plan_new(self, paths: list, exist_ok: bool = False) -> list:
+        """[(action, kind, rel)] for creating PATHS and every missing parent, in order; action is
+        'create' or 'exists'. A path with an extension creates a file, one without a folder (see
+        `new_kind`). Checks everything first; raises HTTPError on any conflict."""
+        plan: list = []
+        seen: set = set()
+        if not paths:
+            raise HTTPError(400, "a path is required")
+        for raw in paths:
+            rel = self.norm(raw)
+            if not rel:
+                raise HTTPError(400, "a path is required")
+            want = self.new_kind(raw)
+            parts = rel.split("/")
+            for i in range(1, len(parts) + 1):
+                sub = "/".join(parts[:i])
+                last = i == len(parts)
+                kind = want if last else "dir"
+                if (kind, sub) in seen:
+                    continue
+                p = self.node_path(sub)
+                if os.path.lexists(p):
+                    isd = p.is_dir()
+                    if not last and not isd:
+                        raise HTTPError(409, f"{sub} is a file, not a folder")
+                    if last:
+                        if isd != (kind == "dir"):
+                            raise HTTPError(409, f"{sub} exists as a {'folder' if isd else 'file'}")
+                        if not exist_ok:
+                            raise HTTPError(409, f"{sub} already exists (--exist-ok to accept)")
+                        plan.append(("exists", kind, sub))
+                        seen.add((kind, sub))
+                    continue
+                if (("file" if kind == "dir" else "dir"), sub) in seen:
+                    raise HTTPError(400, f"{sub} is asked for as both a file and a folder")
+                plan.append(("create", kind, sub))
+                seen.add((kind, sub))
+        return plan
+
+    def create_paths(self, paths: list, exist_ok: bool = False, dry_run: bool = False):
+        """Plan, then (unless DRY_RUN) create and log. Returns (plan, log event or None)."""
+        with self.lock:
+            plan = self.plan_new(paths, exist_ok)
+            if dry_run:
+                return plan, None
+            made = []
+            for action, kind, rel in plan:
+                if action != "create":
+                    continue
+                p = self.node_path(rel)
+                self.mark_ui(rel)
+                if kind == "dir":
+                    p.mkdir()
+                else:
+                    with open(p, "x", encoding="utf-8"):
+                        pass
+                made.append({"kind": "path", "path": rel, "type": kind, "before": None, "after": kind})
+            return plan, (self.log("new", made) if made else None)
 
     def write_notes(self, notes: dict) -> None:
         with self.lock:
@@ -1168,9 +1488,9 @@ class Workspace:
                 notes[key] = text.rstrip()
             else:
                 notes.pop(key, None)
-            self.write_notes(notes)
+            self._save(notes, self.read_feedback(), "annotation set" if text.strip() else "annotation rm")
 
-    def move_notes(self, src: str, dst: str) -> None:
+    def move_notes(self, src: str, dst: str, strict: bool = False) -> None:
         src, dst = self.norm(src) or ".", self.norm(dst) or "."
 
         def under(k: str) -> bool:
@@ -1193,7 +1513,9 @@ class Workspace:
                 if new != f.get("paths"):
                     f["paths"], changed = new, True
             if changed:
-                self._save(notes, feedback)
+                self._save(notes, feedback, "annotation mv")
+            elif strict:
+                raise HTTPError(404, f"no annotations or feedback on {src}")
 
     def drop_notes(self, rel: str) -> None:
         """Remove annotations under REL. Feedback is kept: it may have asked for the deletion."""
@@ -1202,7 +1524,7 @@ class Workspace:
             notes = self.read_notes()
             keep = {k: v for k, v in notes.items() if not (k == key or k.startswith(key + "/"))}
             if len(keep) != len(notes):
-                self.write_notes(keep)
+                self._save(keep, self.read_feedback(), "annotation drop")
 
     def add_feedback(self, paths: list, text: str, lines=None, quote: str = "") -> dict:
         keys = sorted({self.norm(p) or "." for p in paths})
@@ -1214,7 +1536,7 @@ class Workspace:
         with self.lock:
             feedback = self.read_feedback()
             e = {
-                "id": max((f["id"] for f in feedback), default=0) + 1,
+                "id": max([f["id"] for f in feedback] + self._logged_ids(), default=0) + 1,
                 "paths": keys,
                 "text": text.rstrip(),
                 "status": "open",
@@ -1228,10 +1550,14 @@ class Workspace:
                 a, b = sorted(int(x) for x in lines)
                 e.update(lines=[max(1, a), max(1, b)], quote=quote)
             feedback.append(e)
-            self._save(self.read_notes(), feedback)
+            self._save(self.read_notes(), feedback, "fb add")
             return e
 
-    def update_feedback(self, fid: int, **changes) -> dict:
+    def _logged_ids(self) -> list:
+        """Feedback ids the log has seen, so a deleted id is not handed out again (it can be restored)."""
+        return [c["id"] for e in self.read_log() for c in e["changes"] if c.get("kind") == "fb"]
+
+    def update_feedback(self, fid: int, op: str = "fb update", **changes) -> dict:
         with self.lock:
             feedback = self.read_feedback()
             e = next((f for f in feedback if f["id"] == fid), None)
@@ -1245,7 +1571,7 @@ class Workspace:
                 if k in ("text", "reply", "status"):
                     e[k] = str(v).rstrip()
             e["updated"] = stamp()
-            self._save(self.read_notes(), feedback)
+            self._save(self.read_notes(), feedback, op)
             return e
 
     def delete_feedback(self, fid: int) -> None:
@@ -1254,7 +1580,7 @@ class Workspace:
             keep = [f for f in feedback if f["id"] != fid]
             if len(keep) == len(feedback):
                 raise HTTPError(404, f"no feedback #{fid}")
-            self._save(self.read_notes(), keep)
+            self._save(self.read_notes(), keep, "fb rm")
 
     def refresh_anchors(self) -> list:
         """Follow line comments to where their quoted lines moved; persist only real changes."""
@@ -2146,6 +2472,15 @@ class Mounts:
             skipped.extend(self._pre(name, p) for p in out["skipped"])
         return {"created": created, "skipped": skipped}
 
+    def create_paths(self, paths: list, exist_ok: bool = False, dry_run: bool = False):
+        name, w, subs = self._one(paths)
+        plan, ev = w.create_paths(subs, exist_ok, dry_run)
+        return [(x, k, self._pre(name, r)) for x, k, r in plan], ev
+
+    def undo(self, seq=None, rel: str = ""):
+        _, w, _ = self.split(rel)
+        return w.undo(seq)
+
     def rename(self, src: str, dst: str) -> None:
         _, w, (s, d) = self._one([src, dst])
         if not s:
@@ -2383,6 +2718,14 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/note-move":
             ws.move_notes(b.get("from", ""), b.get("to", ""))
             return self.send_json(200, {"ok": True})
+        if method == "POST" and path == "/api/create":  # the window's New...: same core as `treedit new`
+            dry = bool(b.get("dry_run"))
+            out = ws.create_paths([str(x) for x in (b.get("paths") or [])], bool(b.get("exist_ok")), dry)
+            return self.send_json(200, new_report(*out, dry))
+        if method == "POST" and path == "/api/undo":
+            seq = int(b["seq"]) if b.get("seq") else None
+            e = ws.undo(seq, str(b.get("path", ""))) if isinstance(ws, Mounts) else ws.undo(seq)
+            return self.send_json(200, {"log": e, "lines": [change_label(c) for c in e["changes"]]})
         if method == "POST" and path == "/api/new":
             paths = b.get("paths")
             if isinstance(paths, list):
@@ -2742,6 +3085,8 @@ def open_editor(
     if notes and len(roots) > 1:
         sys.exit("treedit: --notes works with one folder; each opened folder keeps its own notes file")
     ws = roots[0] if len(roots) == 1 else Mounts(roots)
+    for w in roots + ([ws.top] if isinstance(ws, Mounts) else []):
+        w.actor = os.environ.get("TREEDIT_WHO") or f"{_whoami()} (window)"
     Handler.ws = ws
     Handler.loopback = host in ("127.0.0.1", "localhost", "::1")
     srv = None
@@ -2825,6 +3170,15 @@ def print_tree(
         )
 
 
+def _logref(ws) -> str:
+    e = ws.last_log
+    return f"  (log #{e['seq']})" if e else ""
+
+
+def _fbref(f: dict) -> dict:
+    return {"id": f["id"], "status": f.get("status", "open"), "paths": f["paths"]}
+
+
 def note_get(
     path: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
 ) -> None:
@@ -2833,7 +3187,7 @@ def note_get(
     text = _ws(root, notes, ignore, follow_outside, no_gitignore, show).read_notes().get(key)
     if text is None:
         sys.exit(1)
-    print(text)
+    emit(text, {"path": key, "annotation": text})
 
 
 def note_set(
@@ -2847,7 +3201,24 @@ def note_set(
     show: List[str],
 ) -> None:
     """Set the annotation on PATH; an empty TEXT removes it. For the user: agents never write annotations."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).set_note(path, text)
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    key = ws.norm(path) or "."
+    if not text.strip():
+        return note_rm(path, root, notes, ignore, follow_outside, no_gitignore, show)
+    ws.set_note(key, text)
+    emit(f"set annotation on {key}{_logref(ws)}", {"op": "annotation set", "path": key, "log": ws.last_log})
+
+
+def note_rm(
+    path: str, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
+    """Remove the annotation on PATH; exit 1 if there is none."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    key = ws.norm(path) or "."
+    if key not in ws.read_notes():
+        raise HTTPError(404, f"no annotation on {key}")
+    ws.set_note(key, "")
+    emit(f"removed annotation on {key}{_logref(ws)}", {"op": "annotation rm", "path": key, "log": ws.last_log})
 
 
 def note_mv(
@@ -2860,8 +3231,16 @@ def note_mv(
     no_gitignore: bool,
     show: List[str],
 ) -> None:
-    """Re-key the annotations of SRC (and everything under it) to DST, without touching files."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).move_notes(src, dst)
+    """Re-key the annotations and feedback of SRC (and everything under it) to DST, without touching
+    files; exit 1 when nothing is on SRC."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    ws.move_notes(src, dst, strict=True)
+    n = len(ws.last_log["changes"]) if ws.last_log else 0
+    s, d = ws.norm(src) or ".", ws.norm(dst) or "."
+    emit(
+        f"moved annotations and feedback {s} -> {d} ({plural(n, 'change')}){_logref(ws)}",
+        {"op": "annotation mv", "src": s, "dst": d, "log": ws.last_log},
+    )
 
 
 def note_ls(
@@ -2869,9 +3248,70 @@ def note_ls(
 ) -> None:
     """List every annotation as 'path<TAB>first line'; paths that no longer exist are marked '(gone)'."""
     ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
-    for k, v in sorted(ws.read_notes().items()):
-        gone = "" if k == "." or os.path.lexists(ws.root / k) else "  (gone)"
-        print(f"{k}\t{(v.strip().splitlines() or [''])[0]}{gone}")
+    items = sorted(ws.read_notes().items())
+    gone = {k: not (k == "." or os.path.lexists(ws.root / k)) for k, _ in items}
+    if JSON_OUT:
+        return emit("", [{"path": k, "annotation": v, "gone": gone[k]} for k, v in items])
+    for k, v in items:
+        print(f"{k}\t{(v.strip().splitlines() or [''])[0]}{'  (gone)' if gone[k] else ''}")
+
+
+def new_paths(
+    paths: List[str],
+    exist_ok: bool,
+    dry_run: bool,
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+) -> None:
+    """Create each PATH and every missing parent folder in one go. The last name decides the kind:
+    with an extension (`note.md`, `pkg/a.xx`) it is a file, without one (`pkg`, `a/b`) a folder;
+    a trailing slash always asks for a folder (`v1.0/`). Prints one line per entry,
+    'created dir  a/' or 'created file a/b.txt' ('would create' with --dry-run), then the log entry
+    that `treedit undo` reverts. An existing PATH is an error unless --exist-ok (then 'exists ...');
+    a parent that is a file is always an error. Everything is checked before anything is written."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    rep = new_report(*ws.create_paths(paths, exist_ok, dry_run), dry_run)
+    emit("\n".join(rep["lines"]), {k: v for k, v in rep.items() if k != "lines"})
+
+
+def log_ls(
+    limit: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
+    """The change log of annotations, feedback and `treedit new`: who changed what, when, newest last."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    events = ws.read_log()[-limit:] if limit else ws.read_log()
+    if JSON_OUT:
+        return emit("", events)
+    undone = {e.get("undoes") for e in ws.read_log()}
+    for e in events:
+        what = ", ".join(change_label(c) for c in e["changes"]) or "-"
+        extra = f" #{e['undoes']}" if e.get("undoes") else ""
+        mark = "  (undone)" if e["seq"] in undone else ""
+        print(f"#{e['seq']}  {e['at']}  {e['who']}  {e['op']}{extra}: {what}{mark}")
+
+
+def change_label(c: dict) -> str:
+    verb = "added" if c["before"] is None else "removed" if c["after"] is None else "changed"
+    if c["kind"] == "note":
+        return f"annotation {c['key']} {verb}"
+    if c["kind"] == "fb":
+        return f"feedback #{c['id']} {verb}"
+    return f"{c['type']} {c['path']} {'created' if verb == 'added' else verb}"
+
+
+def undo_cmd(
+    seq: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
+    """Revert the latest change-log entry not yet undone (or SEQ), only if what it wrote is unchanged.
+    For `treedit new`: removes the files it created while still empty, and folders while empty."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    e = ws.undo(seq or None)
+    what = ", ".join(change_label(c) for c in e["changes"]) or "nothing left to change"
+    emit(f"undid #{e['undoes']}: {what}  (log #{e['seq']})", {"op": "undo", "log": e})
 
 
 def fb_ls(
@@ -2880,6 +3320,8 @@ def fb_ls(
     """List feedback for the agent to act on: id, status, path(s), lines, the quoted code, the
     request and any reply. Open items only unless --all. Line numbers follow the quoted code."""
     items = _ws(root, notes, ignore, follow_outside, no_gitignore, show).refresh_anchors()
+    if JSON_OUT:
+        return emit("", [f for f in items if all or f.get("status") != "done"])
     for f in items:
         if f.get("status") == "done" and not all:
             continue
@@ -2904,15 +3346,31 @@ def fb_add(
     no_gitignore: bool,
     show: List[str],
 ) -> None:
-    """Add feedback on one or more paths; --lines A-B anchors it to lines of a single file."""
+    """Add feedback on one or more existing paths; --lines A-B anchors it to lines of a single file
+    (within the file). Prints '#ID added on PATHS'."""
     ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    for p in paths:
+        if not os.path.lexists(ws.node_path(p)):
+            raise HTTPError(404, f"{ws.norm(p) or '.'} not found")
     span, quote = None, ""
     if lines:
         a, _, b = lines.partition("-")
-        span = [int(a), int(b or a)]
-        body = decode(ws.target_path(paths[0]).read_bytes()) or ""
+        try:
+            span = [int(a), int(b or a)]
+        except ValueError:
+            raise HTTPError(400, f"--lines must be A-B, not {lines!r}") from None
+        if len(paths) != 1:
+            raise HTTPError(400, "line comments attach to exactly one file")
+        t = ws.target_path(paths[0])
+        if not t.is_file():
+            raise HTTPError(400, f"{ws.norm(paths[0])} is not a file")
+        body = decode(t.read_bytes()) or ""
+        n = len(body.split("\n")) - (1 if body.endswith("\n") else 0)
+        if not 1 <= span[0] <= span[1] <= n:
+            raise HTTPError(400, f"lines {lines} out of range: {ws.norm(paths[0])} has {plural(n, 'line')}")
         quote = "\n".join(body.split("\n")[span[0] - 1 : span[0] - 1 + min(QUOTE_LINES, span[1] - span[0] + 1)])
-    print(f"#{ws.add_feedback(paths, text, span, quote)['id']}")
+    f = ws.add_feedback(paths, text, span, quote)
+    emit(f"#{f['id']} added on {', '.join(f['paths'])}{_logref(ws)}", {"op": "fb add", **_fbref(f), "log": ws.last_log})
 
 
 def fb_reply(
@@ -2927,30 +3385,47 @@ def fb_reply(
     show: List[str],
 ) -> None:
     """Answer feedback ID (what was changed, or why not); --done also resolves it."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(
-        id, reply=text, status="done" if done else None
-    )
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    f = ws.update_feedback(id, "fb reply", reply=text, status="done" if done else None)
+    emit(f"#{id} replied{', done' if done else ''}{_logref(ws)}", {"op": "fb reply", **_fbref(f), "log": ws.last_log})
 
 
 def fb_done(
     id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
 ) -> None:
     """Mark feedback ID done."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(id, status="done")
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    f = ws.update_feedback(id, "fb done", status="done")
+    emit(f"#{id} done{_logref(ws)}", {"op": "fb done", **_fbref(f), "log": ws.last_log})
 
 
 def fb_reopen(
     id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
 ) -> None:
     """Mark feedback ID open again."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).update_feedback(id, status="open")
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    f = ws.update_feedback(id, "fb reopen", status="open")
+    emit(f"#{id} reopened{_logref(ws)}", {"op": "fb reopen", **_fbref(f), "log": ws.last_log})
 
 
 def fb_rm(
     id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
 ) -> None:
-    """Delete feedback ID."""
-    _ws(root, notes, ignore, follow_outside, no_gitignore, show).delete_feedback(id)
+    """Delete feedback ID; the change log keeps it, so `treedit fb restore ID` brings it back."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    ws.delete_feedback(id)
+    emit(
+        f"#{id} removed{_logref(ws)} (restore: treedit fb restore {id})", {"op": "fb rm", "id": id, "log": ws.last_log}
+    )
+
+
+def fb_restore(
+    id: int, root: str, notes: str, ignore: List[str], follow_outside: bool, no_gitignore: bool, show: List[str]
+) -> None:
+    """Bring back deleted feedback ID from the change log."""
+    ws = _ws(root, notes, ignore, follow_outside, no_gitignore, show)
+    f = ws.restore_feedback(id)
+    emit(f"#{id} restored{_logref(ws)}", {"op": "fb restore", **_fbref(f), "log": ws.last_log})
 
 
 def sync_tree(
@@ -3100,6 +3575,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
    edit or move them: they are the user's channel to you, not a place to describe the tree.
    Answer through `treedit fb reply` instead.
 Annotations and feedback live in .treenotes.json (under notes/ when that folder is present); use the CLI rather than editing that file.
+Every change to them, and every `treedit new`, is appended to .treenotes.log.jsonl: `treedit log` shows who
+changed what (set $TREEDIT_WHO, e.g. agent:claude, to name yourself), `treedit undo [SEQ]` reverts an entry,
+`treedit fb restore ID` brings back removed feedback. Add `--json` to a command for machine output.
 
 Agent roll - when the user asks you to "roll" (pick up their manual edits and act on them):
 1. `git status` and `treedit edits`; commit the user's saved edits as theirs first (3b).
@@ -3241,8 +3719,45 @@ app = cli(
                     callback=note_mv,
                     arguments=[argument(name="src", arg_type=str), argument(name="dst", arg_type=str)],
                 ),
+                command(name="rm", help="Remove one (user only).", callback=note_rm, arguments=[NOTE_PATH]),
                 command(name="ls", help="List all annotations.", callback=note_ls),
             ],
+        ),
+        cli(
+            name="new",
+            help="Create files and folders at any depth, with every missing parent.",
+            callback=new_paths,
+            arguments=[
+                argument(
+                    name="paths",
+                    arg_type=str,
+                    nargs="+",
+                    help="paths relative to the root; an extension makes a file, no extension a folder",
+                )
+            ],
+            options=[
+                NOTE_ROOT,
+                *SHARED,
+                option(flags=["--exist-ok", "-e"], flag=True, help="an existing path is fine, not an error"),
+                option(flags=["--dry-run", "-n"], flag=True, help="only print what would be created"),
+            ],
+        ),
+        cli(
+            name="log",
+            help="The change log: who changed which annotation, feedback or created path, and when.",
+            callback=log_ls,
+            options=[
+                NOTE_ROOT,
+                *SHARED,
+                option(flags=["--limit", "-n"], arg_type=int, default=0, help="only the last N entries (0: all)"),
+            ],
+        ),
+        cli(
+            name="undo",
+            help="Revert the latest change-log entry, or SEQ, if it is unchanged since.",
+            callback=undo_cmd,
+            arguments=[argument(name="seq", arg_type=int, nargs="?", default=0, help="log entry (default: latest)")],
+            options=[NOTE_ROOT, *SHARED],
         ),
         cli(
             name="edits",
@@ -3320,7 +3835,8 @@ app = cli(
                 ),
                 command(name="done", help="Mark feedback done.", callback=fb_done, arguments=[FB_ID]),
                 command(name="reopen", help="Reopen feedback.", callback=fb_reopen, arguments=[FB_ID]),
-                command(name="rm", help="Delete feedback.", callback=fb_rm, arguments=[FB_ID]),
+                command(name="rm", help="Delete feedback (recoverable).", callback=fb_rm, arguments=[FB_ID]),
+                command(name="restore", help="Restore deleted feedback.", callback=fb_restore, arguments=[FB_ID]),
             ],
         ),
     ],
@@ -3328,8 +3844,14 @@ app = cli(
 
 
 def main(argv=None):
+    global JSON_OUT
     if argv is not None:
         sys.argv = ["treedit", *argv]
+    # --json after a command means machine output; alone (or -j) it stays treeparse's schema dump.
+    args = sys.argv[1:]
+    JSON_OUT = "--json" in args and any(not a.startswith("-") for a in args)
+    if JSON_OUT:
+        sys.argv = [sys.argv[0], *(a for a in args if a != "--json")]
     try:
         app.run()
     except HTTPError as e:

@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from conftest import git
-from treedit.cli import _ws, merge_notes_text, sync_repo
+from treedit.cli import _ws, merge_notes_log_text, merge_notes_text, sync_info, sync_repo
 
 
 def clone(src, dst):
@@ -55,6 +55,24 @@ def test_sync_pulls_then_pushes(pair):
 
 def test_sync_outside_git(ws):
     assert sync_repo(ws.root)["error"] == "not a git repository"
+    assert sync_info(ws.root)["state"] == "not-git"
+
+
+def test_sync_info_reports_drift(pair):
+    a, b = pair
+    assert sync_info(b)["state"] == "in-sync"
+    (b / "README.md").write_text("dirty\n")
+    info = sync_info(b)
+    assert info["dirty"] == 1 and info["state"] == "dirty"
+    git(b, "add", "-A")
+    git(b, "commit", "-qm", "local")
+    assert sync_info(b)["state"] == "ahead"
+    (a / "README.md").write_text("remote\n")
+    git(a, "commit", "-qam", "remote")
+    git(a, "push", "-q")
+    git(b, "fetch", "-q")
+    info = sync_info(b)
+    assert info["ahead"] == 1 and info["behind"] == 1 and info["state"] == "diverged"
 
 
 def test_sync_reports_a_missing_remote(repo):
@@ -85,7 +103,7 @@ def test_sync_merges_a_conflicting_notes_file(pair):
     git(a, "push", "-q")
     _ws(str(b), "", [], False).add_feedback(["README.md"], "from this side")
     r = sync_repo(b)
-    assert r["ok"] and r["notes"] == 1 and r["pushed"] == 1
+    assert r["ok"] and r["notes"] == 2 and r["pushed"] == 1  # the store and its change log
     fb = _ws(str(b), "", [], False).read_feedback()
     assert [f["id"] for f in fb] == [1, 2, 3]  # the local #2 stays; the remote one is renumbered
     assert [f["text"] for f in fb] == ["do the thing", "from this side", "from the other side"]
@@ -146,3 +164,23 @@ def test_merge_notes_text_renumbers_a_colliding_new_item():
 def test_merge_notes_text_rejects_other_documents():
     assert merge_notes_text("not json", "{}", "{}") is None
     assert merge_notes_text('["a"]', "{}", "{}") is None
+
+
+def event(seq, op, **kw):
+    return {"seq": seq, "at": f"t{seq}", "who": "me", "op": op, **kw, "changes": []}
+
+
+def log(*events):
+    return "".join(json.dumps(e) + "\n" for e in events)
+
+
+def test_merge_notes_log_text_keeps_both_histories():
+    local = log(event(1, "annotation set"), event(2, "new"))
+    remote = log(event(1, "annotation set"), event(2, "feedback reply"), event(3, "undo", undoes=2))
+    got = [json.loads(ln) for ln in merge_notes_log_text(local, remote).splitlines()]
+    assert [(e["seq"], e["op"]) for e in got] == [(1, "annotation set"), (2, "new"), (3, "feedback reply"), (4, "undo")]
+    assert got[3]["undoes"] == 3  # the remote undo now points at its renumbered target
+
+
+def test_merge_notes_log_text_rejects_other_files():
+    assert merge_notes_log_text("not json", "") is None

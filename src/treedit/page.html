@@ -246,9 +246,6 @@ body.wrap #editor{overflow-x:hidden}
 .compose .ctitle{font-size:12px;color:var(--fb);font-weight:600;margin-bottom:4px;font-family:var(--mono)}
 .compose textarea{width:100%;font:13.5px/1.45 var(--sans);border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg);color:var(--text);resize:vertical}
 .compose .cbtns{display:flex;gap:8px;margin-top:6px}
-.newex{min-width:min(64vw,520px)}
-.newex .nlabel{color:var(--dim);font-family:var(--sans);font-size:12.5px;margin-bottom:6px}
-.newex textarea{width:100%;font:13.5px/1.5 var(--mono);border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--bg);color:var(--text);resize:vertical}
 #fball.hot{border-color:var(--fb);color:var(--fb);font-weight:600}
 .fball{padding:4px 14px 12px}
 .fball .msg{color:var(--dim);padding:12px 0}
@@ -275,6 +272,14 @@ body.wrap #editor{overflow-x:hidden}
 .gsync .gs .state.ok{color:var(--ok)} .gsync .gs .state.bad{color:var(--danger)}
 .gsync .gs .what{color:var(--dim);font-size:12.5px;margin-top:4px}
 .gsync .gs .badfiles{font:12px/1.5 var(--mono);color:var(--danger);margin-top:4px;white-space:pre-wrap}
+#b-sync{display:inline-flex;align-items:center;gap:6px}
+#b-sync .sdot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none;box-shadow:0 0 0 1px color-mix(in srgb,var(--line) 65%,transparent)}
+#b-sync.ok .sdot{background:var(--ok)}
+#b-sync.ahead .sdot,#b-sync.dirty .sdot{background:var(--note)}
+#b-sync.behind .sdot{background:var(--accent)}
+#b-sync.diverged .sdot{background:var(--danger)}
+#b-sync.behind .sdot,#b-sync.diverged .sdot{animation:syncdot 1.8s ease-in-out infinite}
+@keyframes syncdot{50%{opacity:.35}}
 #mcompose{padding:0 14px}
 #mcross{padding:2px 14px 4px;border-bottom:3px solid var(--line)}
 #mcross:empty{display:none}
@@ -389,7 +394,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </label>
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
-  <button id="b-sync" title="Sync with the remote: save and commit your edits, pull the other side's work, push yours. Notes and feedback merge automatically.">Sync</button>
+  <button id="b-sync" title="Sync with the remote: save and commit your edits, pull the other side's work, push yours. Notes and feedback merge automatically."><span class="sdot"></span><span id="sync-label">Sync</span></button>
   <button id="b-open" title="Open another folder as its own tree">Open tree</button>
   <button id="fball" title="All feedback for the agent">Feedback</button>
   <button id="b-log" title="Git history of the selected file or folder">History</button>
@@ -415,7 +420,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
-        <button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
+        <button id="b-new" title="Create a file or folder at any depth - a name with an extension is a file, without one a folder; previews first">New…</button><button id="b-newfile">New file</button><button id="b-newdir">New folder</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
@@ -1180,7 +1185,7 @@ function showSync(out) {
 async function syncNow() {
   if (syncing) return;
   syncing = true;
-  const b = $('#b-sync'); b.disabled = true; b.textContent = 'Syncing…';
+  const b = $('#b-sync'); b.disabled = true; $('#sync-label').textContent = 'Syncing…';
   try {
     // sync sends what is on disk: save the editors first, or the visible work would stay behind
     if (isDirty()) await save();
@@ -1189,13 +1194,48 @@ async function syncNow() {
     const out = await api('POST', '/api/sync', {});
     await poll(true);
     showSync(out);
+    await refreshSyncStatus();
   } catch (e) {
     toast('Sync failed: ' + e.message, true);
   } finally {
-    syncing = false; b.disabled = false; b.textContent = 'Sync';
+    syncing = false; b.disabled = false; $('#sync-label').textContent = 'Sync';
   }
 }
 $('#b-sync').onclick = syncNow;
+
+const SYNC_CLASS = { 'in-sync': 'ok', ahead: 'ahead', behind: 'behind', diverged: 'diverged', dirty: 'dirty', 'no-remote': 'unknown', 'not-git': 'unknown' };
+function setSyncBadge(state, title) {  // a dot on Sync: green in sync, amber local work, blue to pull, red both
+  const b = $('#b-sync');
+  b.classList.remove('ok', 'ahead', 'behind', 'diverged', 'dirty', 'unknown');
+  b.classList.add(SYNC_CLASS[state] || 'unknown');
+  b.title = title;
+}
+function syncState(repos) {  // aggregate one state for every opened folder's repository
+  if (!repos.length) return { state: 'not-git', title: 'Sync: not a git repository' };
+  const ahead = repos.reduce((n, r) => n + (r.ahead || 0), 0);
+  const behind = repos.reduce((n, r) => n + (r.behind || 0), 0);
+  const dirty = repos.reduce((n, r) => n + (r.dirty || 0), 0);
+  const up = repos.filter(r => r.upstream).map(r => `${r.branch}→${r.upstream}`).join(', ');
+  const bits = [];
+  if (behind) bits.push(`${behind} to pull`);
+  if (ahead) bits.push(`${ahead} to push`);
+  if (dirty) bits.push(`${dirty} uncommitted`);
+  const state = behind && (ahead || dirty) ? 'diverged' : behind ? 'behind' : ahead ? 'ahead' : dirty ? 'dirty'
+    : up ? 'in-sync' : 'no-remote';
+  const title = state === 'in-sync' ? `In sync with ${up}`
+    : state === 'no-remote' ? 'Sync: no git remote'
+    : `Sync: ${bits.join(' · ')}${up ? ' · ' + up : ''}`;
+  return { state, title };
+}
+async function refreshSyncStatus() {
+  if (syncing) return;
+  let st;
+  try { st = await api('GET', '/api/sync'); } catch { setSyncBadge('unknown', 'Sync: status unknown'); return; }
+  const { state, title } = syncState(Object.values(st || {}).filter(r => r && r.state));
+  setSyncBadge(state, title);
+}
+setInterval(() => { if (!document.hidden) refreshSyncStatus(); }, 10000);
+window.addEventListener('focus', () => refreshSyncStatus());
 function prefixPaths(name) {  // one folder became several: every local path gains that folder's name
   const p = k => (k ? `${name}/${k}` : name);
   const remap = m => { const n = new Map(); for (const [k, v] of m) n.set(p(k), v); return n; };
@@ -2697,6 +2737,37 @@ function newEntries(kind) {
   openModal(`New ${what}s`, box, [cancel, create]);
   ta.focus();
 }
+/* New...: create at depth via the same core as `treedit new` - preview (dry run), confirm, create, log */
+function newLines(r) { const pre = el('pre', 'newlist'); pre.textContent = r.lines.join('\n'); return pre; }
+async function newAtDepth() {
+  const base = baseDir();
+  const raw = prompt(`New… in ${base || S.rootName}/\nRelative path; a name with an extension is a file (note.md), one without is a folder (notes); missing folders are created too. End with / for a folder that has a dot (v1.0/):`);
+  if (!raw || !raw.trim()) return;
+  const path = (base ? base + '/' : '') + raw.trim().replace(/^\/+|\/+$/g, '');
+  const body = { paths: [path], exist_ok: false };
+  let plan;
+  try { plan = await api('POST', '/api/create', { ...body, dry_run: true }); }
+  catch (e) { toast(e.message, true); return; }
+  const box = el('div'); box.append(el('p', '', 'This will create:'), newLines(plan));
+  const go = btn('Create', async () => {
+    let r;
+    try { r = await api('POST', '/api/create', body); } catch (e) { toast(e.message, true); return; }
+    const done = el('div'); done.append(el('p', '', 'Created:'), newLines(r));
+    const acts = [];
+    if (r.log) acts.push(btn(`Undo #${r.log.seq}`, async () => {
+      try { const u = await api('POST', '/api/undo', { seq: r.log.seq, path }); toast(`Undid #${r.log.seq}: ${u.lines.join(', ')}`); $('#modal').close(); await loadTree(); }
+      catch (e) { toast(e.message, true); }
+    }));
+    putModal(`New… ${path}`, done, acts);
+    const made = r.entries.filter(x => x.action === 'created');
+    toast(`Created ${made.length} entr${made.length === 1 ? 'y' : 'ies'}${r.log ? ` (log #${r.log.seq})` : ''}`);
+    expandTo(path);
+    for (const e of made) if (e.kind === 'dir') S.expanded.add(e.path);
+    await loadTree(); await select(path);
+  }, 'primary');
+  openModal(`New… ${path}`, box, [go]);
+  go.focus();
+}
 async function renameSel() {
   const p = S.sel; if (!p) return;
   const to = prompt('Rename / move to (path relative to the root):', p);
@@ -2754,6 +2825,7 @@ async function deletePaths(paths) {  // the Delete button, the Del key, and the 
   if (!failed) toast(`Deleted ${roots.length === 1 ? roots[0] : `${roots.length} items`}${staged ? ' · staged in git' : ''}`);
 }
 function deleteSel() { if (S.sel) deletePaths([S.sel]); }
+$('#b-new').onclick = () => newAtDepth();
 $('#b-newfile').onclick = () => newEntries('file');
 $('#b-newdir').onclick = () => newEntries('dir');
 $('#b-rename').onclick = renameSel;
@@ -3238,6 +3310,7 @@ loadTree().then(() => {
   if (h && S.byPath.has(h)) { expandTo(h); renderTree(); select(h); }
   return pollTerms();
 }).catch(e => { setLive('off'); toast('Could not load tree: ' + e.message, true); });
+refreshSyncStatus();
 </script>
 </body>
 </html>
