@@ -3453,13 +3453,11 @@ def sync_tree(
         bits = []
         if r["committed"]:
             bits.append(f"committed {plural(r['committed'], 'file')}")
-        if r["incoming"]:
-            bits.append(f"pulled {plural(r['incoming'], 'commit')}")
+        bits.append(f"pulled {plural(r['incoming'], 'commit')}" if r["incoming"] else "nothing to pull")
         if r["notes"]:
             bits.append(f"merged {plural(r['notes'], 'notes file')}")
-        if r["pushed"]:
-            bits.append(f"pushed {plural(r['pushed'], 'commit')}")
-        print("  " + (", ".join(bits) or "up to date"))
+        bits.append(f"pushed {plural(r['pushed'], 'commit')}" if r["pushed"] else "nothing to push")
+        print("  " + ", ".join(bits))
     if failed:
         sys.exit(1)
 

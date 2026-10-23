@@ -1151,18 +1151,19 @@ function syncSummary(r) {
   const n = (v, word) => `${v} ${word}${v === 1 ? '' : 's'}`;
   const bits = [];
   if (r.committed) bits.push('committed ' + n(r.committed, 'file'));
-  if (r.incoming) bits.push('pulled ' + n(r.incoming, 'commit'));
+  bits.push(r.incoming ? 'pulled ' + n(r.incoming, 'commit') : 'nothing to pull');
   if (r.notes) bits.push('merged ' + n(r.notes, 'notes file'));
-  if (r.pushed) bits.push('pushed ' + n(r.pushed, 'commit'));
-  return bits.join(', ') || 'up to date';
+  bits.push(r.pushed ? 'pushed ' + n(r.pushed, 'commit') : 'nothing to push');
+  return bits.join(' · ');
 }
 function showSync(out) {
   const box = el('div', 'gsync'), repos = (out && out.repos) || [];
   if (!repos.length) box.append(el('div', 'msg', 'No git repository to sync.'));
   for (const r of repos) {
     const row = el('div', 'gs'), head = el('div', 'top');
+    const quiet = r.ok && !r.committed && !r.incoming && !r.pushed && !r.notes;
     head.append(el('b', null, r.name), el('span', 'repo', r.repo));
-    head.append(el('span', 'state ' + (r.ok ? 'ok' : 'bad'), r.ok ? 'synced' : 'not synced'));
+    head.append(el('span', 'state ' + (r.ok ? 'ok' : 'bad'), r.ok ? (quiet ? 'in sync' : 'synced') : 'not synced'));
     row.append(head);
     row.append(el('div', 'what', r.ok ? syncSummary(r) : (r.error || 'sync failed')
       + (r.upstream ? ` · ${r.upstream}` : '') + (r.branch ? ` · ${r.branch}` : '')));
@@ -1174,7 +1175,8 @@ function showSync(out) {
     putModal('Sync with the remote', box, [again]);
     toast('No git repository to sync', true);
   } else if (repos.every(r => r.ok)) {
-    const msg = repos.some(r => r.committed || r.incoming || r.pushed || r.notes) ? 'Synced with the remote' : 'Up to date';
+    const msg = repos.some(r => r.committed || r.incoming || r.pushed || r.notes)
+      ? 'Synced with the remote' : 'In sync — nothing to pull or push';
     putModal('Sync with the remote', box, [again]);
     toast(msg);
   } else {
@@ -1222,7 +1224,7 @@ function syncState(repos) {  // aggregate one state for every opened folder's re
   if (dirty) bits.push(`${dirty} uncommitted`);
   const state = behind && (ahead || dirty) ? 'diverged' : behind ? 'behind' : ahead ? 'ahead' : dirty ? 'dirty'
     : up ? 'in-sync' : 'no-remote';
-  const title = state === 'in-sync' ? `In sync with ${up}`
+  const title = state === 'in-sync' ? `In sync with ${up} — nothing to pull`
     : state === 'no-remote' ? 'Sync: no git remote'
     : `Sync: ${bits.join(' · ')}${up ? ' · ' + up : ''}`;
   return { state, title };

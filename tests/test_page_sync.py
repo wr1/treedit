@@ -24,12 +24,18 @@ def js_function(src: str, name: str) -> str:
 @pytest.fixture(scope="module")
 def lib():
     src = (resources.files("treedit") / "page.html").read_text("utf-8")
-    return js_function(src, "syncState")
+    return js_function(src, "syncState") + "\n" + js_function(src, "syncSummary")
 
 
 def state(lib: str, repos):
     prog = lib + f"\nprocess.stdout.write(JSON.stringify(syncState({json.dumps(repos)})));"
     return json.loads(subprocess.run([NODE, "-e", prog], capture_output=True, text=True, check=True).stdout)
+
+
+def test_summary_states_nothing_to_pull(lib):
+    prog = lib + "\nprocess.stdout.write(syncSummary({ committed: 1, incoming: 0, notes: 0, pushed: 1 }));"
+    out = subprocess.run([NODE, "-e", prog], capture_output=True, text=True, check=True).stdout
+    assert out == "committed 1 file · nothing to pull · pushed 1 commit"
 
 
 def repo(**kw):
@@ -51,6 +57,7 @@ def test_nothing_to_sync(lib):
 def test_in_sync(lib):
     got = state(lib, [repo()])
     assert got["state"] == "in-sync" and "origin/main" in got["title"]
+    assert "nothing to pull" in got["title"]
 
 
 def test_local_work_is_ahead(lib):

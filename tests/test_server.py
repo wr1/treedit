@@ -308,7 +308,7 @@ def test_sync_cli(repo, tmp_path, capsys):
     assert "committed 1 file" in out and "pushed 1 commit" in out
     assert git(bare, "log", "--format=%s").count("treedit sync") == 1
     main(["sync", "-C", str(repo)])
-    assert "up to date" in capsys.readouterr().out
+    assert "nothing to pull" in capsys.readouterr().out
 
 
 def test_quit(server):
