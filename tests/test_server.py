@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from conftest import git
 from treedit.cli import Handler, Server, _ws, main
 from treedit.term import Sessions, ws_frame
 
@@ -200,6 +201,114 @@ def test_edits_with_window(server, tree, capsys):
     assert "saved in the editor (1):\n  README.md  (just now)" in capsys.readouterr().out
     main(["edits", "-C", str(tree / "pkg"), "--url", server])
     assert "the window at" in capsys.readouterr().out
+
+
+def _remote_setup(repo, tmp_path, branch):
+    bare = tmp_path / "bare.git"
+    bare.mkdir()
+    git(bare, "init", "--bare", "-q")
+    git(repo, "remote", "add", "origin", str(bare))
+    git(repo, "push", "-q", "origin", branch)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "--quiet", str(bare), str(other))
+    git(other, "config", "user.email", "test@example.com")
+    git(other, "config", "user.name", "test")
+    return bare, other
+
+
+def test_sync_endpoint(server, repo, tmp_path, monkeypatch):
+    monkeypatch.setattr(Handler, "ws", _ws(str(repo), "", [], False), raising=False)
+    branch = git(repo, "branch", "--show-current").strip()
+    bare, other = _remote_setup(repo, tmp_path, branch)
+
+    status, info = call(server, "GET", "/api/sync")
+    assert status == 200 and info["proj"]["branch"] == branch and info["proj"]["remotes"] == ["origin"]
+
+    # the remote side commits something
+    (other / "pkg" / "c.py").write_text("def c():\n    return 3\n")
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "agent: add c.py")
+    git(other, "push", "-q", "origin", branch)
+
+    # the local side has an uncommitted edit
+    (repo / "README.md").write_text("# proj\n\nchanged by the user.\n")
+
+    status, out = call(server, "POST", "/api/sync")
+    assert status == 200
+    assert len(out["repos"]) == 1
+    r = out["repos"][0]
+    assert r["name"] == "proj" and r["repo"] == str(repo) and r["branch"] == branch
+    assert r["ok"] is True and r["error"] == ""
+    assert r["committed"] == 1 and r["incoming"] == 1 and r["pushed"] == 1
+    assert r["conflicts"] == []
+    assert (repo / "pkg" / "c.py").read_text() == "def c():\n    return 3\n"
+    log = git(bare, "log", "--format=%s")
+    assert "init" in log and "agent: add c.py" in log and log.count("treedit sync") == 1
+
+
+def test_sync_conflicts_are_reported(server, repo, tmp_path, monkeypatch):
+    monkeypatch.setattr(Handler, "ws", _ws(str(repo), "", [], False), raising=False)
+    branch = git(repo, "branch", "--show-current").strip()
+    bare, other = _remote_setup(repo, tmp_path, branch)
+
+    (other / "README.md").write_text("# proj\n\nagent side.\n")
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "agent: side")
+    git(other, "push", "-q", "origin", branch)
+
+    (repo / "README.md").write_text("# proj\n\nuser side.\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "user: side")
+
+    status, out = call(server, "POST", "/api/sync")
+    assert status == 200
+    r = out["repos"][0]
+    assert r["ok"] is False
+    assert "README.md" in r["conflicts"] and "conflict" in r["error"]
+    assert r["committed"] == 0 and r["incoming"] == 1 and r["pushed"] == 0
+    # the aborted rebase left the repo as it was
+    assert (repo / "README.md").read_text() == "# proj\n\nuser side.\n"
+
+
+def test_sync_needs_a_remote(server, repo, monkeypatch):
+    monkeypatch.setattr(Handler, "ws", _ws(str(repo), "", [], False), raising=False)
+    status, info = call(server, "GET", "/api/sync")
+    assert status == 200 and info["proj"]["branch"] and info["proj"]["remotes"] == []
+    status, out = call(server, "POST", "/api/sync")
+    assert status == 200
+    assert out["repos"][0]["error"] == "no remote" and out["repos"][0]["ok"] is False
+
+
+def test_sync_outside_git(server):
+    status, info = call(server, "GET", "/api/sync")
+    assert status == 200 and info == {"proj": {"branch": "", "remotes": [], "upstream": ""}}
+    status, out = call(server, "POST", "/api/sync")
+    assert status == 200
+    assert out["repos"][0]["error"] == "not a git repository" and out["repos"][0]["ok"] is False
+    assert call(server, "POST", "/api/sync", {"commit": "yes"})[0] == 400
+
+
+def test_sync_mounts_status(server, tree, tmp_path, monkeypatch):
+    monkeypatch.setattr(Handler, "ws", _ws(str(tree), "", [], False), raising=False)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.md").write_text("x\n")
+    assert call(server, "POST", "/api/mount", {"path": str(other)})[0] == 200
+    status, info = call(server, "GET", "/api/sync")
+    assert status == 200 and set(info) == {"proj", "other", "*"}
+    assert info["proj"]["remotes"] == [] and info["other"]["remotes"] == []
+
+
+def test_sync_cli(repo, tmp_path, capsys):
+    branch = git(repo, "branch", "--show-current").strip()
+    bare, _ = _remote_setup(repo, tmp_path, branch)
+    (repo / "user.txt").write_text("me\n")
+    main(["sync", "-C", str(repo)])
+    out = capsys.readouterr().out
+    assert "committed 1 file" in out and "pushed 1 commit" in out
+    assert git(bare, "log", "--format=%s").count("treedit sync") == 1
+    main(["sync", "-C", str(repo)])
+    assert "up to date" in capsys.readouterr().out
 
 
 def test_quit(server):

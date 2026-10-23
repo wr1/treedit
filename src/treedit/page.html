@@ -266,6 +266,15 @@ body.wrap #editor{overflow-x:hidden}
 .glog .badge.agent{background:var(--agentc)} .glog .badge.you{background:var(--note)}
 .glog pre.gdiff{margin:0 0 8px;padding:8px 10px;font:12px/1.45 var(--mono);background:var(--panel);border-radius:0 0 6px 6px;overflow-x:auto;white-space:pre;max-height:55vh}
 .gdiff .d-hunk{color:var(--accent)} .gdiff .d-meta{color:var(--dim)}
+.gsync .gs{border-bottom:1px solid var(--line);padding:10px 0}
+.gsync .gs:last-child{border-bottom:0}
+.gsync .gs .top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.gsync .gs b{font-family:var(--mono);font-size:13px}
+.gsync .gs .repo{color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gsync .gs .state{font-size:12px;font-weight:600;margin-left:auto;flex:none}
+.gsync .gs .state.ok{color:var(--ok)} .gsync .gs .state.bad{color:var(--danger)}
+.gsync .gs .what{color:var(--dim);font-size:12.5px;margin-top:4px}
+.gsync .gs .badfiles{font:12px/1.5 var(--mono);color:var(--danger);margin-top:4px;white-space:pre-wrap}
 #mcompose{padding:0 14px}
 #mcross{padding:2px 14px 4px;border-bottom:3px solid var(--line)}
 #mcross:empty{display:none}
@@ -380,6 +389,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </label>
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
+  <button id="b-sync" title="Sync with the remote: save and commit your edits, pull the other side's work, push yours. Notes and feedback merge automatically.">Sync</button>
   <button id="b-open" title="Open another folder as its own tree">Open tree</button>
   <button id="fball" title="All feedback for the agent">Feedback</button>
   <button id="b-log" title="Git history of the selected file or folder">History</button>
@@ -1129,6 +1139,63 @@ setInterval(() => { if (!document.hidden && $('#auto').checked) poll(); }, 1500)
 window.addEventListener('focus', () => { if ($('#auto').checked) poll(); });
 $('#auto').onchange = e => { setLive(e.target.checked ? 'on' : 'paused'); store('auto', e.target.checked); if (e.target.checked) poll(); };
 $('#refresh').onclick = () => poll(true).then(() => toast('Refreshed from disk'));
+
+/* ---------- sync with the remote (the other side's commits in, yours out) ---------- */
+let syncing = false;
+function syncSummary(r) {
+  const n = (v, word) => `${v} ${word}${v === 1 ? '' : 's'}`;
+  const bits = [];
+  if (r.committed) bits.push('committed ' + n(r.committed, 'file'));
+  if (r.incoming) bits.push('pulled ' + n(r.incoming, 'commit'));
+  if (r.notes) bits.push('merged ' + n(r.notes, 'notes file'));
+  if (r.pushed) bits.push('pushed ' + n(r.pushed, 'commit'));
+  return bits.join(', ') || 'up to date';
+}
+function showSync(out) {
+  const box = el('div', 'gsync'), repos = (out && out.repos) || [];
+  if (!repos.length) box.append(el('div', 'msg', 'No git repository to sync.'));
+  for (const r of repos) {
+    const row = el('div', 'gs'), head = el('div', 'top');
+    head.append(el('b', null, r.name), el('span', 'repo', r.repo));
+    head.append(el('span', 'state ' + (r.ok ? 'ok' : 'bad'), r.ok ? 'synced' : 'not synced'));
+    row.append(head);
+    row.append(el('div', 'what', r.ok ? syncSummary(r) : (r.error || 'sync failed')
+      + (r.upstream ? ` · ${r.upstream}` : '') + (r.branch ? ` · ${r.branch}` : '')));
+    if (r.conflicts && r.conflicts.length) row.append(el('div', 'badfiles', r.conflicts.join('\n')));
+    box.append(row);
+  }
+  const again = btn('Sync again', () => syncNow());
+  if (!repos.length) {
+    putModal('Sync with the remote', box, [again]);
+    toast('No git repository to sync', true);
+  } else if (repos.every(r => r.ok)) {
+    const msg = repos.some(r => r.committed || r.incoming || r.pushed || r.notes) ? 'Synced with the remote' : 'Up to date';
+    putModal('Sync with the remote', box, [again]);
+    toast(msg);
+  } else {
+    putModal('Sync with the remote', box, [again]);
+    toast('Sync needs attention', true);
+  }
+}
+async function syncNow() {
+  if (syncing) return;
+  syncing = true;
+  const b = $('#b-sync'); b.disabled = true; b.textContent = 'Syncing…';
+  try {
+    // sync sends what is on disk: save the editors first, or the visible work would stay behind
+    if (isDirty()) await save();
+    for (const st of S.msec.values()) if (sDirty(st)) await saveSection(st);
+    if (isDirty() || [...S.msec.values()].some(sDirty)) { toast('Save the conflict before syncing', true); return; }
+    const out = await api('POST', '/api/sync', {});
+    await poll(true);
+    showSync(out);
+  } catch (e) {
+    toast('Sync failed: ' + e.message, true);
+  } finally {
+    syncing = false; b.disabled = false; b.textContent = 'Sync';
+  }
+}
+$('#b-sync').onclick = syncNow;
 function prefixPaths(name) {  // one folder became several: every local path gains that folder's name
   const p = k => (k ? `${name}/${k}` : name);
   const remap = m => { const n = new Map(); for (const [k, v] of m) n.set(p(k), v); return n; };

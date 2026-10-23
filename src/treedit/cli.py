@@ -23,6 +23,10 @@ What it does
     PATH/.treenotes.json, or PATH/notes/.treenotes.json when a notes folder is
     present: a flat {"relative/path": "annotation"} map, or
     {"notes": {...}, "feedback": [...]} once there is feedback.
+  * `treedit sync` (and the Sync button in the window): commit local edits, rebase onto the remote's
+    work, and push (.treenotes.json conflicts merge structurally; other conflicts are reported).
+    With an agent on the other side, the window is an asynchronous two-way channel: you push your
+    edits and feedback, the bot pushes its answers; `treedit sync --no-commit` is its half.
   * Watches the disk: when an agent (or anything else) changes the tree, the
     view refreshes. Line ages follow the content (a later edit does not restart
     the fade of lines it left alone) and are kept for an hour, including across
@@ -107,6 +111,334 @@ def notes_file(root: Path) -> Path:
     if legacy.is_file():
         return legacy
     return home
+
+
+_MISSING = object()
+
+
+def notes_doc(notes: dict, feedback: list) -> str:
+    """The JSON text for NOTES and FEEDBACK; the one place that decides its shape."""
+    clean = {k: v for k, v in sorted(notes.items()) if v.strip()}
+    doc = {"notes": clean, "feedback": sorted(feedback, key=lambda f: f["id"])} if feedback else clean
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+
+
+def _notes_parts(data) -> Optional[tuple]:
+    """(notes, feedback) from a flat annotation map or a wrapped document; None when it is neither."""
+    if not isinstance(data, dict):
+        return None
+    wrapped = isinstance(data.get("notes"), dict) or isinstance(data.get("feedback"), list)
+    raw = data.get("notes") if wrapped and isinstance(data.get("notes"), dict) else data
+    notes = {str(k).strip("/") or ".": v for k, v in raw.items() if isinstance(v, str)}
+    fb = data.get("feedback") if wrapped else []
+    feedback = [f for f in fb if isinstance(f, dict) and isinstance(f.get("id"), int)] if isinstance(fb, list) else []
+    return notes, feedback
+
+
+def _merge_field(ours, theirs, base, prefer: str):
+    """Pick one field from two sides, given the common ancestor. When both moved, PREFER wins."""
+    if ours == theirs:
+        return ours
+    if base is _MISSING:
+        return theirs if prefer == "theirs" else ours
+    if ours == base:
+        return theirs
+    if theirs == base:
+        return ours
+    return theirs if prefer == "theirs" else ours
+
+
+def merge_notes_text(ours: str, theirs: str, base: str) -> Optional[str]:
+    """Merge two conflicting .treenotes.json texts without dropping either side's annotations or
+    feedback. Annotations and feedback entries merge per key and per entry, so a reply and a new
+    request made on different machines both survive. None when a text is not a notes document."""
+    try:
+        o = _notes_parts(json.loads(ours) if ours.strip() else {})
+        t = _notes_parts(json.loads(theirs) if theirs.strip() else {})
+        b = _notes_parts(json.loads(base) if base.strip() else {})
+    except ValueError:
+        return None
+    if o is None or t is None or b is None:
+        return None
+    on, of = o
+    tn, tf = t
+    bn, bf = b
+    notes = {}
+    for k in set(on) | set(tn):
+        if k not in on:
+            notes[k] = tn[k]
+        elif k not in tn:
+            notes[k] = on[k]
+        else:
+            notes[k] = _merge_field(on[k], tn[k], bn.get(k, _MISSING), "ours")
+
+    def one(a: dict, z: dict, common: dict) -> dict:
+        newer = str(z.get("updated", "")) >= str(a.get("updated", ""))
+        out = dict(a)
+        for k in set(a) | set(z):
+            if k == "id":
+                continue
+            av, zv = a.get(k, _MISSING), z.get(k, _MISSING)
+            if av is _MISSING:
+                out[k] = z[k]
+            elif zv is _MISSING:
+                out.pop(k, None)
+            else:
+                out[k] = _merge_field(av, zv, common.get(k, _MISSING), "theirs" if newer else "ours")
+        return out
+
+    oby = {f["id"]: f for f in of}
+    tby = {f["id"]: f for f in tf}
+    bby = {f["id"]: f for f in bf}
+    merged, extra = {}, []
+    for fid, f in oby.items():
+        if fid not in tby:
+            merged[fid] = f
+        elif fid in bby:
+            merged[fid] = one(f, tby[fid], bby[fid])
+        elif f == tby[fid]:
+            merged[fid] = f
+        else:  # both machines made #fid first; keep both, the remote one under a fresh id
+            merged[fid] = f
+            extra.append(tby[fid])
+    for fid, f in tby.items():
+        if fid not in oby:
+            merged[fid] = f
+    next_id = max([*merged, *bby], default=0) + 1
+    for f in extra:
+        merged[next_id] = {**f, "id": next_id}
+        next_id += 1
+    return notes_doc(notes, list(merged.values()))
+
+
+GIT_TIMEOUT = 120  # seconds a network operation (fetch, pull, push) may take
+
+
+def git_run(cwd: Path, *args: str, timeout: int = 30) -> tuple:
+    """(returncode, stdout, stderr) from git, without raising; a missing git is just a failure.
+    No stdin: a credential prompt in the window would leave the button waiting on a terminal."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+    return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+
+
+def repo_top(path: Path) -> Optional[Path]:
+    """The work-tree root of the repository holding PATH, or None outside git."""
+    rc, out, _ = git_run(path, "rev-parse", "--show-toplevel", timeout=10)
+    return Path(out.strip()) if rc == 0 and out.strip() else None
+
+
+def _git_path(top: Path, name: str) -> Optional[Path]:
+    rc, out, _ = git_run(top, "rev-parse", "--git-path", name, timeout=10)
+    if rc != 0 or not out.strip():
+        return None
+    p = Path(out.strip())
+    return p if p.is_absolute() else top / p
+
+
+def _git_line(text: str) -> str:
+    return (text.strip().splitlines() or [""])[0]
+
+
+def _count(top: Path, spec: str) -> int:
+    rc, out, _ = git_run(top, "rev-list", "--count", spec, timeout=30)
+    return int(out.strip()) if rc == 0 and out.strip().isdigit() else 0
+
+
+def _conflicts(top: Path) -> list:
+    rc, out, _ = git_run(top, "diff", "--name-only", "--diff-filter=U", timeout=30)
+    return [ln for ln in out.splitlines() if ln.strip()] if rc == 0 else []
+
+
+def _rebasing(top: Path) -> bool:
+    return any((p := _git_path(top, name)) is not None and p.exists() for name in ("rebase-merge", "rebase-apply"))
+
+
+def _finish_notes_rebase(top: Path) -> int:
+    """Resolve a rebase stopped on .treenotes.json conflicts and carry it on. Returns how many notes
+    files merged, or -1 when any other file conflicts (the caller aborts, so nothing is lost)."""
+    merged = 0
+    for _ in range(50):
+        files = _conflicts(top)
+        if not _rebasing(top):
+            return merged if not files else -1
+        if not files or any(Path(f).name != NOTES_NAME for f in files):
+            return -1
+        for f in files:
+            _, base, _ = git_run(top, "show", f":1:{f}", timeout=30)
+            _, onto, _ = git_run(top, "show", f":2:{f}", timeout=30)
+            _, local, _ = git_run(top, "show", f":3:{f}", timeout=30)
+            body = merge_notes_text(local, onto, base)  # in a rebase, stage 3 is the work being applied
+            if body is None:
+                return -1
+            atomic_write(top / f, body.encode("utf-8"))
+            if git_run(top, "add", "--", f, timeout=30)[0] != 0:
+                return -1
+            merged += 1
+        rc, _, _ = git_run(top, "-c", "core.editor=true", "rebase", "--continue", timeout=GIT_TIMEOUT)
+        if rc == 0:
+            return merged
+    return -1
+
+
+def _pull_rebase(top: Path) -> tuple:
+    """Pull with rebase, resolving notes conflicts. (ok, error, notes merged, other conflicts)."""
+    rc, _, err = git_run(top, "pull", "--rebase", "--autostash", "--quiet", timeout=GIT_TIMEOUT)
+    if rc == 0:
+        return True, "", 0, []
+    merged = _finish_notes_rebase(top)
+    if merged >= 0:
+        return True, "", merged, []
+    conflicts = _conflicts(top)
+    git_run(top, "rebase", "--abort", timeout=60)
+    return False, _git_line(err) or "pull failed", 0, conflicts
+
+
+def sync_repo(path: Path, commit: bool = True, message: str = "user: treedit sync") -> dict:
+    """Commit local edits, pull the remote's commits (merging notes), and push yours back.
+
+    A local change is committed first with MESSAGE, so the work is on the remote and the history
+    stays attributable. A rebase conflict that touches only .treenotes.json is merged structurally;
+    any other conflict aborts the rebase and is reported for a human. Never forces: a lost update is
+    worse than an unsynced one. Returns a per-repository report for the window or `treedit sync`."""
+    top = repo_top(path)
+    out = {
+        "name": (top or path).name,
+        "repo": str(top or path),
+        "branch": "",
+        "upstream": "",
+        "committed": 0,
+        "incoming": 0,
+        "pushed": 0,
+        "notes": 0,
+        "conflicts": [],
+        "error": "",
+        "ok": False,
+    }
+    if top is None:
+        out["error"] = "not a git repository"
+        return out
+    rc, branch, _ = git_run(top, "symbolic-ref", "--short", "-q", "HEAD", timeout=10)
+    branch = branch.strip()
+    if rc != 0 or not branch:
+        out["error"] = "detached HEAD"
+        return out
+    out["branch"] = branch
+    rc, raw, _ = git_run(top, "remote", timeout=10)
+    remotes = raw.split()
+    if not remotes:
+        out["error"] = "no remote"
+        return out
+    busy = next(
+        (
+            n
+            for n in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "rebase-merge", "rebase-apply")
+            if (p := _git_path(top, n)) and p.exists()
+        ),
+        "",
+    )
+    if busy:
+        out["error"] = f"a git {busy.replace('-', ' ').replace('_', ' ').lower()} is in progress"
+        return out
+    if commit:
+        rc, raw, _ = git_run(top, "status", "--porcelain", timeout=30)
+        dirty = [ln for ln in raw.splitlines() if ln.strip()]
+        if dirty:
+            rc, _, err = git_run(top, "add", "-A", timeout=60)
+            if rc != 0:
+                out["error"] = f"git add failed: {_git_line(err)}"
+                return out
+            rc, _, err = git_run(top, "commit", "-q", "-m", f"{message} ({plural(len(dirty), 'file')})", timeout=60)
+            if rc != 0:
+                out["error"] = f"git commit failed: {_git_line(err)}"
+                return out
+            out["committed"] = len(dirty)
+
+    rc, raw, _ = git_run(top, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", timeout=10)
+    upstream = raw.strip() if rc == 0 else ""
+    remote = upstream.split("/", 1)[0] if "/" in upstream else ""
+    if not remote:
+        remote = "origin" if "origin" in remotes else (remotes[0] if len(remotes) == 1 else "")
+    if not remote:
+        out["error"] = "no remote to sync with"
+        return out
+    rc, _, err = git_run(top, "fetch", remote, timeout=GIT_TIMEOUT)
+    if rc != 0:
+        out["error"] = f"fetch failed: {_git_line(err)}"
+        return out
+    if not upstream:
+        rc, _, _ = git_run(top, "rev-parse", "-q", "--verify", f"refs/remotes/{remote}/{branch}", timeout=10)
+        if rc == 0:
+            git_run(top, "branch", f"--set-upstream-to={remote}/{branch}", timeout=10)
+            upstream = f"{remote}/{branch}"
+    out["upstream"] = upstream
+    if upstream:
+        out["incoming"] = _count(top, f"HEAD..{upstream}")
+        if out["incoming"]:
+            ok, err, merged, conflicts = _pull_rebase(top)
+            out["notes"] = merged
+            if not ok:
+                out["conflicts"] = conflicts
+                out["error"] = f"conflict: {', '.join(conflicts)}" if conflicts else err
+                return out
+    pushed = _count(top, f"{upstream}..HEAD") if upstream else _count(top, "HEAD --not --remotes")
+    push = ["push", "-q"] + ([] if upstream else ["-u", remote, branch])
+    rc, _, err = git_run(top, *push, timeout=GIT_TIMEOUT)
+    if rc != 0 and any(k in err for k in ("rejected", "fetch first", "non-fast-forward")):
+        ok, perr, merged, conflicts = _pull_rebase(top)  # the remote moved between our pull and our push
+        if not ok:
+            out["notes"] += merged
+            out["conflicts"] = conflicts
+            out["error"] = f"conflict: {', '.join(conflicts)}" if conflicts else perr
+            return out
+        out["notes"] += merged
+        out["incoming"] += _count(top, f"HEAD..{upstream}") if upstream else 0
+        rc, _, err = git_run(top, *push, timeout=GIT_TIMEOUT)
+    if rc != 0:
+        out["error"] = f"push failed: {_git_line(err)}"
+        return out
+    out["pushed"] = pushed
+    if not upstream:
+        out["upstream"] = f"{remote}/{branch}"
+    out["ok"] = True
+    return out
+
+
+def sync_info(root: Path) -> dict:
+    """Branch, remotes and upstream of the repository holding ROOT (empty outside git): what the
+    sync button can push to and pull from."""
+    out = {"branch": "", "remotes": [], "upstream": ""}
+    top = repo_top(root)
+    if top is None:
+        return out
+    rc, branch, _ = git_run(top, "symbolic-ref", "--short", "-q", "HEAD", timeout=10)
+    if rc == 0:
+        out["branch"] = branch.strip()
+    rc, raw, _ = git_run(top, "remote", timeout=10)
+    if rc == 0:
+        out["remotes"] = raw.split()
+    rc, raw, _ = git_run(top, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", timeout=10)
+    if rc == 0:
+        out["upstream"] = raw.strip()
+    return out
+
+
+def sync_status(ws) -> dict:
+    """Per repository (mount name -> status, "" for a single tree): branch, remotes and upstream."""
+    if isinstance(ws, Mounts):
+        out = {name: sync_info(w.root) for name, w in ws.mounts.items()}
+        if ws.own_top:
+            out["*"] = sync_info(ws.top.root)
+        return out
+    return {ws.root.name: sync_info(ws.root)}
 
 
 MAX_TEXT = 2 * 1024 * 1024  # files above this are shown but not edited
@@ -822,8 +1154,7 @@ class Workspace:
         clean = {k: v for k, v in sorted(notes.items()) if v.strip()}
         if not clean and not feedback and not self.notes_path.exists():
             return
-        doc = {"notes": clean, "feedback": sorted(feedback, key=lambda f: f["id"])} if feedback else clean
-        atomic_write(self.notes_path, (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+        atomic_write(self.notes_path, notes_doc(notes, feedback).encode("utf-8"))
 
     def write_notes(self, notes: dict) -> None:
         with self.lock:
@@ -1069,6 +1400,24 @@ class Workspace:
         return self._run_git(
             cwd, "show", "--stat", "--patch", "--format=fuller", commit, *([] if whole else ["--", spec])
         )
+
+    def sync_repos(self) -> list[Path]:
+        """The repositories to sync for this folder: the one holding the tree, and the one holding
+        its notes file (a nested notes/ repo is its own, and notes travel to the other side)."""
+        out: list[Path] = []
+        for p in (self.root, self.notes_path.parent):
+            top = repo_top(p)
+            if top is not None and top not in out:
+                out.append(top)
+        return out
+
+    def sync(self, commit: bool = True, message: str = "user: treedit sync") -> list[dict]:
+        """Push and pull every repository this folder keeps annotations, feedback or work in.
+        No lock: a slow remote must not block saves or the tree refresh in the window."""
+        repos = self.sync_repos()
+        if not repos:  # outside git, say so for the folder itself
+            return [sync_repo(self.root, commit, message)]
+        return [sync_repo(p, commit, message) for p in repos]
 
     # ---------- content search ----------
     def grep(self, query: str, case: bool = False, limit: int = GREP_LIMIT) -> dict:
@@ -1762,6 +2111,15 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.git_show(sub, whole, commit)
 
+    def sync(self, commit: bool = True, message: str = "user: treedit sync") -> list[dict]:
+        """Every repository behind the opened folders, each once (notes files included)."""
+        tops: list[Path] = []
+        for w in [*self.mounts.values(), *([self.top] if self.own_top else [])]:
+            for p in w.sync_repos():
+                if p not in tops:
+                    tops.append(p)
+        return [sync_repo(p, commit, message) for p in tops]
+
     def grep(self, query: str, case: bool = False, limit: int = GREP_LIMIT) -> dict:
         hits, truncated = [], False
         for name, w in self.mounts.items():
@@ -1917,6 +2275,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, Handler.context)
         if method == "GET" and path == "/api/version":
             return self.send_json(200, {"version": ws.version()})
+        if method == "GET" and path == "/api/sync":
+            return self.send_json(200, sync_status(ws))
         if method == "GET" and path == "/api/tree":
             v = ws.version()
             multi = isinstance(ws, Mounts)
@@ -1998,6 +2358,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(
                 200, {"ok": True, "cmd": external_terminal(w.root, {**base, **self.term_env(w)}, self.agent)}
             )
+        if method == "POST" and path == "/api/sync":
+            commit = b.get("commit", True)
+            if not isinstance(commit, bool):
+                raise HTTPError(400, "commit must be true or false")
+            message = b.get("message") or "user: treedit sync"
+            if not isinstance(message, str):
+                raise HTTPError(400, "message must be text")
+            return self.send_json(200, {"repos": ws.sync(commit, message)})
         if method == "POST" and path == "/api/feedback":
             return self.send_json(
                 200,
@@ -2585,6 +2953,42 @@ def fb_rm(
     _ws(root, notes, ignore, follow_outside, no_gitignore, show).delete_feedback(id)
 
 
+def sync_tree(
+    root: str,
+    notes: str,
+    ignore: List[str],
+    follow_outside: bool,
+    no_gitignore: bool,
+    show: List[str],
+    message: str,
+    no_commit: bool,
+) -> None:
+    """Sync ROOT's repositories with their remotes: commit local edits (unless --no-commit), pull
+    with rebase (merging .treenotes.json conflicts), and push. A conflict in any other file aborts
+    that repository's rebase and is reported; nothing is forced."""
+    results = _ws(root, notes, ignore, follow_outside, no_gitignore, show).sync(not no_commit, message)
+    failed = 0
+    for r in results:
+        print(f"{r['name']}  {r['repo']}" + (f"  [{r['upstream']}]" if r["upstream"] else ""))
+        if not r["ok"]:
+            failed += 1
+            detail = f" ({', '.join(r['conflicts'])})" if r["conflicts"] else ""
+            print(f"  {r['error']}{detail}")
+            continue
+        bits = []
+        if r["committed"]:
+            bits.append(f"committed {plural(r['committed'], 'file')}")
+        if r["incoming"]:
+            bits.append(f"pulled {plural(r['incoming'], 'commit')}")
+        if r["notes"]:
+            bits.append(f"merged {plural(r['notes'], 'notes file')}")
+        if r["pushed"]:
+            bits.append(f"pushed {plural(r['pushed'], 'commit')}")
+        print("  " + (", ".join(bits) or "up to date"))
+    if failed:
+        sys.exit(1)
+
+
 def show_context(url: str) -> None:
     """Print what the user has selected in the treedit window: paths, and the line span with its
     quoted text when lines are selected. Inside the agent pane the window's URL is in $TREEDIT_URL."""
@@ -2681,7 +3085,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
       (`git add <path>...`, never `git add -A`):
       `git commit -m "agent: <what changed> (treedit #ID)"`.
    e. Commit in the repository that holds the file (a nested `notes/` repo is its own repository).
-      Never push, amend, rebase or reset. Not a git repository? Ask the user before `git init`.
+      Never amend, rebase or reset, and never `git push` by hand. Not a git repository? Ask the
+      user before `git init`. On a remote checkout, `treedit sync --no-commit` sends your commits
+      and brings the user's in (see Remote bot below).
    f. After anything that merges (`git merge`, `pull`, `stash pop`, `cherry-pick`, resolving a
       conflict), read each merged file back in full, not just the diff. Merges sometimes keep both
       sides of a block that differ only slightly, leaving near-duplicate text: a paragraph, function,
@@ -2714,6 +3120,14 @@ Agent roll - when the user asks you to "roll" (pick up their manual edits and ac
 Loop roll - the same roll repeated every few minutes (in Claude Code: `/loop 3m ...`), while the user
 keeps editing. Each tick picks up what changed since the last one; a quiet tick (no new edits, no open
 feedback) makes no commits and answers in one line. The user ends the loop when they are done.
+
+Remote bot - when the user runs treedit on another machine and you work in a clone:
+1. At the start and after your commits, run `treedit sync --no-commit`. It commits nothing, pulls
+   their latest commits and feedback, rebases your commits on top, and pushes them. A conflicting
+   .treenotes.json is merged entry by entry, so their new feedback and your replies both survive.
+2. A conflict in a work file stops that repository's sync before anything is pushed. Resolve it by
+   reading both versions, commit, and sync again.
+3. Run it from the repository root (or `-C <folder>`). Never force, reset or push by hand.
 """
 
 
@@ -2838,6 +3252,22 @@ app = cli(
                 NOTE_ROOT,
                 *SHARED,
                 option(flags=["--url"], arg_type=str, default="", help="window URL (default $TREEDIT_URL)"),
+            ],
+        ),
+        cli(
+            name="sync",
+            help="Sync with the remote: commit local edits, pull the other side's work, push yours.",
+            callback=sync_tree,
+            options=[
+                NOTE_ROOT,
+                *SHARED,
+                option(
+                    flags=["--message", "-m"],
+                    arg_type=str,
+                    default="user: treedit sync",
+                    help="commit message for local edits (when they are committed)",
+                ),
+                option(flags=["--no-commit"], flag=True, help="push only commits already made"),
             ],
         ),
         cli(

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Sync with the remote: the header's Sync button (and `treedit sync`) commits your edits, pulls with
+  rebase, pushes, and merges a conflicting `.treenotes.json` entry by entry, so annotations and
+  feedback travel between a treedit here and an agent working in a clone. Notes on both sides
+  survive; a new feedback id is renumbered, never dropped. A conflict in any other file aborts that
+  repository's rebase before pushing and lists the files. `treedit sync --no-commit` is the remote
+  side's half: push what is committed, pull the rest.
 - Delete from the tree: the row's right-click menu, the Delete button, or Del on a focused row removes
   the selection. A file git tracks is removed with `git rm`, so it leaves the index too. It asks first
   only when the deletion cannot be undone: an untracked path, or one whose annotation would be dropped.

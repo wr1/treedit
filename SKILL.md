@@ -38,7 +38,9 @@ Reviewing with the user (they see the tree, your replies and every file change l
       (`git add <path>...`, never `git add -A`):
       `git commit -m "agent: <what changed> (treedit #ID)"`.
    e. Commit in the repository that holds the file (a nested `notes/` repo is its own repository).
-      Never push, amend, rebase or reset. Not a git repository? Ask the user before `git init`.
+      Never amend, rebase or reset, and never `git push` by hand. Not a git repository? Ask the
+      user before `git init`. On a remote checkout, `treedit sync --no-commit` sends your commits
+      and brings the user's in (see Remote bot below).
    f. After anything that merges (`git merge`, `pull`, `stash pop`, `cherry-pick`, resolving a
       conflict), read each merged file back in full, not just the diff. Merges sometimes keep both
       sides of a block that differ only slightly, leaving near-duplicate text: a paragraph, function,
@@ -71,3 +73,11 @@ Agent roll - when the user asks you to "roll" (pick up their manual edits and ac
 Loop roll - the same roll repeated every few minutes (in Claude Code: `/loop 3m ...`), while the user
 keeps editing. Each tick picks up what changed since the last one; a quiet tick (no new edits, no open
 feedback) makes no commits and answers in one line. The user ends the loop when they are done.
+
+Remote bot - when the user runs treedit on another machine and you work in a clone:
+1. At the start and after your commits, run `treedit sync --no-commit`. It commits nothing, pulls
+   their latest commits and feedback, rebases your commits on top, and pushes them. A conflicting
+   .treenotes.json is merged entry by entry, so their new feedback and your replies both survive.
+2. A conflict in a work file stops that repository's sync before anything is pushed. Resolve it by
+   reading both versions, commit, and sync again.
+3. Run it from the repository root (or `-C <folder>`). Never force, reset or push by hand.
