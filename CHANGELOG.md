@@ -23,6 +23,9 @@
   the selection. A file git tracks is removed with `git rm`, so it leaves the index too. It asks first
   only when the deletion cannot be undone: an untracked path, or one whose annotation would be dropped.
 - Three more window themes: GitHub light, Gruvbox and Evening (a warm dark).
+- Markdown lists: Tab/Shift+Tab move a bullet by one of the file's own nesting levels (2 spaces, 4
+  spaces or tabs) instead of always 2; Shift+Tab at the left margin drops the bullet/number/task
+  marker, so the item leaves the list.
 - The tree keeps its scroll position when a row is selected, a folder opens, or a live refresh
   rebuilds the rows; it no longer jumps back to the top.
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes

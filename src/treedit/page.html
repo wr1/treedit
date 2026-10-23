@@ -2121,7 +2121,40 @@ function toggleComment(ta, path, block) {
 function indentUnit(ta, path) {  // tabs if the file indents with tabs, else 4 spaces (Python) or 2
   return /^\t/m.test(ta.value) && !/^ {2}/m.test(ta.value) ? '\t' : langOf(path) === 'py' ? '    ' : '  ';
 }
+function mdIndentUnit(text) {  // one Markdown list level: tabs, or the file's own nesting width
+  if (/^\t+(?:[-*+]|\d+[.)])\s/m.test(text)) return '\t';
+  const inds = [...String(text).matchAll(/^( +)(?:[-*+]|\d+[.)])\s/gm)].map(m => m[1].length).filter(n => n > 0);
+  return ' '.repeat(inds.length ? Math.min(...inds) : 2);
+}
+function mdIndentLines(lines, out, unit) {
+  return lines.map(l => {
+    if (!l.trim()) return l;
+    if (!out) return unit + l;
+    if (l.startsWith('\t')) return l.slice(1);
+    const n = l.match(/^ */)[0].length;
+    if (n) return l.slice(Math.min(unit === '\t' ? 1 : unit.length, n));
+    return l.replace(/^(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, '');  // a top-level bullet leaves the list
+  });
+}
+function indentMarkdown(ta, out) {
+  const v = ta.value, s0 = ta.selectionStart, e1 = ta.selectionEnd, unit = mdIndentUnit(v);
+  const block = v.slice(s0, e1).includes('\n');
+  const e0 = e1 > s0 && v[e1 - 1] === '\n' ? e1 - 1 : e1;
+  const ls = v.lastIndexOf('\n', s0 - 1) + 1, le0 = v.indexOf('\n', e0), le = le0 < 0 ? v.length : le0;
+  const line = v.slice(ls, le), bullet = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/.test(line);
+  if (!out && !block && !bullet) return replaceRange(ta, s0, e1, unit);
+  if (out && !block && !/^[ \t]/.test(line) && !bullet) return;
+  const text = mdIndentLines(line.split('\n'), out, unit).join('\n');
+  if (text === line) return;
+  replaceRange(ta, ls, le, text);
+  if (block) ta.setSelectionRange(ls, ls + text.length);
+  else {
+    const at = Math.max(ls, s0 + text.length - line.length);
+    ta.setSelectionRange(at, at);
+  }
+}
 function indentBlock(ta, path, out) {  // Tab: indent the selected lines (or insert one); Shift+Tab: outdent them
+  if (langOf(path) === 'md') return indentMarkdown(ta, out);
   const v = ta.value, s0 = ta.selectionStart, e1 = ta.selectionEnd, unit = indentUnit(ta, path);
   const block = v.slice(s0, e1).includes('\n');
   if (!out && !block) return replaceRange(ta, s0, e1, unit);
