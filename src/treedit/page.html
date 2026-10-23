@@ -475,6 +475,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <span id="crumb"></span><span id="linkinfo"></span>
         <button id="b-new" title="Create a file or folder at any depth - a name with an extension is a file, without one a folder; previews first">New…</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
+        <button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams and clickable links">Preview</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
       <div id="banner" hidden></div>
@@ -488,7 +489,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <div id="plotview" hidden><div id="plotstage"></div></div>
       <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><div id="mdview" hidden></div></div>
       <div id="dirinfo" hidden></div>
-      <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams rendered">Preview</button><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
+      <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
     <div id="findbar" hidden><input id="findq" placeholder="Find" spellcheck="false" autocomplete="off"><span id="findn"></span>
       <button id="find-prev" title="Previous (Shift+Enter, Shift+F3)">↑</button><button id="find-next" title="Next (Enter, F3)">↓</button>
@@ -1733,10 +1734,10 @@ function syncChrome() {
 }
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
-const MDP = { on: false, gen: 0 };
+const MDP = { on: false, gen: 0, anchor: '' };
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 function resetMdPreview() {
-  MDP.on = false; MDP.gen++;
+  MDP.on = false; MDP.gen++; MDP.anchor = '';
   $('#mdview').hidden = true; $('#mdview').replaceChildren();
   $('#b-md').classList.remove('on'); $('#b-md').textContent = 'Preview';
 }
@@ -1754,7 +1755,29 @@ function mdPath(href) {  // a relative link in this file, as a tree path
   const p = clean.startsWith('/') ? clean.slice(1) : (dir ? dir + '/' + clean : clean);
   return decodeURIComponent(p).replace(/^\.\//, '');
 }
+function mdAnchor(href) {
+  const i = href.indexOf('#');
+  return i < 0 ? '' : decodeURIComponent(href.slice(i + 1));
+}
+function scrollMd(anchor) {
+  if (!anchor) return;
+  const target = document.getElementById(anchor)
+    || [...document.querySelectorAll('#mdview h1,#mdview h2,#mdview h3,#mdview h4,#mdview h5,#mdview h6')]
+      .find(h => h.textContent.trim().toLowerCase() === anchor.toLowerCase());
+  if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+function headingIds(root) {  // marked v15 leaves headings without ids; anchors need them
+  const used = new Set();
+  for (const h of root.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+    if (h.id) { used.add(h.id); continue; }
+    const base = h.textContent.trim().toLowerCase().replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '') || 'section';
+    let id = base, n = 1;
+    while (used.has(id)) id = `${base}-${++n}`;
+    used.add(id); h.id = id;
+  }
+}
 function rewriteMd(root) {
+  headingIds(root);
   for (const img of root.querySelectorAll('img[src]')) {
     const s = img.getAttribute('src');
     if (/^(https?:|data:|blob:|\/\/)/i.test(s)) continue;
@@ -1763,12 +1786,22 @@ function rewriteMd(root) {
   }
   for (const a of root.querySelectorAll('a[href]')) {
     const h = a.getAttribute('href');
-    if (/^(https?:|mailto:|#)/i.test(h)) { a.target = '_blank'; a.rel = 'noreferrer'; continue; }
-    const p = mdPath(h);
-    if (!p) continue;
-    a.onclick = e => {
+    if (!h) continue;
+    if (h.startsWith('#')) {  // a section in this preview
+      a.onclick = e => { e.preventDefault(); scrollMd(h.slice(1)); };
+      continue;
+    }
+    if (/^(https?:|mailto:)/i.test(h)) { a.target = '_blank'; a.rel = 'noreferrer'; continue; }
+    const p = mdPath(h), anchor = mdAnchor(h);
+    if (!p) { if (anchor) a.onclick = e => { e.preventDefault(); scrollMd(anchor); }; continue; }
+    a.onclick = async e => {  // follow a link through the tree, keeping the preview for Markdown
       e.preventDefault();
-      if (S.byPath.has(p)) select(p); else toast('Not in this tree: ' + p, true);
+      if (!S.byPath.has(p)) { toast('Not in this tree: ' + p, true); return; }
+      await select(p);
+      if (isMarkdown(p) && S.file && S.file.path === p) {
+        MDP.anchor = anchor;
+        setMdPreview(true);
+      }
     };
   }
 }
@@ -1829,6 +1862,10 @@ function renderMdPreview(gen) {
       const box = el('div', 'md-diagram loading', kind + ' diagram…');
       pre.replaceWith(box);
       await renderDiagram(kind, code.textContent, box, gen);
+    }
+    if (gen === MDP.gen && MDP.anchor) {
+      const at = MDP.anchor; MDP.anchor = '';
+      requestAnimationFrame(() => scrollMd(at));
     }
   })();
 }

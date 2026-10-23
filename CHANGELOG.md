@@ -11,9 +11,11 @@
   `treedit sync --no-commit` is the remote side's half: push what is committed, pull the rest. A dot
   on the Sync button shows whether the tree is in sync, ahead, behind, diverged, has a conflict
   waiting on the remote, or has uncommitted work.
-- Markdown preview: Preview on a .md file renders it (marked, sanitized with DOMPurify). A
-  ```mermaid block renders in the window; a ```d2 block renders through the installed d2 CLI and
-  is shown as a sandboxed image. Relative images and links follow the file.
+- Markdown preview: Preview in the file bar renders a .md file (marked, sanitized with DOMPurify).
+  A ```mermaid block renders in the window; a ```d2 block renders through the installed d2 CLI and
+  is shown as a sandboxed image. Links are followed by clicking: another Markdown file opens in the
+  preview, `#section` scrolls to the heading, and web links open in a new tab. Relative images
+  follow the file.
 - The agent pane now folds to a thin strip on the right edge (the » chevron at its top left): one
   segment per session, green when it just wrote, amber when connected but idle, red when
   disconnected, grey when ended. Click the strip to unfold; sessions keep running while folded.
