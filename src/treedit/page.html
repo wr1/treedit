@@ -278,8 +278,13 @@ body.wrap #editor{overflow-x:hidden}
 #b-sync.ahead .sdot,#b-sync.dirty .sdot{background:var(--note)}
 #b-sync.behind .sdot{background:var(--accent)}
 #b-sync.diverged .sdot{background:var(--danger)}
-#b-sync.behind .sdot,#b-sync.diverged .sdot{animation:syncdot 1.8s ease-in-out infinite}
+#b-sync.behind .sdot,#b-sync.diverged .sdot,#b-sync.syncing .sdot{animation:syncdot 1.8s ease-in-out infinite}
 @keyframes syncdot{50%{opacity:.35}}
+#sync-note{font-size:12px;color:var(--dim);max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none}
+#sync-note[hidden]{display:none}
+#sync-note.busy{color:var(--accent)}
+#sync-note.good{color:var(--ok)}
+#sync-note.bad{color:var(--danger);cursor:pointer;text-decoration:underline dotted}
 #mcompose{padding:0 14px}
 #mcross{padding:2px 14px 4px;border-bottom:3px solid var(--line)}
 #mcross:empty{display:none}
@@ -395,7 +400,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <label title="Watch the folder for changes made by agents or other editors"><input type="checkbox" id="auto" checked> live <span id="live"></span></label>
   <button id="refresh" title="Re-read the tree from disk">Refresh</button>
   <button id="b-sync" title="Sync with the remote: save and commit your edits, pull the other side's work, push yours. Notes and feedback merge automatically."><span class="sdot"></span><span id="sync-label">Sync</span></button>
-  <button id="b-open" title="Open another folder as its own tree">Open tree</button>
+  <span id="sync-note" hidden></span>
   <button id="fball" title="All feedback for the agent">Feedback</button>
   <button id="b-log" title="Git history of the selected file or folder">History</button>
   <button id="b-term" hidden title="Terminal / agent pane on the right">Agent</button>
@@ -1170,37 +1175,59 @@ function showSync(out) {
     if (r.conflicts && r.conflicts.length) row.append(el('div', 'badfiles', r.conflicts.join('\n')));
     box.append(row);
   }
-  const again = btn('Sync again', () => syncNow());
-  if (!repos.length) {
-    putModal('Sync with the remote', box, [again]);
-    toast('No git repository to sync', true);
-  } else if (repos.every(r => r.ok)) {
-    const msg = repos.some(r => r.committed || r.incoming || r.pushed || r.notes)
-      ? 'Synced with the remote' : 'In sync — nothing to pull or push';
-    putModal('Sync with the remote', box, [again]);
-    toast(msg);
-  } else {
-    putModal('Sync with the remote', box, [again]);
-    toast('Sync needs attention', true);
-  }
+  putModal('Sync with the remote', box, [btn('Sync again', () => syncNow())]);
 }
+function syncOutcome(out) {  // one line for the header; the full report stays one click away
+  const repos = (out && out.repos) || [];
+  if (!repos.length) return { text: 'No git repository to sync', kind: 'bad', details: false };
+  const bad = repos.find(r => !r.ok);
+  if (bad) {
+    const why = bad.conflicts && bad.conflicts.length ? bad.conflicts.join(', ') : (bad.error || 'sync failed');
+    return { text: 'Sync needs attention: ' + why, kind: 'bad', details: true };
+  }
+  const quiet = repos.every(r => !r.committed && !r.incoming && !r.pushed && !r.notes);
+  if (quiet) return { text: 'In sync — nothing to pull or push', kind: 'good', details: true };
+  return { text: 'Synced · ' + repos.map(syncSummary).join('; '), kind: 'good', details: true };
+}
+let lastSync = null, syncNoteT;
+function syncNote(text, kind, details) {  // an inline, self-clearing status; never blocks the window
+  const n = $('#sync-note');
+  n.textContent = text;
+  n.className = kind;
+  n.hidden = false;
+  n.title = details ? 'Click for details' : '';
+  n.style.cursor = details ? 'pointer' : 'default';
+  clearTimeout(syncNoteT);
+  if (kind !== 'bad') syncNoteT = setTimeout(() => { n.hidden = true; }, 9000);
+}
+$('#sync-note').onclick = () => { if (lastSync) showSync(lastSync); };
 async function syncNow() {
   if (syncing) return;
-  syncing = true;
-  const b = $('#b-sync'); b.disabled = true; $('#sync-label').textContent = 'Syncing…';
+  syncing = true; lastSync = null;
+  const b = $('#b-sync'); b.disabled = true; b.classList.add('syncing');
+  $('#sync-label').textContent = 'Syncing…';
+  syncNote('Syncing with the remote…', 'busy', false);
   try {
     // sync sends what is on disk: save the editors first, or the visible work would stay behind
     if (isDirty()) await save();
     for (const st of S.msec.values()) if (sDirty(st)) await saveSection(st);
-    if (isDirty() || [...S.msec.values()].some(sDirty)) { toast('Save the conflict before syncing', true); return; }
+    if (isDirty() || [...S.msec.values()].some(sDirty)) {
+      syncNote('Save the conflict before syncing', 'bad', false);
+      toast('Save the conflict before syncing', true);
+      return;
+    }
     const out = await api('POST', '/api/sync', {});
+    lastSync = out;
     await poll(true);
-    showSync(out);
+    const o = syncOutcome(out);
+    syncNote(o.text, o.kind, o.details);
+    toast(o.kind === 'bad' ? 'Sync needs attention' : (o.text.startsWith('In sync') ? o.text : 'Synced'), o.kind === 'bad');
     await refreshSyncStatus();
   } catch (e) {
+    syncNote('Sync failed: ' + e.message, 'bad', false);
     toast('Sync failed: ' + e.message, true);
   } finally {
-    syncing = false; b.disabled = false; $('#sync-label').textContent = 'Sync';
+    syncing = false; b.disabled = false; b.classList.remove('syncing'); $('#sync-label').textContent = 'Sync';
   }
 }
 $('#b-sync').onclick = syncNow;
@@ -1238,38 +1265,6 @@ async function refreshSyncStatus() {
 }
 setInterval(() => { if (!document.hidden) refreshSyncStatus(); }, 10000);
 window.addEventListener('focus', () => refreshSyncStatus());
-function prefixPaths(name) {  // one folder became several: every local path gains that folder's name
-  const p = k => (k ? `${name}/${k}` : name);
-  const remap = m => { const n = new Map(); for (const [k, v] of m) n.set(p(k), v); return n; };
-  S.expanded = new Set([...S.expanded].map(k => (k === '' ? '' : p(k))));
-  S.expanded.add(''); S.expanded.add(name); store('expanded', [...S.expanded]);
-  if (S.sel) S.sel = p(S.sel);
-  if (S.anchor) S.anchor = p(S.anchor);
-  S.multi = new Set([...S.multi].map(p));
-  S.bufs = remap(S.bufs); S.draftSent = remap(S.draftSent);
-  if (S.file && S.file.path) S.file.path = p(S.file.path);
-  const msec = new Map();
-  for (const [k, st] of S.msec) { st.path = p(k); msec.set(st.path, st); }
-  S.msec = msec;
-  const stuck = {}; for (const [k, v] of Object.entries(S.stuck)) stuck[p(k)] = v; S.stuck = stuck;
-  S.hydrated = new Set([...S.hydrated].map(p));
-  const hist = new Map(); for (const [k, v] of HIST) hist.set(p(k), v); HIST.clear();
-  for (const [k, v] of hist) HIST.set(k, v);
-  if (S.sel) history.replaceState(null, '', '#' + encodeURIComponent(S.sel));
-}
-async function openAnotherTree() {
-  const path = prompt('Folder to open as another tree:', '');
-  if (!path) return;
-  try {
-    const r = await api('POST', '/api/mount', { path });
-    if (r.promoted) prefixPaths(r.promoted);
-    if (r.name) S.expanded.add(r.name);
-    store('expanded', [...S.expanded]);
-    await loadTree();
-    toast('Opened ' + r.name);
-  } catch (e) { toast(e.message, true); }
-}
-$('#b-open').onclick = openAnotherTree;
 
 /* ---------- selection & detail ---------- */
 async function select(path) {
