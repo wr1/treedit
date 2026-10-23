@@ -81,8 +81,9 @@ Remote bot - when the user runs treedit on another machine and you work in a clo
 1. At the start and after your commits, run `treedit sync --no-commit`. It commits nothing, pulls
    their latest commits and feedback, rebases your commits on top, and pushes them. A conflicting
    .treenotes.json is merged entry by entry, so their new feedback and your replies both survive.
-2. The user's Sync pushes a work-file conflict for you to resolve: the last commit subject starts
-   with `user: sync conflict` and names the files. Read every listed file in full, keep both sides
-   where they belong, remove all `<<<<<<<`, `=======` and `>>>>>>>` markers, run the checks, then
-   commit `agent: resolve sync conflict (<files>)` and sync again.
+2. The user's Sync pushes a work-file conflict for you to resolve: `treedit sync` reports
+   `conflict: <files>` (and `/api/sync` sets `state: "conflict"` with `conflicts: [<files>]`)
+   whenever any tracked file still contains unresolved conflict markers. Read every listed file in
+   full, keep both sides where they belong, remove all `<<<<<<<`, `=======` and `>>>>>>>` markers,
+   run the checks, then commit `agent: resolve sync conflict (<files>)` and sync again.
 3. Run it from the repository root (or `-C <folder>`). Never force, reset or push by hand.

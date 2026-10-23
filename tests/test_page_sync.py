@@ -121,3 +121,6 @@ def test_outcome_reports_a_pushed_conflict(lib):
 def test_conflict_state_waits_for_the_remote(lib):
     got = state(lib, [repo(state="conflict")])
     assert got["state"] == "conflict" and "remote" in got["title"]
+    with_files = state(lib, [repo(state="conflict", conflicts=["README.md"], ahead=1, behind=1, dirty=1)])
+    assert with_files["state"] == "conflict"
+    assert "README.md" in with_files["title"] and "remote" in with_files["title"]

@@ -1310,16 +1310,19 @@ function syncState(repos) {  // aggregate one state for every opened folder's re
   const ahead = repos.reduce((n, r) => n + (r.ahead || 0), 0);
   const behind = repos.reduce((n, r) => n + (r.behind || 0), 0);
   const dirty = repos.reduce((n, r) => n + (r.dirty || 0), 0);
-  const conflict = repos.some(r => r.state === 'conflict');
+  const conflicts = [...new Set(repos.flatMap(r => r.conflicts || []))];
+  const conflict = conflicts.length > 0 || repos.some(r => r.state === 'conflict');
   const up = repos.filter(r => r.upstream).map(r => `${r.branch}→${r.upstream}`).join(', ');
   const bits = [];
   if (behind) bits.push(`${behind} to pull`);
   if (ahead) bits.push(`${ahead} to push`);
   if (dirty) bits.push(`${dirty} uncommitted`);
-  const state = behind && (ahead || dirty) ? 'diverged' : behind ? 'behind' : conflict ? 'conflict'
+  const state = conflict ? 'conflict' : behind && (ahead || dirty) ? 'diverged' : behind ? 'behind'
     : ahead ? 'ahead' : dirty ? 'dirty' : up ? 'in-sync' : 'no-remote';
   const title = state === 'in-sync' ? `In sync with ${up} — nothing to pull`
-    : state === 'conflict' ? 'Conflict pushed — waiting for the remote to resolve it'
+    : state === 'conflict' ? (conflicts.length
+      ? `Conflict in ${conflicts.join(', ')} — waiting for the remote to resolve it`
+      : 'Conflict pushed — waiting for the remote to resolve it')
     : state === 'no-remote' ? 'Sync: no git remote'
     : `Sync: ${bits.join(' · ')}${up ? ' · ' + up : ''}`;
   return { state, title };

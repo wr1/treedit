@@ -9,8 +9,9 @@
   with its markers and pushed by default, so the remote agent resolves it (the Sync dot then shows
   "conflict pushed"); `treedit sync --no-push-conflict` aborts and lists the files instead.
   `treedit sync --no-commit` is the remote side's half: push what is committed, pull the rest. A dot
-  on the Sync button shows whether the tree is in sync, ahead, behind, diverged, has a conflict
-  waiting on the remote, or has uncommitted work.
+  on the Sync button (and `/api/sync` / `treedit sync`) detects unresolved conflict markers directly
+  in tracked files (`conflicts: [...]`, `state: "conflict"`), so the warning stays active across
+  later commits on other files until the markers are resolved.
 - Markdown preview: Preview in the file bar renders a .md file (marked, sanitized with DOMPurify).
   A ```mermaid block renders in the window; a ```d2 block renders through the installed d2 CLI and
   is shown as a sandboxed image. Links are followed by clicking: another Markdown file opens in the

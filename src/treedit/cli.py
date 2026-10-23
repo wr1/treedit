@@ -307,6 +307,38 @@ def _conflicts(top: Path) -> list:
     return [ln for ln in out.splitlines() if ln.strip()] if rc == 0 else []
 
 
+def _has_conflict_markers(text: str) -> bool:
+    """True when TEXT contains an ordered git conflict block (<<<<<<< ... ======= ... >>>>>>>)."""
+    stage = 0
+    for ln in text.splitlines():
+        if ln == "<<<<<<<" or ln.startswith("<<<<<<< "):
+            stage = 1
+        elif stage == 1 and ln == "=======":
+            stage = 2
+        elif stage == 2 and (ln == ">>>>>>>" or ln.startswith(">>>>>>> ")):
+            return True
+    return False
+
+
+def _conflict_files(top: Path) -> list:
+    """Tracked files in TOP with unmerged git index stages or unresolved conflict markers."""
+    found = set(_conflicts(top))
+    rc, out, _ = git_run(
+        top, "grep", "-I", "-l", "--all-match", "-e", "^<<<<<<<", "-e", "^=======", "-e", "^>>>>>>>", timeout=30
+    )
+    if rc == 0:
+        for rel in out.splitlines():
+            rel = rel.strip()
+            if not rel or rel in found:
+                continue
+            try:
+                if _has_conflict_markers((top / rel).read_text(encoding="utf-8", errors="replace")):
+                    found.add(rel)
+            except OSError:
+                pass
+    return sorted(found)
+
+
 def _rebasing(top: Path) -> bool:
     return any((p := _git_path(top, name)) is not None and p.exists() for name in ("rebase-merge", "rebase-apply"))
 
@@ -549,6 +581,7 @@ def sync_info(root: Path) -> dict:
         "ahead": 0,
         "behind": 0,
         "dirty": 0,
+        "conflicts": [],
         "state": "not-git",
     }
     top = repo_top(root)
@@ -563,13 +596,16 @@ def sync_info(root: Path) -> dict:
         out["remotes"] = raw.split()
     rc, raw, _ = git_run(top, "status", "--porcelain", timeout=30)
     out["dirty"] = len([ln for ln in raw.splitlines() if ln.strip()]) if rc == 0 else 0
+    out["conflicts"] = _conflict_files(top)
     rc, raw, _ = git_run(top, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", timeout=10)
     if rc == 0:
         out["upstream"] = raw.strip()
         out["ahead"] = _count(top, f"{out['upstream']}..HEAD")
         out["behind"] = _count(top, f"HEAD..{out['upstream']}")
     ahead, behind, dirty = out["ahead"], out["behind"], out["dirty"]
-    if (ahead or dirty) and behind:
+    if out["conflicts"]:
+        out["state"] = "conflict"
+    elif (ahead or dirty) and behind:
         out["state"] = "diverged"
     elif behind:
         out["state"] = "behind"
@@ -579,9 +615,6 @@ def sync_info(root: Path) -> dict:
         out["state"] = "dirty"
     elif out["upstream"]:
         out["state"] = "in-sync"
-    rc, last, _ = git_run(top, "log", "-1", "--format=%s", timeout=10)
-    if rc == 0 and last.strip().startswith("user: sync conflict") and out["state"] == "in-sync":
-        out["state"] = "conflict"  # markers are on the remote side now, waiting for the bot
     return out
 
 
@@ -3595,6 +3628,9 @@ def sync_tree(
             bits.append(f"merged {plural(r['notes'], 'notes file')}")
         if r["published"]:
             bits.append("pushed conflict: " + ", ".join(r["published"]))
+        unresolved = [f for f in _conflict_files(Path(r["repo"])) if f not in r["published"]]
+        if unresolved:
+            bits.append("conflict: " + ", ".join(unresolved))
         bits.append(f"pushed {plural(r['pushed'], 'commit')}" if r["pushed"] else "nothing to push")
         print("  " + ", ".join(bits))
     if failed:
@@ -3740,10 +3776,11 @@ Remote bot - when the user runs treedit on another machine and you work in a clo
 1. At the start and after your commits, run `treedit sync --no-commit`. It commits nothing, pulls
    their latest commits and feedback, rebases your commits on top, and pushes them. A conflicting
    .treenotes.json is merged entry by entry, so their new feedback and your replies both survive.
-2. The user's Sync pushes a work-file conflict for you to resolve: the last commit subject starts
-   with `user: sync conflict` and names the files. Read every listed file in full, keep both sides
-   where they belong, remove all `<<<<<<<`, `=======` and `>>>>>>>` markers, run the checks, then
-   commit `agent: resolve sync conflict (<files>)` and sync again.
+2. The user's Sync pushes a work-file conflict for you to resolve: `treedit sync` reports
+   `conflict: <files>` (and `/api/sync` sets `state: "conflict"` with `conflicts: [<files>]`)
+   whenever any tracked file still contains unresolved conflict markers. Read every listed file in
+   full, keep both sides where they belong, remove all `<<<<<<<`, `=======` and `>>>>>>>` markers,
+   run the checks, then commit `agent: resolve sync conflict (<files>)` and sync again.
 3. Run it from the repository root (or `-C <folder>`). Never force, reset or push by hand.
 """
 

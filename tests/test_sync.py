@@ -122,7 +122,9 @@ def test_sync_merges_a_conflicting_notes_file(pair):
     assert [f["text"] for f in fb] == ["do the thing", "from this side", "from the other side"]
 
 
-def test_sync_pushes_a_work_file_conflict(pair):
+def test_sync_pushes_a_work_file_conflict(pair, capsys):
+    from treedit.cli import main
+
     a, b = pair
     (a / "README.md").write_text("their version\n")
     git(a, "commit", "-qam", "agent: theirs")
@@ -134,7 +136,54 @@ def test_sync_pushes_a_work_file_conflict(pair):
     assert "<<<<<<<" in text and "my version" in text and "their version" in text
     assert git(b, "log", "-1", "--format=%s").startswith("user: sync conflict")
     assert git(b, "rev-parse", "HEAD") == git(b, "rev-parse", "origin/main")
-    assert sync_info(b)["state"] == "conflict"
+    info = sync_info(b)
+    assert info["state"] == "conflict" and info["conflicts"] == ["README.md"]
+
+    # a later commit on another file (or local edits) must NOT clear the conflict state
+    (b / "other.txt").write_text("unrelated change\n")
+    git(b, "add", "other.txt")
+    git(b, "commit", "-qm", "user: unrelated commit")
+    info = sync_info(b)
+    assert info["state"] == "conflict" and info["conflicts"] == ["README.md"] and info["ahead"] == 1
+
+    (b / "dirty.txt").write_text("uncommitted\n")
+    info = sync_info(b)
+    assert info["state"] == "conflict" and info["conflicts"] == ["README.md"] and info["dirty"] == 1
+    (b / "dirty.txt").unlink()
+    git(b, "push", "-q")
+
+    # when the remote side pulls the conflict via `treedit sync --no-commit`, CLI output names the conflict
+    main(["sync", "--no-commit", "-C", str(a)])
+    cli_out = capsys.readouterr().out
+    assert "conflict: README.md" in cli_out
+    assert sync_info(a)["state"] == "conflict" and sync_info(a)["conflicts"] == ["README.md"]
+
+    # resolving the conflict markers clears `conflicts` and restores normal state
+    (a / "README.md").write_text("merged version\n")
+    assert sync_info(a)["conflicts"] == [] and sync_info(a)["state"] == "dirty"
+    git(a, "commit", "-qam", "agent: resolve sync conflict (README.md)")
+    assert sync_info(a)["conflicts"] == [] and sync_info(a)["state"] == "ahead"
+    assert sync_repo(a, commit=False)["ok"]
+    assert sync_info(a)["conflicts"] == [] and sync_info(a)["state"] == "in-sync"
+
+
+def test_sync_info_ignores_inline_or_unordered_markers_and_self_repo(pair):
+    from pathlib import Path
+
+    a, _ = pair
+    # inline mentions and out-of-order marker lines are not conflict blocks
+    (a / "README.md").write_text(
+        "Remove all `<<<<<<<`, `=======` and `>>>>>>>` markers.\n>>>>>>> branch\n=======\n<<<<<<< HEAD\n"
+    )
+    git(a, "commit", "-qam", "docs: mention markers")
+    git(a, "push", "-q")
+    info = sync_info(a)
+    assert info["conflicts"] == [] and info["state"] == "in-sync"
+
+    # running sync_info on the treedit repository itself must not false-flag SKILL.md or tests
+    treedit_root = Path(__file__).resolve().parents[1]
+    self_info = sync_info(treedit_root)
+    assert self_info["conflicts"] == []
 
 
 def test_sync_can_refuse_to_push_a_conflict(pair):
