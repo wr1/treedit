@@ -23,6 +23,8 @@
   the selection. A file git tracks is removed with `git rm`, so it leaves the index too. It asks first
   only when the deletion cannot be undone: an untracked path, or one whose annotation would be dropped.
 - Three more window themes: GitHub light, Gruvbox and Evening (a warm dark).
+- The tree keeps its scroll position when a row is selected, a folder opens, or a live refresh
+  rebuilds the rows; it no longer jumps back to the top.
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes
   (wrapping around). In the tree pane, Ctrl+Shift+Up/Down or plain Up/Down move the selection and
   Enter opens a file or folds a folder. Ctrl/Cmd+N opens New….

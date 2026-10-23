@@ -856,9 +856,14 @@ function renderHeaderChips() {  // a single folder has no mount row, so its sess
 function renderTree() {
   const f = S.hitsOn ? '' : $('#filter').value.trim().toLowerCase();
   const showNotes = $('#shownotes').checked, showCounts = $('#showcounts').checked, heat = S.colour !== 'off', compact = $('#compact').checked;
+  const pane = $('#treepane'), top = pane.scrollTop, left = pane.scrollLeft;  // keep the view still while rows are rebuilt
   const box = $('#tree'); box.textContent = '';
   if (!S.tree) return;
-  if (S.orderMode === 'recent') return renderRecent(f);
+  if (S.orderMode === 'recent') {
+    renderRecent(f);
+    pane.scrollTop = top; pane.scrollLeft = left;
+    return;
+  }
   S.order = [];
   const picked = p => S.multi.size ? S.multi.has(p) : S.sel === p;
   const vis = new Map();
@@ -917,6 +922,7 @@ function renderTree() {
   S.flashPaths.clear();
   renderOrphans();
   renderHeaderChips();
+  pane.scrollTop = top; pane.scrollLeft = left;
 }
 function multiClick(path, range, additive) {
   if (!S.multi.size && S.sel !== null && S.byPath.has(S.sel)) S.multi.add(S.sel);
