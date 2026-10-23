@@ -58,6 +58,19 @@ def test_sync_outside_git(ws):
     assert sync_info(ws.root)["state"] == "not-git"
 
 
+def test_sync_skips_a_local_only_notes_repo(pair):
+    a, _ = pair
+    notes = a / "notes"
+    notes.mkdir()
+    subprocess.run(["git", "init", "-q", str(notes)], check=True, capture_output=True)
+    git(notes, "config", "user.email", "test@example.com")
+    git(notes, "config", "user.name", "test")
+    (notes / "private.md").write_text("local only\n")
+    git(notes, "add", "-A")
+    git(notes, "commit", "-qm", "private notes")
+    assert _ws(str(a), "", [], False).sync_repos() == [a.resolve()]
+
+
 def test_sync_info_reports_drift(pair):
     a, b = pair
     assert sync_info(b)["state"] == "in-sync"

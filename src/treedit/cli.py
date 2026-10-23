@@ -1729,12 +1729,18 @@ class Workspace:
 
     def sync_repos(self) -> list[Path]:
         """The repositories to sync for this folder: the one holding the tree, and the one holding
-        its notes file (a nested notes/ repo is its own, and notes travel to the other side)."""
+        its notes file (a nested notes/ repo is its own, and notes travel to the other side). A
+        notes repo with no remote is local-only: there is nothing to exchange, and it must not turn
+        an otherwise clean sync into a failure."""
         out: list[Path] = []
-        for p in (self.root, self.notes_path.parent):
+        root_top = repo_top(self.root)
+        for i, p in enumerate((self.root, self.notes_path.parent)):
             top = repo_top(p)
-            if top is not None and top not in out:
-                out.append(top)
+            if top is None or top in out:
+                continue
+            if i and top != root_top and not git_run(top, "remote", timeout=10)[1].split():
+                continue
+            out.append(top)
         return out
 
     def sync(self, commit: bool = True, message: str = "user: treedit sync") -> list[dict]:
