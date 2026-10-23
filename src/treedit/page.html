@@ -1776,6 +1776,28 @@ function headingIds(root) {  // marked v15 leaves headings without ids; anchors 
     used.add(id); h.id = id;
   }
 }
+async function followMdLink(href) {  // the one navigator for preview links and Ctrl/Cmd+click in the source
+  const h = String(href || '').trim();
+  if (!h) return;
+  if (h.startsWith('#')) {
+    const anchor = h.slice(1);
+    if (MDP.on) scrollMd(anchor); else { MDP.anchor = anchor; setMdPreview(true); }
+    return;
+  }
+  if (/^(https?:|mailto:)/i.test(h)) {
+    const w = window.open(h, '_blank', 'noopener');
+    if (!w) toast('Could not open ' + h, true);
+    return;
+  }
+  const p = mdPath(h), anchor = mdAnchor(h);
+  if (!p) return;
+  if (!S.byPath.has(p)) { toast('Not in this tree: ' + p, true); return; }
+  await select(p);
+  if (isMarkdown(p) && S.file && S.file.path === p) {
+    MDP.anchor = anchor;
+    setMdPreview(true);
+  }
+}
 function rewriteMd(root) {
   headingIds(root);
   for (const img of root.querySelectorAll('img[src]')) {
@@ -1787,24 +1809,62 @@ function rewriteMd(root) {
   for (const a of root.querySelectorAll('a[href]')) {
     const h = a.getAttribute('href');
     if (!h) continue;
-    if (h.startsWith('#')) {  // a section in this preview
-      a.onclick = e => { e.preventDefault(); scrollMd(h.slice(1)); };
-      continue;
-    }
     if (/^(https?:|mailto:)/i.test(h)) { a.target = '_blank'; a.rel = 'noreferrer'; continue; }
-    const p = mdPath(h), anchor = mdAnchor(h);
-    if (!p) { if (anchor) a.onclick = e => { e.preventDefault(); scrollMd(anchor); }; continue; }
-    a.onclick = async e => {  // follow a link through the tree, keeping the preview for Markdown
-      e.preventDefault();
-      if (!S.byPath.has(p)) { toast('Not in this tree: ' + p, true); return; }
-      await select(p);
-      if (isMarkdown(p) && S.file && S.file.path === p) {
-        MDP.anchor = anchor;
-        setMdPreview(true);
-      }
-    };
+    a.onclick = e => { e.preventDefault(); followMdLink(h); };
   }
 }
+function mdLinkAt(text, at) {  // the inline link, image or bare URL under a source offset
+  const start = text.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
+  const end = text.indexOf('\n', at);
+  const line = text.slice(start, end < 0 ? text.length : end);
+  const inline = /!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+["'][^)]*["'])?\s*\)/g;
+  for (let m; (m = inline.exec(line));) {
+    if (at >= start + m.index && at <= start + m.index + m[0].length) return m[1];
+  }
+  const url = /https?:\/\/[^\s<>()]+/g;
+  for (let m; (m = url.exec(line));) {
+    if (at >= start + m.index && at <= start + m.index + m[0].length) return m[0];
+  }
+  return '';
+}
+function editorOffsetAt(x, y) {  // map a click to the source offset through the highlight copy
+  if (!$('#editwrap').classList.contains('hl') || !hlEl.textContent) return -1;
+  const ep = editor.style.pointerEvents, hp = hlEl.style.pointerEvents;
+  editor.style.pointerEvents = 'none'; hlEl.style.pointerEvents = 'auto';
+  let range = null;
+  try {
+    if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(x, y);
+    else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (pos) range = { startContainer: pos.offsetNode, startOffset: pos.offset };
+    }
+  } finally {
+    editor.style.pointerEvents = ep; hlEl.style.pointerEvents = hp;
+  }
+  if (!range || !range.startContainer || !hlEl.contains(range.startContainer)) return -1;
+  const r = document.createRange();
+  r.selectNodeContents(hlEl);
+  try { r.setEnd(range.startContainer, range.startOffset); } catch { return -1; }
+  return r.toString().length;
+}
+editor.addEventListener('click', e => {  // in source: Ctrl/Cmd/Alt+click follows a link, plain click edits
+  if (!(e.ctrlKey || e.metaKey || e.altKey) || !S.file || !isMarkdown(S.file.path)) return;
+  const at = editorOffsetAt(e.clientX, e.clientY);
+  if (at < 0) return;
+  const href = mdLinkAt(editor.value, at);
+  if (!href) return;
+  e.preventDefault();
+  followMdLink(href);
+});
+editor.addEventListener('mousemove', e => {  // show a pointer over a link while the follow key is held
+  if (!(e.ctrlKey || e.metaKey || e.altKey) || !S.file || !isMarkdown(S.file.path)) { editor.style.cursor = ''; return; }
+  const at = editorOffsetAt(e.clientX, e.clientY);
+  editor.style.cursor = at >= 0 && mdLinkAt(editor.value, at) ? 'pointer' : '';
+});
+editor.addEventListener('mouseleave', () => { editor.style.cursor = ''; });
+window.addEventListener('keyup', e => {
+  if (e.key === 'Control' || e.key === 'Meta' || e.key === 'Alt') editor.style.cursor = '';
+});
 async function loadMermaid() {  // lazy: only a preview with a Mermaid block pays for the library
   if (window.mermaid) return window.mermaid;
   if (!loadMermaid.p) {
