@@ -25,10 +25,10 @@
 - Three more window themes: GitHub light, Gruvbox and Evening (a warm dark).
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes
   (wrapping around). In the tree pane, Ctrl+Shift+Up/Down or plain Up/Down move the selection and
-  Enter opens a file or folds a folder.
-- Window: a New… action creates a file or folder at any depth: it previews the dry-run list, asks to
-  confirm, shows and logs exactly what it created (with an Undo button) and selects the new node. It calls
-  the same core as `treedit new` (`/api/create`, `/api/undo`).
+  Enter opens a file or folds a folder. Ctrl/Cmd+N opens New….
+- Window: a New… action creates files or folders at any depth from one multiline box (one path per
+  line; an extension picks a file, a trailing / a folder), with missing parents. It creates and logs
+  them in one go and selects the first new node, without a dry-run or a post-create dialog.
 - `treedit new PATH...`: create files and folders at any depth with every missing parent. The last name
   decides the kind: an extension (`.md`, `.xx`) makes a file, no extension a folder (`v1.0/` asks for a
   dotted folder with a trailing slash). Prints each entry created; existing paths error unless

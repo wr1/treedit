@@ -469,11 +469,11 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   </aside>
   <div id="divider"></div>
   <section id="detail" tabindex="-1">
-    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Shift+←/→ moves between the tree, editor and agent panes · in the tree, ↑/↓ move and Enter opens<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row to copy or delete it (a tracked file goes with git rm), or Ctrl/Cmd+C to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
+    <div id="empty">Select a file to edit it or a plot to view it, or any file or folder to leave feedback for the agent.<br><br><small>Ctrl/Cmd+S saves · Ctrl/Cmd+N creates a file or folder · Ctrl+W / Ctrl+Q quits · Ctrl+F finds in the file · Enter in the header search looks through every file<br>Ctrl+Shift+←/→ moves between the tree, editor and agent panes · in the tree, ↑/↓ move and Enter opens<br>Ctrl+Z / Ctrl+Shift+Z undo and redo · Ctrl+/ comments lines, Shift+Alt+A a block<br>Ctrl/Cmd+click or Shift+click rows to view several at once<br>Right-click a row to copy or delete it (a tracked file goes with git rm), or Ctrl/Cmd+C to copy that subtree. Skill folders join their SKILL.md files, parent first<br>Plots (png, svg, pdf, …) open as a picture; SVG has a Source button<br>Select lines, then “+ Feedback” to comment on them for the agent</small></div>
     <div id="pane" hidden>
       <div class="bar">
         <span id="crumb"></span><span id="linkinfo"></span>
-        <button id="b-new" title="Create a file or folder at any depth - a name with an extension is a file, without one a folder; previews first">New…</button>
+        <button id="b-new" title="Create a file or folder at any depth (Ctrl/Cmd+N) - a name with an extension is a file, without one a folder">New…</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
         <button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams and clickable links">Preview</button>
       </div>
@@ -3415,6 +3415,9 @@ document.addEventListener('keydown', e => {
     if (k === 'q' || (k === 'w' && !inTerm)) { e.preventDefault(); quitApp(); return; }
   }
   if (inTerm) return;  // keys belong to the shell / agent
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n' && !$('#modal').open) {
+    e.preventDefault(); newAtDepth(); return;
+  }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'c' && !copyKeyBlocked(e)) {
     const paths = (!$('#ctx').hidden && ctxPaths) ? ctxPaths : selectionPaths();
     if (paths.length) { e.preventDefault(); hideCtx(); copySubtrees(paths); return; }
