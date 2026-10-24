@@ -135,6 +135,20 @@ def test_guards(server):
     assert call(server, "GET", "/api/term")[0] == 404
 
 
+def test_open_endpoint(server, tree, monkeypatch):
+    import treedit.cli as tcli
+
+    (tree / "fig.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    calls = []
+    monkeypatch.setattr(tcli.shutil, "which", lambda name: "/usr/bin/inkscape" if name == "inkscape" else None)
+    monkeypatch.setattr(tcli.subprocess, "Popen", lambda *a, **k: calls.append(a))
+    status, out = call(server, "POST", "/api/open", {"path": "fig.svg", "app": "inkscape"})
+    assert status == 200 and out["cmd"].startswith("inkscape ") and calls
+    assert call(server, "POST", "/api/open", {"path": "README.md", "app": "inkscape"})[0] == 400
+    monkeypatch.setattr(Handler, "loopback", False)
+    assert call(server, "POST", "/api/open", {"path": "fig.svg", "app": "inkscape"})[0] == 403
+
+
 def test_pdf_endpoints(server, tree):
     if not (shutil.which("pdfinfo") and shutil.which("pdftoppm")):
         pytest.skip("needs poppler-utils")

@@ -1815,6 +1815,33 @@ class Workspace:
             raise HTTPError(413, "plot is too large to show")
         return data, mime
 
+    def open_with(self, rel: str, app: str = "inkscape") -> str:
+        """Open an SVG in a desktop app (Inkscape) on the machine serving the tree. Only the fixed
+        editor is allowed: this endpoint must not become a way to run arbitrary programs."""
+        if app != "inkscape":
+            raise HTTPError(400, "the only external editor is inkscape")
+        rel = self.norm(rel)
+        if not rel.lower().endswith(".svg"):
+            raise HTTPError(400, "only SVG files open in Inkscape")
+        t = self.target_path(rel)
+        if not t.is_file():
+            raise HTTPError(404, "file not found")
+        exe = shutil.which("inkscape")
+        if not exe:
+            raise HTTPError(404, "Inkscape is not installed on the treedit server")
+        try:
+            subprocess.Popen(
+                [exe, str(t)],
+                cwd=str(self.root),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as e:
+            raise HTTPError(500, f"could not start Inkscape: {e}") from e
+        return f"{Path(exe).name} {t.name}"
+
     def _pdf_file(self, rel: str) -> Path:
         """The checked PDF behind REL, for the page rasteriser."""
         rel = self.norm(rel)
@@ -2639,6 +2666,10 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.raw_file(sub)
 
+    def open_with(self, rel: str, app: str = "inkscape") -> str:
+        _, w, sub = self.split(rel)
+        return w.open_with(sub, app)
+
     def pdf_info(self, rel: str) -> dict:
         _, w, sub = self.split(rel)
         return w.pdf_info(sub)
@@ -2932,6 +2963,12 @@ class Handler(BaseHTTPRequestHandler):
             base = self.terms.env if self.terms else dict(os.environ)
             return self.send_json(
                 200, {"ok": True, "cmd": external_terminal(w.root, {**base, **self.term_env(w)}, self.agent)}
+            )
+        if method == "POST" and path == "/api/open":
+            if not self.loopback:  # a desktop app belongs to the machine in front of the user
+                raise HTTPError(403, "opening an app needs a loopback window")
+            return self.send_json(
+                200, {"ok": True, "cmd": ws.open_with(str(b.get("path") or ""), str(b.get("app") or "inkscape"))}
             )
         if method == "POST" and path == "/api/sync":
             commit = b.get("commit", True)

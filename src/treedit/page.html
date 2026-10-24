@@ -3457,6 +3457,18 @@ function openCtx(x, y, path) {
   cp.append(el('span', '', 'Copy path'));
   cp.onclick = async () => { hideCtx(); const ok = await writeClipboard(pathLabel(path)); toast(ok ? 'Copied path' : 'Copy failed', !ok); };
   menu.append(copy, cp);
+  const node = S.byPath.get(path);
+  if (paths.length === 1 && node && node.type === 'file' && /\.svg$/i.test(path)) {
+    const ink = el('button'); ink.type = 'button';
+    ink.append(el('span', '', 'Open in Inkscape'), el('kbd', '', '↗'));
+    ink.title = 'Edit this SVG in Inkscape (installed on the machine serving the tree)';
+    ink.onclick = async () => {
+      hideCtx();
+      try { await api('POST', '/api/open', { path, app: 'inkscape' }); toast('Opening in Inkscape'); }
+      catch (e) { toast(e.message, true); }
+    };
+    menu.append(ink);
+  }
   const del = copyRoots(paths.filter(p => p !== ''), S.order);
   if (del.length) {
     const rm = el('button', 'danger'); rm.type = 'button';

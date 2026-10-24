@@ -29,6 +29,8 @@
 - Markdown lists: Tab/Shift+Tab move a bullet by one of the file's own nesting levels (2 spaces, 4
   spaces or tabs) instead of always 2; Shift+Tab at the left margin drops the bullet/number/task
   marker, so the item leaves the list.
+- Right-click an SVG row and choose **Open in Inkscape** to edit it in Inkscape on the machine
+  running the treedit server (only that one app is allowed; needs Inkscape installed).
 - PDF previews rasterise pages server-side with Poppler (`pdfinfo`/`pdftoppm`) and show a page
   counter with ‹ › controls; WebKit/Tauri has no dependable inline PDF viewer. If Poppler is not
   installed the old browser-viewer fallback is used.
