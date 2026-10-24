@@ -12,8 +12,9 @@
   on the Sync button (and `/api/sync` / `treedit sync`) detects unresolved conflict markers directly
   in tracked files (`conflicts: [...]`, `state: "conflict"`), so the warning stays active across
   later commits on other files until the markers are resolved.
-- Markdown preview: Preview in the file bar opens beside the source instead of covering it, and
-  follows edits as you type. It renders with marked, sanitized with DOMPurify. A ```mermaid block
+- Markdown preview: Preview in the file bar opens beside the source instead of covering it, follows
+  edits as you type, and scrolls to keep the block under the caret in view. It renders with marked,
+  sanitized with DOMPurify. A ```mermaid block
   renders in the window; a ```d2 block renders through the installed d2 CLI and is shown as a
   sandboxed image. Links are followed by clicking: another Markdown file opens in the preview,
   `#section` scrolls to the heading, and web links open in a new tab. In the source editor,

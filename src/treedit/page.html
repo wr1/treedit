@@ -1960,6 +1960,69 @@ async function renderDiagram(kind, source, box, gen) {
     if (gen === MDP.gen) { box.className = 'md-diagram bad'; box.textContent = kind + ': ' + (e.message || e); }
   }
 }
+function mdTokenOffsets(tokens, src) {  // token -> source offset, so a block can say where it began
+  const map = new WeakMap();
+  function walk(list, raw, base) {
+    let pos = 0;
+    for (const t of list) {
+      if (typeof t.raw !== 'string' || !t.raw) continue;
+      const at = raw.indexOf(t.raw, pos);
+      if (at < 0) continue;
+      map.set(t, base + at);
+      pos = at + t.raw.length;
+      if (t.items) {
+        let ip = 0;
+        for (const item of t.items) {
+          if (typeof item.raw !== 'string' || !item.raw) continue;
+          const ia = t.raw.indexOf(item.raw, ip);
+          if (ia < 0) continue;
+          map.set(item, base + at + ia);
+          ip = ia + item.raw.length;
+          if (item.tokens) walk(item.tokens, item.raw, base + at + ia);
+        }
+      } else if (t.tokens) walk(t.tokens, t.raw, base + at);
+    }
+  }
+  walk(tokens, src, 0);
+  return map;
+}
+function mdRenderer(offsets) {  // block tags carry data-src so the preview can follow the caret
+  const r = new marked.Renderer();
+  for (const name of ['heading', 'paragraph', 'code', 'blockquote', 'table', 'hr', 'list', 'listitem']) {
+    const orig = r[name];
+    if (typeof orig !== 'function') continue;
+    r[name] = function (token, ...rest) {
+      const html = orig.call(this, token, ...rest);
+      const at = offsets.get(token);
+      return at == null ? html : html.replace(/^<([a-z0-9]+)/i, `<$1 data-src="${at}"`);
+    };
+  }
+  return r;
+}
+function previewFollowCursor() {
+  if (!MDP.on || !S.file) return;
+  const view = $('#mdview'), els = view.querySelectorAll('[data-src]');
+  if (!els.length) return;
+  const at = editor.selectionStart;
+  let best = null;
+  for (const el of els) {
+    const n = +el.dataset.src;
+    if (n <= at && (!best || n >= best.n)) best = { el, n };
+  }
+  const el = (best || { el: els[0] }).el;
+  const r = el.getBoundingClientRect(), vr = view.getBoundingClientRect(), margin = 24;
+  if (r.top >= vr.top + margin && r.bottom <= vr.bottom - margin) return;
+  const max = Math.max(0, view.scrollHeight - view.clientHeight);
+  const top = Math.max(0, Math.min(max, view.scrollTop + r.top - vr.top - margin));
+  if (Math.abs(view.scrollTop - top) > 2) view.scrollTop = top;  // instant, so repeated events cannot overshoot
+}
+let followT = 0;
+function followCursorSoon() { clearTimeout(followT); followT = setTimeout(previewFollowCursor, 60); }
+editor.addEventListener('keyup', followCursorSoon);
+editor.addEventListener('click', followCursorSoon);
+document.addEventListener('selectionchange', () => {
+  if (MDP.on && document.activeElement === editor) followCursorSoon();
+});
 function renderMdPreview(gen) {
   if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
     $('#mdview').replaceChildren(el('div', 'md', 'The Markdown renderer did not load (vendor/marked.js, vendor/purify.js).'));
@@ -1970,7 +2033,15 @@ function renderMdPreview(gen) {
     return;
   }
   const root = el('div', 'md'), view = $('#mdview'), top = view.scrollTop;
-  root.innerHTML = DOMPurify.sanitize(marked.parse(editor.value, { gfm: true }));
+  try {
+    const tokens = marked.lexer(editor.value, { gfm: true });
+    root.innerHTML = DOMPurify.sanitize(
+      marked.parser(tokens, { gfm: true, renderer: mdRenderer(mdTokenOffsets(tokens, editor.value)) }),
+      { ADD_ATTR: ['data-src'] },
+    );
+  } catch {
+    root.innerHTML = DOMPurify.sanitize(marked.parse(editor.value, { gfm: true }));
+  }
   rewriteMd(root);
   view.replaceChildren(root);
   view.scrollTop = top;  // typing must not throw the preview back to the top
@@ -1985,10 +2056,11 @@ function renderMdPreview(gen) {
       pre.replaceWith(box);
       await renderDiagram(kind, code.textContent, box, gen);
     }
-    if (gen === MDP.gen && MDP.anchor) {
+    if (gen !== MDP.gen) return;
+    if (MDP.anchor) {
       const at = MDP.anchor; MDP.anchor = '';
       requestAnimationFrame(() => scrollMd(at));
-    }
+    } else requestAnimationFrame(previewFollowCursor);
   })();
 }
 $('#b-md').onclick = () => setMdPreview(!MDP.on);
