@@ -196,6 +196,8 @@ section#detail{flex:1;min-width:0;display:flex;flex-direction:column;position:re
 #banner[hidden]{display:none}
 #banner b{color:var(--danger)}
 #editwrap{flex:1;display:flex;min-height:0;position:relative;background:var(--bg);overflow:hidden}
+#textside{flex:1;min-width:0;display:flex;position:relative;overflow:hidden}
+#editwrap.md-split #textside{flex:1 1 50%;border-right:1px solid var(--line)}
 #marks{position:absolute;left:0;right:0;top:0;pointer-events:none}
 .mark{position:absolute;left:0;right:0;background:color-mix(in srgb,var(--fb) 9%,transparent);border-left:3px solid var(--fb)}
 .chg{position:absolute;width:4px;border-radius:2px;background:var(--agentc)}
@@ -217,7 +219,7 @@ body.wrap #editor{overflow-x:hidden}
 #editwrap.hl #editor::selection{color:transparent;background:color-mix(in srgb,var(--accent) 28%,transparent)}
 #hl.flash{animation:flash 1.2s ease-out}
 #b-md.on{border-color:var(--accent);color:var(--accent)}
-#mdview{position:absolute;inset:0;z-index:4;overflow:auto;padding:20px 30px 60px;background:var(--bg)}
+#mdview{flex:1 1 50%;min-width:0;overflow:auto;padding:18px 22px 50px;background:var(--bg)}
 #mdview[hidden]{display:none}
 #mdview .md{max-width:900px;margin:0 auto;font-size:14.5px;line-height:1.62}
 #mdview .md>:first-child{margin-top:0}
@@ -490,7 +492,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><div id="mdview" hidden></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1789,19 +1791,23 @@ function syncChrome() {
 }
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
-const MDP = { on: false, gen: 0, anchor: '' };
+const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 function resetMdPreview() {
-  MDP.on = false; MDP.gen++; MDP.anchor = '';
-  $('#mdview').hidden = true; $('#mdview').replaceChildren();
+  MDP.on = false; MDP.gen++; MDP.anchor = ''; clearTimeout(MDP.timer);
+  $('#mdview').hidden = true; $('#mdview').replaceChildren(); $('#mdview').scrollTop = 0;
+  $('#editwrap').classList.remove('md-split');
   $('#b-md').classList.remove('on'); $('#b-md').textContent = 'Preview';
+  requestAnimationFrame(() => { syncHL(); renderMarks(); });
 }
 function setMdPreview(on) {
   if (!on) return resetMdPreview();
   if (!S.file || !isMarkdown(S.file.path)) return;
   MDP.on = true; MDP.gen++;
-  $('#mdview').hidden = false; $('#b-md').classList.add('on'); $('#b-md').textContent = 'Source';
+  $('#mdview').hidden = false; $('#editwrap').classList.add('md-split');
+  $('#b-md').classList.add('on'); $('#b-md').textContent = 'Source';
   renderMdPreview(MDP.gen);
+  requestAnimationFrame(() => { syncHL(); renderMarks(); });
 }
 function mdPath(href) {  // a relative link in this file, as a tree path
   const clean = href.split('#')[0].split('?')[0];
@@ -1963,10 +1969,11 @@ function renderMdPreview(gen) {
     $('#mdview').replaceChildren(el('div', 'md', 'This file is too large to preview here.'));
     return;
   }
-  const root = el('div', 'md');
+  const root = el('div', 'md'), view = $('#mdview'), top = view.scrollTop;
   root.innerHTML = DOMPurify.sanitize(marked.parse(editor.value, { gfm: true }));
   rewriteMd(root);
-  $('#mdview').replaceChildren(root);
+  view.replaceChildren(root);
+  view.scrollTop = top;  // typing must not throw the preview back to the top
   const blocks = [...root.querySelectorAll('code.language-mermaid, code.language-d2')];
   (async () => {
     for (const code of blocks) {
@@ -2037,7 +2044,15 @@ function updatePos() {
   const v = editor.value.slice(0, editor.selectionStart), line = v.split('\n').length, col = v.length - v.lastIndexOf('\n');
   $('#pos').textContent = S.file && S.file.kind === 'text' ? `Ln ${line}, Col ${col}` : '';
 }
-editor.addEventListener('input', () => { updateFileState(); updatePos(); renderHL(); renderMarks(); });
+editor.addEventListener('input', () => {
+  updateFileState(); updatePos(); renderHL(); renderMarks();
+  if (MDP.on) {  // side-by-side: follow the typing without re-rendering on every keystroke
+    clearTimeout(MDP.timer);
+    MDP.timer = setTimeout(() => {
+      if (MDP.on && S.file && isMarkdown(S.file.path)) renderMdPreview(++MDP.gen);
+    }, 350);
+  }
+});
 editor.addEventListener('scroll', syncHL);
 ['keyup', 'click', 'select', 'mouseup'].forEach(ev => editor.addEventListener(ev, () => { updatePos(); updateFbButton(); }));
 /* ---------- undo / redo: one history per file, shared by the single and the stacked editors ---------- */
