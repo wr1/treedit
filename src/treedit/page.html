@@ -246,6 +246,8 @@ body.wrap #editor{overflow-x:hidden}
 #plotbar{display:flex;gap:8px;align-items:center;padding:4px 14px;border-bottom:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--dim)}
 #plotbar[hidden]{display:none}
 #plotbar button{padding:1px 8px;font-size:12px}
+#pdf-pageno{font:12px var(--mono);color:var(--dim);min-width:4.5em;text-align:center}
+#plotstage img.pdfpage{background:#fff}
 #plotview{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
 #plotview[hidden]{display:none}
 #plotstage{flex:1;min-height:0;overflow:auto;cursor:grab;
@@ -481,6 +483,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       <div id="banner" hidden></div>
       <div id="plotbar" hidden>
         <span id="plotmeta"></span><span class="spacer"></span>
+        <button id="pdf-prev" hidden title="Previous page">‹</button><span id="pdf-pageno" hidden></span><button id="pdf-next" hidden title="Next page">›</button>
         <button id="plot-out" title="Zoom out">−</button>
         <button id="plot-fit" title="Fit the pane. Double-click the plot for its own size">Fit</button>
         <button id="plot-in" title="Zoom in">+</button>
@@ -1675,7 +1678,7 @@ function setFile(f, keepView) {
   syncChrome();
   if (MDP.on) renderMdPreview(++MDP.gen);  // a disk reload or agent edit updates the preview
 }
-const Plot = { source: false, fit: true, scale: 1 };  // the open plot: picture, or SVG source
+const Plot = { source: false, fit: true, scale: 1, pdfPage: 1, pdfPages: 0 };  // the open plot: picture, or SVG source
 S.plotDoc = null;
 function rawUrl(path, hash) {
   return '/api/raw?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(hash || '');
@@ -1689,9 +1692,13 @@ function showPlot(f, keep) {
   const pdf = f.mime === 'application/pdf';
   stage.classList.toggle('pdf', pdf);
   if (pdf) {
-    const fr = document.createElement('iframe');
-    fr.src = rawUrl(f.path, f.hash); fr.title = f.path; stage.append(fr);
+    Plot.pdfPage = 1; Plot.pdfPages = 0;
+    const img = new Image(); img.alt = f.path; img.className = 'pdfpage';
+    img.onload = () => { updatePdfBar(); Plot.fit = true; layoutPlot(); };
+    img.onerror = () => { $('#plotmeta').textContent = 'could not render this PDF page'; };
+    const frame = el('div', 'plotframe'); frame.append(img); stage.append(frame);
     $('#plotmeta').textContent = 'pdf';
+    loadPdfInfo(f, stage);
   } else {
     const frame = el('div', 'plotframe'), img = document.createElement('img');
     img.alt = f.path; img.draggable = false; img.title = 'Double-click for the plot’s own size';
@@ -1701,6 +1708,43 @@ function showPlot(f, keep) {
     frame.append(img); stage.append(frame);
     $('#plotmeta').textContent = '';
   }
+}
+function pdfUrl(path, page, hash) {
+  return '/api/pdf?path=' + encodeURIComponent(path) + '&page=' + page + '&v=' + encodeURIComponent(hash || '');
+}
+async function loadPdfInfo(f, stage) {
+  try {
+    const r = await api('GET', '/api/pdf/info?path=' + encodeURIComponent(f.path));
+    if (stage.dataset.path !== f.path) return;
+    Plot.pdfPages = Math.max(1, r.pages | 0);
+    updatePdfBar();
+    pdfShow(f, 1);
+  } catch (e) {
+    if (stage.dataset.path === f.path) pdfFallback(f, stage, e.message);
+  }
+}
+function pdfShow(f, page) {
+  const img = $('#plotstage img.pdfpage');
+  if (!img) return;
+  Plot.pdfPage = Math.max(1, Math.min(page, Plot.pdfPages || page));
+  img.src = pdfUrl(f.path, Plot.pdfPage, f.hash);
+  updatePdfBar();
+}
+function updatePdfBar() {
+  const many = Plot.pdfPages > 1;
+  $('#pdf-prev').hidden = $('#pdf-next').hidden = $('#pdf-pageno').hidden = !many;
+  if (!many) return;
+  $('#pdf-pageno').textContent = `${Plot.pdfPage} / ${Plot.pdfPages}`;
+  $('#pdf-prev').disabled = Plot.pdfPage <= 1;
+  $('#pdf-next').disabled = Plot.pdfPage >= Plot.pdfPages;
+  $('#plotmeta').textContent = `pdf · page ${Plot.pdfPage} / ${Plot.pdfPages}`;
+}
+function pdfFallback(f, stage, why) {  // no poppler: let the browser try its own PDF viewer
+  stage.replaceChildren();
+  const fr = document.createElement('iframe'); fr.src = rawUrl(f.path, f.hash); fr.title = f.path;
+  stage.append(fr);
+  $('#plotmeta').textContent = 'browser PDF viewer' + (why ? ': ' + why : '');
+  $('#pdf-prev').hidden = $('#pdf-next').hidden = $('#pdf-pageno').hidden = true;
 }
 function layoutPlot() {
   const img = $('#plotstage img');
@@ -1740,6 +1784,8 @@ function syncChrome() {
   $('#plot-src').textContent = Plot.source ? 'Plot' : 'Source';
   const pdf = !!(S.file && S.file.mime === 'application/pdf') || !!(n && n.mime === 'application/pdf');
   $('#plot-out').hidden = $('#plot-in').hidden = $('#plot-fit').hidden = pdf || Plot.source;
+  if (pdf) updatePdfBar();
+  else $('#pdf-prev').hidden = $('#pdf-next').hidden = $('#pdf-pageno').hidden = true;
 }
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
@@ -1943,6 +1989,8 @@ $('#b-md').hidden = true;
 $('#plot-in').onclick = () => zoomPlot(1.25);
 $('#plot-out').onclick = () => zoomPlot(0.8);
 $('#plot-fit').onclick = () => { Plot.fit = true; layoutPlot(); };
+$('#pdf-prev').onclick = () => { if (S.file && Plot.pdfPage > 1) pdfShow(S.file, Plot.pdfPage - 1); };
+$('#pdf-next').onclick = () => { if (S.file && Plot.pdfPage < Plot.pdfPages) pdfShow(S.file, Plot.pdfPage + 1); };
 $('#plot-src').onclick = () => {
   if (!S.file || !S.file.plot || !S.plotDoc || S.plotDoc.content == null) return;
   if (!Plot.source) {

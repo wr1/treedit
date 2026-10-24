@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from conftest import git
+from conftest import git, tiny_pdf
 from treedit.cli import Handler, Server, _ws, main
 from treedit.term import Sessions, ws_frame
 
@@ -133,6 +133,21 @@ def test_guards(server):
         urlopen(req, timeout=5)
     assert e.value.code == 400
     assert call(server, "GET", "/api/term")[0] == 404
+
+
+def test_pdf_endpoints(server, tree):
+    if not (shutil.which("pdfinfo") and shutil.which("pdftoppm")):
+        pytest.skip("needs poppler-utils")
+    tiny_pdf(tree / "doc.pdf")
+    status, info = call(server, "GET", "/api/pdf/info?path=doc.pdf")
+    assert status == 200 and info["pages"] == 1
+    with urlopen(server + "/api/pdf?path=doc.pdf&page=1", timeout=10) as r:
+        assert r.headers["Content-Type"] == "image/png"
+        assert r.read().startswith(b"\x89PNG")
+    with urlopen(server + "/api/raw?path=doc.pdf", timeout=10) as r:
+        assert r.headers["Content-Type"] == "application/pdf"
+        assert "Content-Security-Policy" not in r.headers  # the browser fallback must be able to load it
+    assert call(server, "GET", "/api/pdf/info?path=README.md")[0] == 415
 
 
 def test_diagram_endpoint(server):

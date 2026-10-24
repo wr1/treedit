@@ -15,7 +15,8 @@ What it does
   * Edit any text file; Ctrl/Cmd+S saves, Ctrl+W / Ctrl+Q stops the server (closing the window or
     tab). Symlinked files edit their target.
   * Plot files (png, jpg, gif, webp, bmp, tiff, avif, svg, pdf) open in a viewer.
-    SVG can still be edited as source. Markdown has a preview with Mermaid and D2 diagrams.
+    SVG can still be edited as source. PDF pages are rasterised through Poppler with page controls
+    (the browser's viewer is only a fallback). Markdown has a preview with Mermaid and D2 diagrams.
   * The agent pane folds to a thin strip on the right edge, one segment per session, coloured by
     active, idle, ended or disconnected.
   * Annotate any file or folder (including the root): your standing comments for the agent,
@@ -887,6 +888,8 @@ def heat_ansi(rank, bold: bool) -> str:
 
 DIAGRAM_MAX = 200_000  # source bytes; a diagram bigger than this is not a Markdown illustration
 _diagrams: dict = {}  # sha1(source) -> svg, so re-rendering the same preview is cheap
+PDF_CACHE: dict = {}  # sha1(file|mtime|size|page|dpi) -> png, so paging back is instant
+PDF_CACHE_MAX = 24
 
 
 def render_d2(source: str) -> dict:
@@ -1812,6 +1815,67 @@ class Workspace:
             raise HTTPError(413, "plot is too large to show")
         return data, mime
 
+    def _pdf_file(self, rel: str) -> Path:
+        """The checked PDF behind REL, for the page rasteriser."""
+        rel = self.norm(rel)
+        if plot_mime(rel) != "application/pdf":
+            raise HTTPError(415, "not a PDF")
+        t = self.target_path(rel)
+        if not t.is_file():
+            raise HTTPError(404, "file not found")
+        if t.stat().st_size > RAW_MAX:
+            raise HTTPError(413, "PDF is too large to show")
+        return t
+
+    def pdf_info(self, rel: str) -> dict:
+        """How many pages the PDF has. Browser PDF viewers are unreliable in Tauri/WebKit, so the
+        window rasterises pages; pdfinfo only supplies the count."""
+        t = self._pdf_file(rel)
+        exe = shutil.which("pdfinfo")
+        if not exe:
+            raise HTTPError(404, "PDF pages need pdfinfo (install poppler-utils)")
+        try:
+            r = subprocess.run([exe, str(t)], capture_output=True, timeout=20, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise HTTPError(500, f"could not read the PDF: {e}") from e
+        m = re.search(rb"^Pages:\s+(\d+)", r.stdout, re.MULTILINE)
+        if r.returncode != 0 or not m:
+            msg = (r.stderr or r.stdout).decode("utf-8", "replace").strip().splitlines()
+            raise HTTPError(422, "pdfinfo: " + (msg[-1] if msg else "could not read the PDF"))
+        return {"pages": int(m.group(1))}
+
+    def pdf_page(self, rel: str, page: int = 1, dpi: int = 110) -> tuple[bytes, str]:
+        """One PDF page as a PNG, through pdftoppm. Cached by file signature, page and dpi."""
+        t = self._pdf_file(rel)
+        page, dpi = max(1, int(page)), max(72, min(int(dpi), 200))
+        st = t.stat()
+        key = sha1(f"{t}|{st.st_mtime_ns}|{st.st_size}|{page}|{dpi}".encode())
+        if key in PDF_CACHE:
+            return PDF_CACHE[key], "image/png"
+        exe = shutil.which("pdftoppm")
+        if not exe:
+            raise HTTPError(404, "PDF pages need pdftoppm (install poppler-utils)")
+        with tempfile.TemporaryDirectory(prefix="treedit-pdf-") as tmp:
+            prefix = Path(tmp) / "page"
+            try:
+                r = subprocess.run(
+                    [exe, "-png", "-r", str(dpi), "-f", str(page), "-l", str(page), "-singlefile", str(t), str(prefix)],
+                    capture_output=True,
+                    timeout=45,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as e:
+                raise HTTPError(504, f"could not render the PDF page: {e}") from e
+            out = prefix.with_suffix(".png")
+            if r.returncode != 0 or not out.is_file():
+                msg = (r.stderr or r.stdout).decode("utf-8", "replace").strip().splitlines()
+                raise HTTPError(422, "pdftoppm: " + (msg[-1] if msg else "could not render this page"))
+            data = out.read_bytes()
+        if len(PDF_CACHE) >= PDF_CACHE_MAX:
+            PDF_CACHE.pop(next(iter(PDF_CACHE)))
+        PDF_CACHE[key] = data
+        return data, "image/png"
+
     def write_file(self, rel: str, content: str, base_hash, force: bool) -> dict:
         rel = self.norm(rel)
         if not rel:
@@ -2575,6 +2639,14 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.raw_file(sub)
 
+    def pdf_info(self, rel: str) -> dict:
+        _, w, sub = self.split(rel)
+        return w.pdf_info(sub)
+
+    def pdf_page(self, rel: str, page: int = 1, dpi: int = 110) -> tuple[bytes, str]:
+        _, w, sub = self.split(rel)
+        return w.pdf_page(sub, page, dpi)
+
     def write_file(self, rel: str, content: str, base_hash, force: bool) -> dict:
         name, w, sub = self.split(rel)
         try:
@@ -2789,18 +2861,30 @@ class Handler(BaseHTTPRequestHandler):
             )
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
-        if method == "GET" and path == "/api/raw":
-            data, mime = ws.raw_file(q.get("path", ""))
+        if method == "GET" and path == "/api/pdf/info":
+            return self.send_json(200, ws.pdf_info(q.get("path", "")))
+        if method == "GET" and path == "/api/pdf":
+            try:
+                page = int(q.get("page", "1"))
+                dpi = int(q.get("dpi", "110"))
+            except ValueError as e:
+                raise HTTPError(400, "page and dpi must be numbers") from e
+            data, mime = ws.pdf_page(q.get("path", ""), page, dpi)
             return self.send(
                 200,
                 data,
                 mime,
-                {
-                    "X-Content-Type-Options": "nosniff",
-                    # a plot opened on its own must not run as a page on this origin
-                    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; sandbox",
-                },
+                {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"},
             )
+        if method == "GET" and path == "/api/raw":
+            data, mime = ws.raw_file(q.get("path", ""))
+            headers = {"X-Content-Type-Options": "nosniff"}
+            if mime != "application/pdf":  # the browser's own PDF viewer is the fallback when poppler is absent
+                # a plot opened on its own must not run as a page on this origin
+                headers["Content-Security-Policy"] = (
+                    "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; sandbox"
+                )
+            return self.send(200, data, mime, headers)
         b = self.body()
         if method == "POST" and path == "/api/texts":
             return self.send_json(200, {"files": text_batch(ws, b.get("paths"))})

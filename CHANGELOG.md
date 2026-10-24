@@ -27,6 +27,9 @@
 - Markdown lists: Tab/Shift+Tab move a bullet by one of the file's own nesting levels (2 spaces, 4
   spaces or tabs) instead of always 2; Shift+Tab at the left margin drops the bullet/number/task
   marker, so the item leaves the list.
+- PDF previews rasterise pages server-side with Poppler (`pdfinfo`/`pdftoppm`) and show a page
+  counter with ‹ › controls; WebKit/Tauri has no dependable inline PDF viewer. If Poppler is not
+  installed the old browser-viewer fallback is used.
 - The tree keeps its scroll position when a row is selected, a folder opens, or a live refresh
   rebuilds the rows; it no longer jumps back to the top.
 - Keyboard navigation: Ctrl+Shift+Left/Right move focus between the tree, editor and agent panes
