@@ -410,6 +410,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .mhead{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
 .mbody{overflow:auto;max-height:70vh;padding:0}
 .mbody pre{margin:0;padding:12px 16px;font:12.5px/1.5 var(--mono);white-space:pre}
+.mknote{padding:8px 12px 2px;color:var(--dim);font-size:12px}
+#makeq{margin:8px 10px;padding:6px 10px;width:calc(100% - 20px);border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text)}
+.mklist{max-height:52vh;overflow:auto;padding:4px 8px 8px}
+.mkt{display:flex;gap:12px;align-items:baseline;width:100%;text-align:left;border:0;background:none;border-radius:6px;padding:6px 10px;color:var(--text);cursor:pointer}
+.mkt:hover{background:var(--sel)}
+.mkt.sel{background:var(--sel);outline:1px solid color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:-1px}
+.mkt b{font:600 13px var(--mono);color:var(--accent);min-width:120px}
+.mkt .mkd{color:var(--dim);font-size:12.5px}
+.mkt .mkdef{font:11px var(--sans);color:var(--ok);margin-left:auto}
 .d-add{background:color-mix(in srgb,var(--ok) 18%,transparent)}
 .d-del{background:color-mix(in srgb,var(--danger) 18%,transparent)}
 .d-skip{color:var(--dim);font-style:italic}
@@ -856,7 +865,8 @@ function harnessChips(root) {  // one chip per agent session started in this fol
   for (const t of terms) {
     const b = el('button', 'hchip' + (t.alive ? ' live' : ''), t.label || 'shell');
     b.type = 'button';
-    b.title = `${t.agent || t.label || 'shell'}\n${t.root}\n${t.alive ? 'live' : 'ended'}`;
+    const where = t.dir ? `${t.root}/${t.dir}` : t.root;
+    b.title = `${t.agent || t.label || 'shell'}\n${where}\n${t.alive ? 'live' : 'ended'}`;
     b.onclick = e => { e.stopPropagation(); focusTerm(t.id); };
     box.append(b);
   }
@@ -3029,13 +3039,17 @@ function termTheme() {
     selectionBackground: dark ? 'rgba(127,167,224,.35)' : 'rgba(63,111,181,.25)', ...(dark ? {} : LIGHT_ANSI) };
 }
 const termFont = () => getComputedStyle(document.documentElement).getPropertyValue('--mono');
-function sessionTitle(info) {  // "claude · proj" once several trees are open
+function sessionTitle(info) {  // "claude · proj" once several trees are open, plus a subfolder when it runs in one
   const base = info.base || info.label || info.agent || 'shell';
-  return S.tree && S.tree.multi && info.mount ? `${base} · ${info.mount}` : base;
+  const multi = S.tree && S.tree.multi;
+  const where = info.dir
+    ? [multi && info.mount ? info.mount : '', info.dir].filter(Boolean).join('/')
+    : (multi && info.mount ? info.mount : '');
+  return where ? `${base} · ${where}` : base;
 }
 function retitleTerms() { for (const P of T.list) P.lab.textContent = sessionTitle(P); }
 function termMake(info) {  // the pane, the xterm and (once shown) the socket of one server terminal
-  const P = { id: info.id, agent: info.agent, mount: info.mount || '', root: info.root || '', base: info.label,
+  const P = { id: info.id, agent: info.agent, mount: info.mount || '', root: info.root || '', dir: info.dir || '', base: info.label,
     ws: null, retry: 0, queue: [], closed: false, state: 'off', at: 0 };
   P.el = el('div', 'tsess'); P.dot = el('span', 'tdot'); P.lab = el('b', null, sessionTitle(P)); P.body = el('div', 'tbody');
   const restart = btn('↻', () => { if (confirm(`End "${P.lab.textContent}" and start it again?`)) termSend(P, { t: 'restart' }); });
@@ -3624,6 +3638,67 @@ async function copySubtrees(paths) {
 }
 let ctxPaths = null;  // what the open menu will copy; Ctrl+C uses it while the menu is up
 function hideCtx() { ctxPaths = null; const m = $('#ctx'); if (m) m.hidden = true; }
+function isMakefile(path) {
+  const name = (path || '').split('/').pop().toLowerCase();
+  return name === 'makefile' || name === 'gnumakefile' || /\.(mk|make)$/.test(name);
+}
+async function makeMenu(path) {  // pick a target, then run it in the agent pane from the Makefile's folder
+  if (!CFG.term) return toast('Make targets run in the agent pane, which needs a loopback window', true);
+  let d;
+  try { d = await api('GET', '/api/make?path=' + encodeURIComponent(path)); }
+  catch (e) { return toast(e.message, true); }
+  if (!d.targets.length) return toast(`No targets in ${d.name}`, true);
+  const wrap = el('div', 'mk');
+  wrap.append(el('div', 'mknote', `Runs in an open shell, or a new one, from ${d.dir}/`));
+  const q = el('input'); q.id = 'makeq'; q.type = 'search'; q.placeholder = 'Filter targets'; q.autocomplete = 'off';
+  const list = el('div', 'mklist'); list.id = 'makelist';
+  const rows = new Map();
+  const def = d.targets.find(t => t.default);
+  let sel = def ? def.name : d.targets[0].name;
+  let runBtn = null;
+  const pick = name => {
+    sel = name;
+    for (const [n, r] of rows) r.classList.toggle('sel', n === name);
+    if (runBtn) runBtn.disabled = !name;
+  };
+  for (const t of d.targets) {
+    const r = el('button', 'mkt'); r.type = 'button';
+    r.append(el('b', '', t.name), el('span', 'mkd', t.desc || ''));
+    if (t.default) r.append(el('span', 'mkdef', 'default'));
+    r.title = t.desc ? `${t.name} — ${t.desc}` : t.name;
+    r.onclick = () => pick(t.name);
+    r.ondblclick = () => run(t.name);
+    rows.set(t.name, r); list.append(r);
+  }
+  q.oninput = () => {
+    const s = q.value.trim().toLowerCase();
+    for (const t of d.targets) {
+      const r = rows.get(t.name);
+      r.hidden = !!s && !(t.name.toLowerCase().includes(s) || (t.desc || '').toLowerCase().includes(s));
+    }
+  };
+  q.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); run(sel); } };
+  const run = async name => {
+    if (!name) return;
+    if (runBtn) runBtn.disabled = true;
+    try {
+      const r = await api('POST', '/api/make/run', { path, target: name, id: T.active?.id || '' });
+      $('#modal').close();
+      await openTerm(true);
+      const P = T.list.find(x => x.id === r.id);
+      if (P) {
+        if (r.label) { P.base = r.label; P.lab.textContent = sessionTitle(P); }
+        termActive(P); requestAnimationFrame(() => P.term.focus());
+      }
+      toast(r.reused ? `make ${name} in the open shell` : `make ${name}`);
+    } catch (e) { toast(e.message, true); if (runBtn) runBtn.disabled = false; }
+  };
+  wrap.append(q, list);
+  runBtn = btn('Run', () => run(sel));
+  openModal(`Make · ${d.name}`, wrap, [runBtn, btn('Cancel', () => $('#modal').close())]);
+  pick(sel);
+  requestAnimationFrame(() => q.focus());
+}
 function openCtx(x, y, path) {
   const menu = $('#ctx'), paths = (S.multi.size > 1 && S.multi.has(path)) ? [...S.multi] : [path];
   ctxPaths = paths;
@@ -3641,6 +3716,13 @@ function openCtx(x, y, path) {
   cp.onclick = async () => { hideCtx(); const ok = await writeClipboard(pathLabel(path)); toast(ok ? 'Copied path' : 'Copy failed', !ok); };
   menu.append(copy, cp);
   const node = S.byPath.get(path);
+  if (paths.length === 1 && node && node.type === 'file' && isMakefile(path)) {
+    const mk = el('button'); mk.type = 'button';
+    mk.append(el('span', '', 'Make targets…'), el('kbd', '', '▶'));
+    mk.title = "Pick a target and run it in the agent pane, from the Makefile's folder";
+    mk.onclick = () => { hideCtx(); makeMenu(path); };
+    menu.append(mk);
+  }
   if (paths.length === 1 && node && node.type === 'file' && /\.svg$/i.test(path)) {
     const ink = el('button'); ink.type = 'button';
     ink.append(el('span', '', 'Open in Inkscape'), el('kbd', '', '↗'));

@@ -85,8 +85,20 @@ class Client:
 
 # ---------- the shared terminal ----------
 class Terminal:
-    def __init__(self, cwd: str, env: dict, agent: str = ""):
+    def __init__(
+        self,
+        cwd: str,
+        env: dict,
+        agent: str = "",
+        root: str | None = None,
+        label: str = "",
+        reuse: bool | None = None,
+    ):
         self.cwd, self.env, self.agent = cwd, env, agent
+        self.root = root or cwd  # the opened folder this session belongs to; cwd may be a subfolder
+        self.name = label  # a short title, when the command itself is too long for the pane
+        self.reuse = (not agent.strip()) if reuse is None else reuse  # a shell a later command may use
+        self.pending = bytearray()  # input for a session that has not started yet
         self.lock = threading.Lock()
         self.clients: set = set()
         self.buf = bytearray()
@@ -99,8 +111,18 @@ class Terminal:
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 
+    @property
+    def at_prompt(self) -> bool:
+        """True when the shell itself owns the terminal: no command or agent is in the foreground."""
+        if not self.alive or self.master is None:
+            return False
+        try:
+            return os.tcgetpgrp(self.master) == self.proc.pid
+        except (AttributeError, OSError):
+            return False
+
     def label(self) -> str:
-        return self.agent or os.path.basename(self.env.get("SHELL") or "sh")
+        return self.name or self.agent or os.path.basename(self.env.get("SHELL") or "sh")
 
     def start(self) -> None:
         with self.lock:
@@ -133,6 +155,9 @@ class Terminal:
             threading.Thread(target=self._pump, args=(master, self.gen), daemon=True).start()
             if self.agent:
                 self.write((self.agent + "\r").encode())
+            if self.pending:
+                data, self.pending = bytes(self.pending), bytearray()
+                self.write(data)
 
     def _winsize(self, fd: int) -> None:
         rows, cols = self.size
@@ -169,11 +194,14 @@ class Terminal:
                 self.clients.discard(c)
 
     def write(self, data: bytes) -> None:
-        if self.master is not None:
-            try:
-                os.write(self.master, data)
-            except OSError:
-                pass
+        if self.master is None:
+            if self.proc is None and len(self.pending) < 65536:  # not started yet: keep it for the first prompt
+                self.pending += data
+            return
+        try:
+            os.write(self.master, data)
+        except OSError:
+            pass
 
     def resize(self, rows: int, cols: int) -> None:
         self.size = (max(2, rows), max(10, cols))
@@ -250,18 +278,41 @@ class Sessions:
         self.next = 1
         self.add(agent)
 
-    def add(self, agent: str = "", cwd: str | None = None, env_extra: dict | None = None) -> str:
-        """A new session. CWD defaults to the window's first folder. ENV_EXTRA overlays the shared env,
-        so a session can carry its own TREEDIT_ROOT without changing the ones already running."""
+    def add(
+        self,
+        agent: str = "",
+        cwd: str | None = None,
+        env_extra: dict | None = None,
+        root: str | None = None,
+        label: str = "",
+        reuse: bool | None = None,
+    ) -> str:
+        """A new session. CWD defaults to the window's first folder. ROOT is the opened folder it
+        belongs to (the default for CWD). ENV_EXTRA overlays the shared env, so a session can carry
+        its own TREEDIT_ROOT without changing the ones already running. REUSE marks a session a
+        later command may be typed into (a plain shell, or a finished make run)."""
         with self.lock:
             sid = str(self.next)
             self.next += 1
             env = {**self.env, **(env_extra or {})}
-            self.terms[sid] = Terminal(cwd or self.cwd, env, agent.strip())
+            self.terms[sid] = Terminal(cwd or self.cwd, env, agent.strip(), root, label, reuse)
             return sid
 
     def get(self, sid: str):
         return self.terms.get(sid)
+
+    def shell(self, prefer: str = "") -> tuple[str, Terminal] | None:
+        """A shell that can take a command now: PREFER if it qualifies, else the latest one.
+        Never started counts (its input is queued for the first prompt); a live one must be at
+        its prompt, and an ended one is left alone."""
+        with self.lock:
+            hits = [(sid, t) for sid, t in self.terms.items() if t.reuse and (t.proc is None or t.at_prompt)]
+        if not hits:
+            return None
+        for sid, t in hits:
+            if sid == prefer:
+                return sid, t
+        return hits[-1]
 
     def close(self, sid: str) -> bool:
         with self.lock:
@@ -275,10 +326,23 @@ class Sessions:
         return True
 
     def list(self) -> list:
-        return [
-            {"id": sid, "label": t.label(), "agent": t.agent, "alive": t.alive, "root": t.cwd}
-            for sid, t in list(self.terms.items())
-        ]
+        out = []
+        for sid, t in list(self.terms.items()):
+            try:
+                rel = os.path.relpath(t.cwd, t.root)
+            except ValueError:  # different drives on Windows
+                rel = ""
+            out.append(
+                {
+                    "id": sid,
+                    "label": t.label(),
+                    "agent": t.agent,
+                    "alive": t.alive,
+                    "root": t.root,
+                    "dir": "" if rel in ("", ".") else rel,
+                }
+            )
+        return out
 
     def stop(self) -> None:
         for t in list(self.terms.values()):

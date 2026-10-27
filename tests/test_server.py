@@ -44,6 +44,12 @@ def test_page_and_vendor(server):
     status, page = call(server, "GET", "/")
     assert status == 200 and '"token"' in page and "/*TREEDIT_CONFIG*/" not in page
     assert call(server, "GET", "/vendor/xterm.js")[0] == 200
+    assert call(server, "GET", "/vendor/katex/katex.min.js")[0] == 200
+    assert call(server, "GET", "/vendor/katex/nope.js")[0] == 404
+    with urlopen(server + "/vendor/katex/katex.min.css", timeout=5) as r:
+        assert r.status == 200 and r.headers["Content-Type"].startswith("text/css")
+    with urlopen(server + "/vendor/katex/fonts/KaTeX_Main-Regular.woff2", timeout=5) as r:
+        assert r.status == 200 and r.headers["Content-Type"] == "font/woff2" and r.read(4) == b"wOF2"
     assert call(server, "GET", "/logo.svg")[1].startswith("<svg")
     assert call(server, "GET", "/vendor/nope.js")[0] == 404
 
@@ -443,7 +449,7 @@ def test_terminal_sessions(server, monkeypatch, tree):
     terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "PS1": "$ "}, "")
     monkeypatch.setattr(Handler, "terms", terms)
     assert call(server, "GET", "/api/terms")[1]["terms"] == [
-        {"id": "1", "label": "sh", "agent": "", "alive": False, "root": str(tree), "mount": "proj"}
+        {"id": "1", "label": "sh", "agent": "", "alive": False, "root": str(tree), "dir": "", "mount": "proj"}
     ]
     status, out = call(server, "POST", "/api/term/new", {"agent": "echo second-pane"})
     assert status == 200 and out["id"] == "2" and [t["label"] for t in out["terms"]] == ["sh", "echo second-pane"]
@@ -471,6 +477,75 @@ def test_terminal_sessions(server, monkeypatch, tree):
     s.close()
     assert call(server, "POST", "/api/term/close", {"id": "2"})[0] == 404
     assert call(server, "GET", "/api/term?id=9&token=" + Handler.token)[0] == 404
+    terms.stop()
+
+
+def test_make_targets_and_run(server, monkeypatch, tree):
+    makefile = """\
+ROOT ?= .
+.DEFAULT_GOAL := help
+.PHONY: help test
+help: ## Show this help
+\t@echo hi
+test lint: pkg ## Run the checks
+\t@true
+$(VENV)/bin/tool: pyproject.toml
+foo%: ; @true
+"""
+    (tree / "pkg" / "Makefile").write_text(makefile)
+    status, out = call(server, "GET", "/api/make?path=pkg/Makefile")
+    assert status == 200
+    assert out["path"] == "pkg/Makefile" and out["name"] == "Makefile"
+    assert out["dir"] == str((tree / "pkg").resolve())
+    assert out["targets"] == [
+        {"name": "help", "desc": "Show this help", "default": True},
+        {"name": "test", "desc": "Run the checks", "default": False},
+        {"name": "lint", "desc": "Run the checks", "default": False},
+    ]
+    assert call(server, "GET", "/api/make?path=README.md")[0] == 400
+    assert call(server, "GET", "/api/make?path=pkg/nope.mk")[0] == 404
+    assert call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "help"})[0] == 404
+    if shutil.which("make") is None:
+        pytest.skip("make is not installed")
+    terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", ""), "TREEDIT_ROOT": str(tree)}, "")
+    monkeypatch.setattr(Handler, "terms", terms)
+    status, out = call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "help"})
+    assert status == 200 and out["id"] == "1" and out["reused"] is True
+    t = terms.get("1")
+    assert t.proc is None and t.reuse  # not started yet: the command waits for the first prompt
+    assert str((tree / "pkg").resolve()).encode() in t.pending and t.pending.endswith(b")\r")
+    assert len(out["terms"]) == 1 and out["terms"][0]["label"] == "sh"
+    t.start()
+    deadline = time.time() + 10
+    while b"hi" not in t.buf and time.time() < deadline:
+        time.sleep(0.05)
+    assert b"hi" in t.buf
+    while not t.at_prompt and time.time() < deadline:
+        time.sleep(0.05)
+    assert t.at_prompt
+    status, out = call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "help"})
+    assert status == 200 and out["reused"] is True and out["id"] == "1"
+    deadline = time.time() + 10
+    while t.buf.count(b"hi") < 2 and time.time() < deadline:
+        time.sleep(0.05)
+    assert t.buf.count(b"hi") >= 2
+    assert call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "nope"})[0] == 400
+    terms.stop()
+
+    # an agent preset is not a shell: the first make run needs a session of its own, which is then reused
+    terms = Sessions(str(tree), {"SHELL": "/bin/sh", "PATH": os.environ.get("PATH", "")}, "claude")
+    monkeypatch.setattr(Handler, "terms", terms)
+    status, out = call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "help"})
+    assert status == 200 and out["id"] == "2" and out["reused"] is False
+    t = terms.get("2")
+    assert t.cwd == str((tree / "pkg").resolve()) and t.root == str(tree.resolve())
+    assert " -f Makefile help)" in t.agent and t.label() == "make help" and t.reuse
+    assert t.env["TREEDIT_ROOT"] == str(tree)
+    second = next(x for x in out["terms"] if x["id"] == "2")
+    assert second["label"] == "make help" and second["dir"] == "pkg" and second["mount"] == "proj"
+    status, out = call(server, "POST", "/api/make/run", {"path": "pkg/Makefile", "target": "test"})
+    assert status == 200 and out["reused"] is True and out["id"] == "2"
+    assert t.name == "make test" and b"test" in t.pending
     terms.stop()
 
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Makefiles: right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** to see
+  its targets (with `##` descriptions) and run one. The command is typed into a shell that is
+  already at its prompt (the one you are in when it qualifies, else the latest free one), so no new
+  terminal is opened when one can take it; only when no shell is free does it start a session. It
+  runs from the Makefile's folder either way, so output streams live and the shell stays open after
+  it finishes. The default target is preselected; the list can be filtered.
 - Sync with the remote: the header's Sync button (and `treedit sync`) commits your edits, pulls with
   rebase, pushes, and merges a conflicting `.treenotes.json` entry by entry, so annotations and
   feedback travel between a treedit here and an agent working in a clone. Notes on both sides

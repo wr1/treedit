@@ -19,6 +19,9 @@ work-file conflict is committed with its markers and pushed for the agent to res
 
 Markdown files preview with Mermaid diagrams, and with D2 diagrams through the installed `d2` CLI.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.
+Right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** to pick a target and
+run it: the command goes into a shell that is already at its prompt (or into a new session if none
+is free), from the Makefile's folder, so output streams live and the shell stays open afterwards.
 
 ![Agents on the tree, a live merge into unsaved edits, several files open, change bars fading](docs/treedit.png)
 

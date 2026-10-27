@@ -18,7 +18,8 @@ What it does
     SVG can still be edited as source. PDF pages are rasterised through Poppler with page controls
     (the browser's viewer is only a fallback). Markdown has a preview with Mermaid and D2 diagrams.
   * The agent pane folds to a thin strip on the right edge, one segment per session, coloured by
-    active, idle, ended or disconnected.
+    active, idle, ended or disconnected. Right-click a Makefile to pick one of its targets and run
+    it from the Makefile's folder, in a shell already at its prompt when there is one.
   * Annotate any file or folder (including the root): your standing comments for the agent,
     which it reads but never writes. Leave feedback
     for an agent on a path, on lines of a file, or on several paths; it is open or
@@ -56,6 +57,7 @@ import os
 import re
 import secrets
 import select
+import shlex
 import shutil
 import stat
 import subprocess
@@ -67,7 +69,7 @@ from datetime import datetime, timezone
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import ClassVar, List, Optional
 from urllib.error import URLError
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -76,6 +78,7 @@ from urllib.request import urlopen
 from treeparse import argument, cli, command, group, option
 
 from . import __version__
+from .makefile import is_makefile, parse_targets
 from .term import Sessions, ws_accept
 
 DEFAULT_IGNORE = [
@@ -1815,6 +1818,22 @@ class Workspace:
             raise HTTPError(413, "plot is too large to show")
         return data, mime
 
+    def make_targets(self, rel: str) -> dict:
+        """The targets of a Makefile in the tree, for the Run menu. Reads the file only."""
+        rel = self.norm(rel)
+        if not is_makefile(rel):
+            raise HTTPError(400, "not a Makefile")
+        t = self.target_path(rel)
+        if not t.is_file():
+            raise HTTPError(404, "file not found")
+        try:
+            text = t.read_text("utf-8", errors="replace")
+        except OSError as e:
+            raise HTTPError(400, f"cannot read the Makefile: {e}") from e
+        if len(text) > 1024 * 1024:
+            raise HTTPError(413, "the Makefile is too large")
+        return {"path": rel, "name": t.name, "dir": str(t.parent), "targets": parse_targets(text)}
+
     def open_with(self, rel: str, app: str = "inkscape") -> str:
         """Open an SVG in a desktop app (Inkscape) on the machine serving the tree. Only the fixed
         editor is allowed: this endpoint must not become a way to run arbitrary programs."""
@@ -2666,6 +2685,10 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.raw_file(sub)
 
+    def make_targets(self, rel: str) -> dict:
+        _, w, sub = self.split(rel)
+        return {**w.make_targets(sub), "path": rel}
+
     def open_with(self, rel: str, app: str = "inkscape") -> str:
         _, w, sub = self.split(rel)
         return w.open_with(sub, app)
@@ -2843,13 +2866,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (resources.files(__package__) / "logo.svg").read_bytes(), "image/svg+xml")
         if method == "GET" and path.startswith("/vendor/"):
             name = path[len("/vendor/") :]
-            if name not in VENDOR:
+            kind = VENDOR.get(name) or VENDOR_TYPES.get(PurePosixPath(name).suffix)
+            f = resources.files(__package__) / "vendor" / name
+            if not kind or ".." in PurePosixPath(name).parts or not f.is_file():
                 raise HTTPError(404, "no such file")
-            return self.send(200, (resources.files(__package__) / "vendor" / name).read_bytes(), VENDOR[name])
+            return self.send(200, f.read_bytes(), kind)
         if method == "GET" and path == "/api/term":
             return self.terminal(q)
         if method == "GET" and path == "/api/terms":
             return self.send_json(200, {"terms": self.term_list()})
+        if method == "GET" and path == "/api/make":
+            return self.send_json(200, ws.make_targets(q.get("path", "")))
         if method == "GET" and path == "/api/git/log":
             return self.send_json(200, ws.git_log(q.get("path", ""), q.get("whole") == "1", int(q.get("n", "150"))))
         if method == "GET" and path == "/api/git/show":
@@ -2954,6 +2981,11 @@ class Handler(BaseHTTPRequestHandler):
             _, w = self.resolve_root(str(b.get("root") or ""))
             sid = self.sessions().add(str(b.get("agent") or ""), str(w.root), self.term_env(w))
             return self.send_json(200, {"id": sid, "terms": self.term_list()})
+        if method == "POST" and path == "/api/make/run":
+            return self.send_json(
+                200,
+                self.run_make(ws, str(b.get("path") or ""), str(b.get("target") or ""), str(b.get("id") or "")),
+            )
         if method == "POST" and path == "/api/term/close":
             if not self.sessions().close(str(b.get("id", ""))):
                 raise HTTPError(404, "no such terminal")
@@ -3065,6 +3097,35 @@ class Handler(BaseHTTPRequestHandler):
             t["mount"] = names.get(t["root"], "")
         return out
 
+    def run_make(self, ws, rel: str, target: str, prefer: str = "") -> dict:
+        """Run one target: in the preferred shell if it is at a prompt, else in the latest free
+        shell, else in a new session. Either way the command changes into the Makefile's folder."""
+        if isinstance(ws, Mounts):
+            _, w, sub = ws.split(rel)
+        else:
+            w, sub = ws, ws.norm(rel)
+        info = w.make_targets(sub)
+        if target not in {t["name"] for t in info["targets"]}:
+            raise HTTPError(400, "that target is not in the Makefile")
+        exe = shutil.which("make")
+        if not exe:
+            raise HTTPError(404, "make is not installed on the treedit server")
+        cmd = (
+            f"(cd {shlex.quote(info['dir'])} && "
+            f"{shlex.quote(exe)} -f {shlex.quote(info['name'])} {shlex.quote(target)})"
+        )
+        sessions = self.sessions()
+        picked = sessions.shell(prefer)
+        if picked is not None:  # a shell is already open: type there, do not add another terminal
+            sid, t = picked
+            if t.name:  # a make session, not the user's plain shell: name it for this target
+                t.name = f"make {target}"
+                t.agent = cmd
+            t.write(((b"\x15" if t.alive else b"") + (cmd + "\r").encode()))
+            return {"id": sid, "terms": self.term_list(), "reused": True, "label": t.label()}
+        sid = sessions.add(cmd, info["dir"], self.term_env(w), str(w.root), f"make {target}", reuse=True)
+        return {"id": sid, "terms": self.term_list(), "reused": False, "label": f"make {target}"}
+
     def add_mount(self, path: str) -> dict:
         """Open PATH as another top-level folder. One folder becomes a Mounts; names already shown stay."""
         if not path.strip():
@@ -3160,6 +3221,13 @@ VENDOR = {
     "marked.js": "text/javascript; charset=utf-8",
     "purify.js": "text/javascript; charset=utf-8",
     "mermaid.js": "text/javascript; charset=utf-8",
+}
+VENDOR_TYPES = {  # vendored libraries may keep their files in a subfolder (KaTeX's fonts)
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
 }
 PAGE = (resources.files(__package__) / "page.html").read_text("utf-8")
 
