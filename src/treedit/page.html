@@ -237,9 +237,20 @@ body.wrap #editor{overflow-x:hidden}
 #mdview .md blockquote{margin-left:0;padding:.1em 1em;border-left:3px solid var(--line);color:var(--dim)}
 #mdview .md a{color:var(--accent)}
 #mdview .md img{max-width:100%;height:auto;border-radius:5px}
-#mdview .md table{border-collapse:collapse}
-#mdview .md th,#mdview .md td{border:1px solid var(--line);padding:4px 10px;text-align:left}
-#mdview .md th{background:var(--panel)}
+#mdview .md .md-table{max-width:100%;overflow:auto;margin:.85em 0;border:1px solid var(--line);border-radius:7px}
+#mdview .md .md-table table{width:max-content;min-width:100%;border-collapse:collapse;font-size:.95em;margin:0}
+#mdview .md .md-table th,#mdview .md .md-table td{
+  border:1px solid var(--line);padding:5px 11px;text-align:left;vertical-align:top;white-space:nowrap}
+#mdview .md .md-table th{background:var(--panel);font-weight:600}
+#mdview .md .md-table tbody tr:nth-child(even){background:color-mix(in srgb,var(--panel) 45%,transparent)}
+#mdview .md .md-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+#mdview .md .md-table th[align="center"],#mdview .md .md-table td[align="center"]{text-align:center}
+#mdview .md .md-table th[align="right"],#mdview .md .md-table td[align="right"]{text-align:right}
+#mdview .md .md-table img{max-width:none}
+#mdview .md .md-math[data-math]{font-family:var(--mono);font-size:.92em;color:var(--dim)}
+#mdview .md .md-math .katex{font-size:1.05em}
+#mdview .md .md-math-block{display:block;margin:.7em 0;overflow-x:auto;overflow-y:hidden;text-align:center}
+#mdview .md .md-math-block .katex-display{margin:.15em 0}
 #mdview .md hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
 #mdview .md .md-diagram{margin:1em 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:auto;text-align:center}
 #mdview .md .md-diagram img{max-width:100%;height:auto;vertical-align:top}
@@ -1939,6 +1950,24 @@ async function loadMermaid() {  // lazy: only a preview with a Mermaid block pay
   }
   return loadMermaid.p;
 }
+async function loadKatex() {  // lazy: only a preview with math pays for the library and its fonts
+  if (window.katex) return window.katex;
+  if (!loadKatex.p) {
+    loadKatex.p = new Promise((resolve, reject) => {
+      if (!document.querySelector('link[data-katex]')) {
+        const l = document.createElement('link');
+        l.rel = 'stylesheet'; l.href = '/vendor/katex/katex.min.css'; l.dataset.katex = '1';
+        document.head.append(l);
+      }
+      const s = document.createElement('script');
+      s.src = '/vendor/katex/katex.min.js';
+      s.onload = () => window.katex ? resolve(window.katex) : reject(new Error('katex did not start'));
+      s.onerror = () => { loadKatex.p = null; reject(new Error('could not load katex')); };
+      document.head.append(s);
+    });
+  }
+  return loadKatex.p;
+}
 async function renderDiagram(kind, source, box, gen) {
   try {
     if (kind === 'mermaid') {
@@ -1988,7 +2017,7 @@ function mdTokenOffsets(tokens, src) {  // token -> source offset, so a block ca
 }
 function mdRenderer(offsets) {  // block tags carry data-src so the preview can follow the caret
   const r = new marked.Renderer();
-  for (const name of ['heading', 'paragraph', 'code', 'blockquote', 'table', 'hr', 'list', 'listitem']) {
+  for (const name of ['heading', 'paragraph', 'code', 'blockquote', 'hr', 'list', 'listitem']) {
     const orig = r[name];
     if (typeof orig !== 'function') continue;
     r[name] = function (token, ...rest) {
@@ -1997,7 +2026,152 @@ function mdRenderer(offsets) {  // block tags carry data-src so the preview can 
       return at == null ? html : html.replace(/^<([a-z0-9]+)/i, `<$1 data-src="${at}"`);
     };
   }
+  const table = typeof r.table === 'function' ? r.table.bind(r) : null;  // a table sits in its own scroll box
+  if (table) {
+    r.table = function (token, ...rest) {
+      const html = table(token, ...rest);
+      const at = offsets.get(token);
+      return `<div class="md-table"${at == null ? '' : ` data-src="${at}"`}>${html}</div>`;
+    };
+  }
   return r;
+}
+/* ---------- math: protected before marked, so TeX backslashes and * survive, then KaTeX ---------- */
+function mathRanges(src) {  // math spans in the Markdown source, outside code blocks and code spans
+  const spans = [], n = src.length, skip = new Uint8Array(n);
+  let i = 0;
+  while (i < n) {  // fenced code: an example of $x$ stays an example
+    const nl = src.indexOf('\n', i), end = nl < 0 ? n : nl;
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(src.slice(i, end));
+    if (!open) { i = end + 1; continue; }
+    const mark = open[1][0], len = open[1].length;
+    skip.fill(1, i, end);
+    i = end + 1;
+    while (i < n) {
+      const nl2 = src.indexOf('\n', i), end2 = nl2 < 0 ? n : nl2;
+      const line = src.slice(i, end2);
+      skip.fill(1, i, end2);
+      i = end2 + 1;
+      if (new RegExp(`^ {0,3}[${mark}]{${len},}[ \\t]*$`).test(line)) break;
+    }
+  }
+  const inFence = (a, b) => { for (let k = a; k < b; k++) if (skip[k]) return true; return false; };
+  i = 0;
+  while (i < n) {
+    if (skip[i]) { i++; continue; }
+    const c = src[i];
+    if (c === '\\') {
+      const d = src[i + 1];
+      if (d === '(' || d === '[') {
+        const close = d === '(' ? '\\)' : '\\]';
+        const j = src.indexOf(close, i + 2);
+        if (j > -1 && !inFence(i + 2, j)) {
+          spans.push({ start: i, end: j + 2, tex: src.slice(i + 2, j), display: d === '[' });
+          i = j + 2; continue;
+        }
+      }
+      i += 2; continue;  // an escaped delimiter, e.g. \$5
+    }
+    if (c === '`') {  // an inline code span
+      let run = 1; while (src[i + run] === '`') run++;
+      const j = src.indexOf('`'.repeat(run), i + run);
+      i = j > -1 ? j + run : i + run;
+      continue;
+    }
+    if (c !== '$') { i++; continue; }
+    if (src[i + 1] === '$') {
+      const j = src.indexOf('$$', i + 2);
+      if (j > -1 && !inFence(i + 2, j)) {
+        spans.push({ start: i, end: j + 2, tex: src.slice(i + 2, j), display: true });
+        i = j + 2; continue;
+      }
+      i += 2; continue;
+    }
+    if (!src[i + 1] || /\s/.test(src[i + 1])) { i++; continue; }  // $ 5 is money, not math
+    let j = i + 1;
+    while (j < n && src[j] !== '\n') {
+      if (src[j] === '\\') { j += 2; continue; }
+      if (src[j] === '$' && !/\s/.test(src[j - 1]) && !/[0-9]/.test(src[j + 1] || '')) break;
+      j++;
+    }
+    if (src[j] === '$' && j > i + 1) {  // $5 and $10 is not a formula
+      spans.push({ start: i, end: j + 1, tex: src.slice(i + 1, j), display: false });
+      i = j + 1; continue;
+    }
+    i++;
+  }
+  return spans;
+}
+function protectMath(src) {  // swap math for sentinels so marked cannot eat TeX, and map offsets back
+  const spans = mathRanges(src);
+  if (!spans.length) return { src, math: [], mapOffset: at => at };
+  const math = [], edits = [];
+  let out = '', last = 0;
+  for (const s of spans) {
+    const token = `\ue000${math.length}\ue001`;
+    out += src.slice(last, s.start) + token;
+    edits.push({ sub: out.length - token.length, len: token.length, orig: s.start, origLen: s.end - s.start });
+    math.push({ tex: s.tex.trim(), raw: src.slice(s.start, s.end), display: s.display });
+    last = s.end;
+  }
+  out += src.slice(last);
+  const mapOffset = at => {  // a source offset before the substitution is what the caret wants
+    let delta = 0;
+    for (const e of edits) {
+      if (at <= e.sub) break;
+      if (at < e.sub + e.len) return e.orig;
+      delta += e.origLen - e.len;
+    }
+    return at + delta;
+  };
+  return { src: out, math, mapOffset };
+}
+function mdMathPlaceholders(root, math) {  // sentinels -> spans that show the TeX until KaTeX loads
+  if (!math.length) return;
+  const one = /^\ue000(\d+)\ue001$/, walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.nodeValue.includes('\ue000')) nodes.push(n);
+  for (const node of nodes) {
+    const parts = node.nodeValue.split(/(\ue000\d+\ue001)/);
+    if (parts.length < 2) continue;
+    const code = node.parentElement && node.parentElement.closest('pre, code, script, style, textarea');
+    const frag = document.createDocumentFragment();
+    for (const part of parts) {
+      const m = one.exec(part);
+      if (!m) { if (part) frag.append(part); continue; }
+      const item = math[+m[1]];
+      if (!item) continue;
+      if (code) { frag.append(item.raw); continue; }  // an indented code example keeps its $...$
+      const span = el('span', 'md-math' + (item.display ? ' md-math-block' : ''));
+      span.dataset.math = m[1];
+      span.textContent = item.tex;
+      frag.append(span);
+    }
+    node.replaceWith(frag);
+  }
+}
+const MD_MATH = new Map();
+function mdMathHtml(tex, display) {  // one KaTeX pass per distinct formula, not per keystroke
+  const key = (display ? 'D' : 'I') + tex;
+  let html = MD_MATH.get(key);
+  if (html == null) {
+    try {
+      html = katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: 'ignore', trust: false });
+    } catch { html = ''; }
+    if (MD_MATH.size > 4000) MD_MATH.clear();
+    MD_MATH.set(key, html);
+  }
+  return html;
+}
+function mdMathFill(root, math) {
+  if (typeof katex === 'undefined') return;
+  for (const span of root.querySelectorAll('[data-math]')) {
+    const item = math[+span.dataset.math];
+    if (!item) continue;
+    const html = mdMathHtml(item.tex, item.display);
+    if (html) span.innerHTML = html;
+    span.removeAttribute('data-math');
+  }
 }
 function previewFollowCursor() {
   if (!MDP.on || !S.file) return;
@@ -2033,20 +2207,29 @@ function renderMdPreview(gen) {
     return;
   }
   const root = el('div', 'md'), view = $('#mdview'), top = view.scrollTop;
+  const pm = protectMath(editor.value);
   try {
-    const tokens = marked.lexer(editor.value, { gfm: true });
+    const tokens = marked.lexer(pm.src, { gfm: true });
+    const found = mdTokenOffsets(tokens, pm.src);
+    const offsets = { get: t => { const at = found.get(t); return at == null ? null : pm.mapOffset(at); } };
     root.innerHTML = DOMPurify.sanitize(
-      marked.parser(tokens, { gfm: true, renderer: mdRenderer(mdTokenOffsets(tokens, editor.value)) }),
+      marked.parser(tokens, { gfm: true, renderer: mdRenderer(offsets) }),
       { ADD_ATTR: ['data-src'] },
     );
   } catch {
     root.innerHTML = DOMPurify.sanitize(marked.parse(editor.value, { gfm: true }));
   }
+  mdMathPlaceholders(root, pm.math);
   rewriteMd(root);
   view.replaceChildren(root);
   view.scrollTop = top;  // typing must not throw the preview back to the top
   const blocks = [...root.querySelectorAll('code.language-mermaid, code.language-d2')];
   (async () => {
+    if (pm.math.length) {
+      try { await loadKatex(); } catch { /* the TeX stays readable as text */ }
+      if (gen !== MDP.gen) return;
+      mdMathFill(root, pm.math);
+    }
     for (const code of blocks) {
       if (gen !== MDP.gen) return;
       const pre = code.closest('pre');

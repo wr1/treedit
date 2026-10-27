@@ -12,6 +12,7 @@ license-files = [
     "src/treedit/vendor/LICENSE-marked.txt",
     "src/treedit/vendor/LICENSE-dompurify.txt",
     "src/treedit/vendor/LICENSE-mermaid.txt",
+    "src/treedit/vendor/LICENSE-katex.txt",
 ]
 keywords = ["editor", "annotation", "code-review", "agent", "claude", "cli", "tree"]
 classifiers = [

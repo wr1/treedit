@@ -12,6 +12,15 @@
   on the Sync button (and `/api/sync` / `treedit sync`) detects unresolved conflict markers directly
   in tracked files (`conflicts: [...]`, `state: "conflict"`), so the warning stays active across
   later commits on other files until the markers are resolved.
+- Markdown preview: `$…$`, `$$…$$`, `\(…\)` and `\[…\]` render with KaTeX, loaded only when a
+  preview has math. Math is cut out of the Markdown before marked parses it, so TeX escapes
+  (`\%`, `\_`, `\\`) survive, `*` and `_` inside a formula are not read as emphasis, and code
+  blocks keep their dollar signs. The table renderer then displays formulas in headers and cells;
+  KaTeX ships as a vendored library with woff2 fonts.
+- Markdown preview: GFM pipe tables render in their own scroll box at their natural column width,
+  with the delimiter row's alignment, a header band and zebra rows. A wide table (a DEL sweep with
+  a column per load case) scrolls sideways inside the preview instead of squeezing its headers into
+  one word per line or pushing the whole pane sideways.
 - Markdown preview: Preview in the file bar opens beside the source instead of covering it, follows
   edits as you type, and scrolls to keep the block under the caret in view. It renders with marked,
   sanitized with DOMPurify. A ```mermaid block
