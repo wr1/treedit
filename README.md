@@ -23,6 +23,12 @@ Right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** 
 run it: the command goes into a shell that is already at its prompt (or into a new session if none
 is free), from the Makefile's folder, so output streams live and the shell stays open afterwards.
 
+The Roll queue at the bottom starts minimized. Expand it to see your saved edits, unsaved drafts,
+changed annotations and open feedback since the last roll; untick anything that should wait, pick a
+terminal, and **Roll** sends the list as one message. Images zoom with the scroll wheel and pan when
+you drag them. A `.typ` file gets a **Compile PDF** button in its file bar: it saves the file, runs
+`typst compile`, and opens the resulting PDF in the viewer (even when the output is gitignored).
+
 ![Agents on the tree, a live merge into unsaved edits, several files open, change bars fading](docs/treedit.png)
 
 ## Install

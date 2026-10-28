@@ -20,6 +20,9 @@ What it does
   * The agent pane folds to a thin strip on the right edge, one segment per session, coloured by
     active, idle, ended or disconnected. Right-click a Makefile to pick one of its targets and run
     it from the Makefile's folder, in a shell already at its prompt when there is one.
+  * A Roll queue at the bottom starts minimized: your new edits, drafts, annotations and feedback
+    since the last roll. Expand it to tick items and roll them to a terminal. Images zoom with the
+    scroll wheel and pan when dragged. A `.typ` file gets a Compile PDF button in its file bar.
   * Annotate any file or folder (including the root): your standing comments for the agent,
     which it reads but never writes. Leave feedback
     for an agent on a path, on lines of a file, or on several paths; it is open or
@@ -79,6 +82,8 @@ from treeparse import argument, cli, command, group, option
 
 from . import __version__
 from .makefile import is_makefile, parse_targets
+from .queue import read as read_queue
+from .queue import rolled as roll_queue
 from .term import Sessions, ws_accept
 
 DEFAULT_IGNORE = [
@@ -1818,6 +1823,37 @@ class Workspace:
             raise HTTPError(413, "plot is too large to show")
         return data, mime
 
+    def compile_typst(self, rel: str) -> dict:
+        """Compile a .typ file to a PDF beside it, then keep that PDF visible even when ignored."""
+        rel = self.norm(rel)
+        if not rel.lower().endswith(".typ"):
+            raise HTTPError(400, "not a Typst file")
+        src = self.node_path(rel)
+        if not src.is_file():
+            raise HTTPError(404, "file not found")
+        exe = shutil.which("typst")
+        if not exe:
+            raise HTTPError(404, "typst is not installed on the treedit server")
+        out = src.with_suffix(".pdf")
+        try:
+            r = subprocess.run(
+                [exe, "compile", "--root", str(self.root), str(src), str(out)],
+                cwd=str(src.parent),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise HTTPError(504, "typst compile timed out") from e
+        if r.returncode != 0:
+            raise HTTPError(400, (r.stderr or r.stdout or "typst compile failed").strip()[-4000:])
+        out_rel = self.norm(str(out.relative_to(self.root)))
+        if out_rel not in self.show:  # the output may be gitignored; the viewer must still find it
+            self.show.append(out_rel)
+            self._git = (-1.0, frozenset())
+        return {"path": out_rel, "output": (r.stderr or "").strip()[-4000:]}
+
     def make_targets(self, rel: str) -> dict:
         """The targets of a Makefile in the tree, for the Run menu. Reads the file only."""
         rel = self.norm(rel)
@@ -2689,6 +2725,11 @@ class Mounts:
         _, w, sub = self.split(rel)
         return {**w.make_targets(sub), "path": rel}
 
+    def compile_typst(self, rel: str) -> dict:
+        name, w, sub = self.split(rel)
+        out = w.compile_typst(sub)
+        return {**out, "path": self._pre(name, out["path"])}
+
     def open_with(self, rel: str, app: str = "inkscape") -> str:
         _, w, sub = self.split(rel)
         return w.open_with(sub, app)
@@ -2877,6 +2918,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"terms": self.term_list()})
         if method == "GET" and path == "/api/make":
             return self.send_json(200, ws.make_targets(q.get("path", "")))
+        if method == "GET" and path == "/api/queue":
+            return self.send_json(200, read_queue(ws.root))
         if method == "GET" and path == "/api/git/log":
             return self.send_json(200, ws.git_log(q.get("path", ""), q.get("whole") == "1", int(q.get("n", "150"))))
         if method == "GET" and path == "/api/git/show":
@@ -2986,6 +3029,16 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 self.run_make(ws, str(b.get("path") or ""), str(b.get("target") or ""), str(b.get("id") or "")),
             )
+        if method == "POST" and path == "/api/queue/rolled":
+            notes = b.get("notes") if isinstance(b.get("notes"), dict) else {}
+            raw_fb, raw_items, raw_held = b.get("feedback"), b.get("items"), b.get("held")
+            feedback = [str(x) for x in raw_fb if isinstance(x, (int, str))] if isinstance(raw_fb, list) else []
+            items = [x for x in raw_items if isinstance(x, dict)] if isinstance(raw_items, list) else []
+            held = [x for x in raw_held if isinstance(x, dict)] if isinstance(raw_held, list) else []
+            target = str(b.get("target") or "")
+            return self.send_json(200, roll_queue(ws.root, target, notes, feedback, items, held))
+        if method == "POST" and path == "/api/typst":
+            return self.send_json(200, ws.compile_typst(str(b.get("path") or "")))
         if method == "POST" and path == "/api/term/close":
             if not self.sessions().close(str(b.get("id", ""))):
                 raise HTTPError(404, "no such terminal")

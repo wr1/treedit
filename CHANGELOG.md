@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Typst: a **Compile PDF** button in the file bar saves the `.typ` file, compiles it with
+  `typst compile` beside it, and opens the PDF in the viewer. The PDF stays visible in the tree even
+  when `.gitignore` hides it, so the viewer can find it.
+- A Roll queue at the bottom of the window, minimized by default: your saved edits, unsaved drafts,
+  changed annotations and open feedback since the last roll, each one tickable to hold it back.
+  Roll sends the ticked list to the chosen agent-pane terminal and records it, so the next queue
+  starts empty; held items wait for a later roll. The record lives in the treedit state dir, keyed
+  by the root's first commit, so it survives a reload and resets for a new repository.
+- Images in the plot viewer zoom with the scroll wheel around the pointer and pan when you drag
+  them (with pointer capture, so the drag can leave the pane); no modifier key is needed.
+- A GitHub Dark theme (`github dark` in the theme menu), following github.com's dark palette.
 - Makefiles: right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** to see
   its targets (with `##` descriptions) and run one. The command is typed into a shell that is
   already at its prompt (the one you are in when it qualifies, else the latest free one), so no new

@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import socket
+import sys
 import threading
 import time
 from urllib.error import HTTPError as URLHTTPError
@@ -547,6 +548,91 @@ foo%: ; @true
     assert status == 200 and out["reused"] is True and out["id"] == "2"
     assert t.name == "make test" and b"test" in t.pending
     terms.stop()
+
+
+def test_queue_round_trip(server, tree):
+    assert call(server, "GET", "/api/queue")[1] == {
+        "at": 0.0,
+        "target": "",
+        "notes": {},
+        "feedback": [],
+        "history": [],
+        "held": [],
+    }
+    held = [{"key": "note:README.md", "kind": "note", "path": "README.md", "text": "keep"}]
+    status, out = call(
+        server,
+        "POST",
+        "/api/queue/rolled",
+        {
+            "target": "claude · #1",
+            "notes": {"pkg": "the package"},
+            "feedback": ["1"],
+            "items": [{"key": "edit:pkg/b.py", "kind": "edit", "path": "pkg/b.py"}],
+            "held": held,
+        },
+    )
+    assert status == 200 and out["at"] > 0
+    assert out["target"] == "claude · #1" and out["notes"] == {"pkg": "the package"}
+    assert out["feedback"] == ["1"] and out["held"] == held
+    assert out["history"] == [
+        {
+            "at": out["at"],
+            "target": "claude · #1",
+            "items": [{"key": "edit:pkg/b.py", "kind": "edit", "path": "pkg/b.py"}],
+        }
+    ]
+    status, out = call(
+        server,
+        "POST",
+        "/api/queue/rolled",
+        {
+            "target": "sh",
+            "notes": {"pkg": "the package, again", "README.md": "readme"},
+            "feedback": ["2"],
+            "items": [],
+            "held": [],
+        },
+    )
+    assert status == 200 and out["target"] == "sh" and out["held"] == []
+    assert out["notes"] == {"pkg": "the package, again", "README.md": "readme"}
+    assert out["feedback"] == ["1", "2"] and [h["target"] for h in out["history"]] == ["sh", "claude · #1"]
+    assert call(server, "GET", "/api/queue")[1] == out
+
+
+def test_typst_compiles_to_pdf_and_opens(server, tree, monkeypatch, tmp_path):
+    (tree / "doc.typ").write_text("#let x = 1\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "typst"
+    exe.write_text(f"#!{sys.executable}\nimport sys\nopen(sys.argv[-1], 'wb').write(b'%PDF-1.4\\n')\n")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    status, out = call(server, "POST", "/api/typst", {"path": "doc.typ"})
+    assert status == 200 and out == {"path": "doc.pdf", "output": ""}
+    assert (tree / "doc.pdf").read_bytes().startswith(b"%PDF")
+    assert "doc.pdf" in [n["name"] for n in call(server, "GET", "/api/tree")[1]["tree"]["children"]]
+    assert call(server, "POST", "/api/typst", {"path": "README.md"})[0] == 400
+    assert call(server, "POST", "/api/typst", {"path": "missing.typ"})[0] == 404
+    exe.write_text(f"#!{sys.executable}\nimport sys\nsys.stderr.write('error: broken document\\n')\nsys.exit(1)\n")
+    status, out = call(server, "POST", "/api/typst", {"path": "doc.typ"})
+    assert status == 400 and "broken document" in out["error"]
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    assert call(server, "POST", "/api/typst", {"path": "doc.typ"})[0] == 404
+
+
+def test_typst_pdf_stays_visible_when_gitignored(repo, monkeypatch, tmp_path):
+    (repo / "doc.typ").write_text("#let x = 1\n")
+    (repo / ".gitignore").write_text("*.pdf\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "typst"
+    exe.write_text(f"#!{sys.executable}\nimport sys\nopen(sys.argv[-1], 'wb').write(b'%PDF-1.4\\n')\n")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    ws = _ws(str(repo), "", [], False)
+    assert ws.compile_typst("doc.typ")["path"] == "doc.pdf"
+    assert "doc.pdf" in [n["name"] for n in ws.scan()["children"]]
 
 
 def test_mount_from_the_page(server, tree, tmp_path):
