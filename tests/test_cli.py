@@ -71,6 +71,7 @@ def test_context_without_window():
 def test_skill(capsys, tmp_path):
     out = run(capsys, "skill", "show")
     assert out.startswith("---\nname: treedit") and "treedit fb ls" in out
+    assert "Roll queue" in out and "sub-agents" in out
     assert run(capsys, "skill", "install", "--dir", str(tmp_path)).strip() == str(tmp_path / "treedit" / "SKILL.md")
     assert (tmp_path / "treedit" / "SKILL.md").read_text() == out
     with pytest.raises(SystemExit, match="neither"):

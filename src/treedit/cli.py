@@ -3943,7 +3943,7 @@ def show_edits(
 
 SKILL_HEAD = """---
 name: treedit
-description: Use when working in a project the user reviews with treedit (a .treenotes.json exists or $TREEDIT_ROOT is set) - read the user's annotations (`treedit annotation ls`) and open feedback (`treedit fb ls`) on files, lines and the tree structure, act on it, commit the user's edits and your own work separately with git, and on an "agent roll" pick up the user's manual edits and do light housekeeping (frontmatter, names, spelling/grammar, doubled text) (`treedit edits` shows the user's saved and unsaved edits), answer each item with `treedit fb reply ID "what changed (hash)" --done`; `treedit context` shows what the user has selected. Never write annotations.
+description: Use when working in a project the user reviews with treedit (a .treenotes.json exists or $TREEDIT_ROOT is set) - read the user's annotations (`treedit annotation ls`) and open feedback (`treedit fb ls`) on files, lines and the tree structure, act on it, commit the user's edits and your own work separately with git, and on an "agent roll" or a Roll queue message pick up the user's manual edits and do light housekeeping (frontmatter, names, spelling/grammar, doubled text) (`treedit edits` shows the user's saved and unsaved edits), give independent queue items to sub-agents when the harness has them, answer each item with `treedit fb reply ID "what changed (hash)" --done`; `treedit context` shows what the user has selected. Never write annotations.
 ---
 """
 SKILL_WORKFLOW = """
@@ -4008,11 +4008,32 @@ Agent roll - when the user asks you to "roll" (pick up their manual edits and ac
    - Doubled text: remove accidental duplicates - a word typed twice ("the the"), a sentence or
      paragraph pasted twice, a repeated heading, list item or frontmatter key. When two near-copies
      differ, keep the fuller one and say in your summary what you dropped.
-3. Then work through `treedit fb ls` as above, and end with a short summary of what you did.
+3. Then work through the queue items (see Roll queue below) and `treedit fb ls` as above, and end
+   with a short summary of what you did.
+
+Roll queue - the window's Roll queue sends one message listing the user's new work since the last
+roll: saved edits, unsaved drafts, changed annotations and open feedback, minus the items the user
+held back. Treat that list as the work queue, and use sub-agents for breadth when your harness has
+them (Claude Code: the Task tool):
+1. Split the list into independent items; group only items that touch the same file or depend on
+   each other. One sub-agent per independent item or group is enough.
+2. Brief each sub-agent with the path, the user's edit or draft text or the feedback id and request,
+   the conventions in this skill, and the boundary: it may read and edit, but must not commit, push
+   or write annotations; it returns the files it changed and a short summary. For a question-only
+   feedback item, a read-only sub-agent that drafts the answer is fine.
+3. Keep git and treedit in the parent: run the sub-agents, then stage and commit each item on its
+   own (`agent: <what changed> (treedit #ID)`), merge any draft into the file, and only then
+   `treedit fb reply ID "<what changed> (hash)" --done`. Never let parallel sub-agents commit,
+   rebase, pull or push at the same time.
+4. A small queue (one item, or everything in one file) is faster done directly; sub-agents are for
+   independent breadth, not ceremony. Leave a held item alone: it is not in this roll and will be
+   in the next queue.
+5. If a sub-agent cannot finish an item, the parent replies without --done and says why.
 
 Loop roll - the same roll repeated every few minutes (in Claude Code: `/loop 3m ...`), while the user
-keeps editing. Each tick picks up what changed since the last one; a quiet tick (no new edits, no open
-feedback) makes no commits and answers in one line. The user ends the loop when they are done.
+keeps editing. Each tick handles the queue items and feedback new since the last tick; a quiet tick
+(no new edits, no open feedback) makes no commits and answers in one line. The user ends the loop
+when they are done.
 
 Remote bot - when the user runs treedit on another machine and you work in a clone:
 1. At the start and after your commits, run `treedit sync --no-commit`. It commits nothing, pulls
