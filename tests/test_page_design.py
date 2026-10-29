@@ -244,3 +244,55 @@ def test_first_node_in_a_starter_graph(lib):
     r = edit(lib, md, "r = D.addNode(m)")
     assert r["out"] == "# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n    S1\n```\n\n## S1\n"
     assert run(lib, "return D.isDesign(D.parse(md));", md=r["out"]) is True
+
+
+TREES = """```mermaid
+stateDiagram-v2
+    A --> B
+```
+
+## A
+
+- one
+  - one.a
+    more of one.a
+  - one.b
+- two
+
+## B
+"""
+
+
+def tree_edit(lib, md, body):
+    return run(lib, f"return {body};", md=md)
+
+
+def test_set_item_and_delete_with_children(lib):
+    r = tree_edit(lib, TREES, "D.setItem(md, 8, 'ONE.A')")
+    assert diff(TREES, r["md"]) == ["-  - one.a", "+  - ONE.A"] and r["line"] == 8
+    r = tree_edit(lib, TREES, "D.setItem(md, 7, '  ')")
+    assert diff(TREES, r["md"]) == ["-- one", "-  - one.a", "-    more of one.a", "-  - one.b"]
+    assert tree_edit(lib, TREES, "D.setItem(md, 4, 'x')") is None  # not an item
+
+
+def test_insert_items(lib):
+    r = tree_edit(lib, TREES, "D.insertItem(md, 'A', 8, 'between')")  # after one.a and its continuation line
+    assert diff(TREES, r["md"]) == ["+  - between"] and r["md"].split("\n")[r["line"]] == "  - between"
+    assert r["md"].split("\n")[r["line"] - 1] == "    more of one.a"
+    r = tree_edit(lib, TREES, "D.insertItem(md, 'A', null, 'three')")
+    assert r["md"].split("\n")[r["line"] - 1 : r["line"] + 1] == ["- two", "- three"]
+    r = tree_edit(lib, TREES, "D.insertItem(md, 'B', null, 'first')")  # a bare heading gets a blank line
+    assert r["md"].endswith("## B\n\n- first\n") and r["md"].split("\n")[r["line"]] == "- first"
+    md = TREES.replace("    A --> B", "    A --> B\n    B --> C")
+    r = tree_edit(lib, md, "D.insertItem(md, 'C', null, 'new tree')")
+    assert r["md"].endswith("## B\n\n## C\n\n- new tree\n")
+    assert tree_edit(lib, TREES, "D.insertItem(md, 'Nope', null, 'x')") is None
+
+
+def test_indent_items(lib):
+    r = tree_edit(lib, TREES, "D.indentItem(md, 10, 1)")  # one.b under one.a
+    assert diff(TREES, r["md"]) == ["-  - one.b", "+    - one.b"]
+    r = tree_edit(lib, TREES, "D.indentItem(md, 8, -1)")  # one.a and its continuation up a level
+    assert diff(TREES, r["md"]) == ["-  - one.a", "-    more of one.a", "+- one.a", "+  more of one.a"]
+    assert tree_edit(lib, TREES, "D.indentItem(md, 7, 1)") is None  # the first item has nothing to go under
+    assert tree_edit(lib, TREES, "D.indentItem(md, 7, -1)") is None  # already a top item

@@ -249,7 +249,7 @@ body.wrap #editor{overflow-x:hidden}
 .dz-edge line,.dz-edge path{stroke:var(--dim);stroke-width:1.4;fill:none}
 .dz-ah{fill:var(--dim)}
 .dz-elabel{fill:var(--dim);font:11px var(--sans);text-anchor:middle}
-.dz-node{cursor:pointer}.dz-node.linking{cursor:crosshair}
+.dz-node{cursor:grab}.dz-node.linking{cursor:crosshair}#dz-canvas.dragging,#dz-canvas.dragging .dz-node{cursor:grabbing}
 .dz-node rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
 .dz-node circle{fill:var(--text)}
 .dz-node text{fill:var(--text);font:600 12.5px var(--mono);text-anchor:middle;pointer-events:none}
@@ -261,6 +261,9 @@ body.wrap #editor{overflow-x:hidden}
 .dz-tree.folded{background:transparent;border-color:transparent;padding:0}
 .dz-fold{pointer-events:auto;border:0;background:none;padding:0;font:600 11px var(--mono);color:var(--dim);cursor:pointer}
 .dz-tree ul{margin:2px 0 0;padding-left:14px}.dz-tree li{margin:0}
+.dz-item{pointer-events:auto;cursor:text}.dz-item:hover{text-decoration:underline dotted}
+.dz-add{pointer-events:auto;border:0;background:none;padding:0 0 0 6px;font:600 12px var(--mono);color:var(--dim);cursor:pointer}.dz-add:hover{color:var(--accent)}
+.dz-input{pointer-events:auto;font:inherit;width:200px;max-width:100%;padding:0 3px;border:1px solid var(--accent);border-radius:3px;background:var(--bg);color:var(--text);outline:none}
 #dz-md{position:absolute;right:8px;top:8px;bottom:8px;width:min(46%,460px);display:flex;flex-direction:column;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:7px}
 #dz-md[hidden]{display:none}
 #dz-md b{padding:5px 9px;font-size:12px;border-bottom:1px solid var(--line)}
@@ -588,7 +591,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move</span><span>dbl-click/<kbd>Enter</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1923,7 +1926,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', showMd: false, folded: new Set(), saveT: 0, timer: 0 };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', showMd: false, folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, edit: null, press: null };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -2667,6 +2670,77 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     for (const id of ids) out[id] = [Math.round(P[id].x), Math.round(P[id].y)];
     return out;
   }
+  /* ---------- tree items, edited by line: each returns { md, line } (LINE: the item now), or null ---------- */
+  function findItem(m, line) {  // { tree, item, sibs, depth } for the item on LINE
+    for (const tree of Object.values(m.trees)) {
+      const walk = (sibs, depth) => {
+        for (const item of sibs) {
+          if (item.line === line) return { tree, item, sibs, depth };
+          const r = walk(item.children, depth + 1);
+          if (r) return r;
+        }
+        return null;
+      };
+      const r = walk(tree.items, 0);
+      if (r) return r;
+    }
+    return null;
+  }
+  function subtreeEnd(L, f) {  // the line after ITEM, its children and their continuation lines
+    const w = width(L[f.item.line].match(RE.item)[1]);
+    let e = f.item.line + 1;
+    while (e < f.tree.end && (!L[e].trim() || width(indentOf(L[e])) > w)) e++;
+    while (e > f.item.line + 1 && !L[e - 1].trim()) e--;
+    return e;
+  }
+  function setItem(md, line, text) {  // new TEXT after the bullet; empty text deletes the item and its children
+    const m = parse(md), f = m && findItem(m, line);
+    if (!f) return null;
+    const L = md.split('\n');
+    if (!text.trim()) { L.splice(line, subtreeEnd(L, f) - line); return { md: L.join('\n'), line: null }; }
+    const b = L[line].match(RE.item);
+    L[line] = `${b[1]}${b[2]} ${text.trim()}`;
+    return { md: L.join('\n'), line };
+  }
+  function insertItem(md, id, after, text) {  // a sibling after the item on line AFTER, or (AFTER null) the last top item of ID's tree
+    const m = parse(md);
+    if (!m || !text.trim()) return null;
+    const L = md.split('\n');
+    if (after != null) {
+      const f = findItem(m, after);
+      if (!f) return null;
+      const b = L[after].match(RE.item), at = subtreeEnd(L, f);
+      L.splice(at, 0, `${b[1]}${b[2]} ${text.trim()}`);
+      return { md: L.join('\n'), line: at };
+    }
+    const t = m.trees[id];
+    if (t) {
+      const top = t.items[0] && L[t.items[0].line].match(RE.item);
+      const ind = top ? top[1] : t.style === 'bullet' ? '  ' : '', mark = top ? top[2] : '-';
+      const add = t.items.length || t.style === 'bullet' ? [] : [''];  // a blank line under a bare heading
+      L.splice(t.end, 0, ...add, `${ind}${mark} ${text.trim()}`);
+      return { md: L.join('\n'), line: t.end + add.length };
+    }
+    if (!m.nodes.some(n => n.id === id) || id === '[*]') return null;
+    const ts = Object.values(m.trees).sort((a, b) => a.line - b.line), last = ts[ts.length - 1];
+    const style = last || { style: 'heading', level: 2 };
+    const block = style.style === 'bullet' ? ['', `- ${id}`, `  - ${text.trim()}`] : ['', `${'#'.repeat(style.level)} ${id}`, '', `- ${text.trim()}`];
+    let at = last ? last.end : L.length;
+    if (!last) { while (at > 0 && !L[at - 1].trim()) at--; }
+    if (!last && at === 0) block.shift();
+    L.splice(at, 0, ...block);
+    return { md: L.join('\n'), line: at + block.length - 1 };
+  }
+  function indentItem(md, line, dir) {  // DIR 1: a child of the item above; -1: a sibling of its parent
+    const m = parse(md), f = m && findItem(m, line);
+    if (!f || (dir > 0 && f.sibs[0] === f.item) || (dir < 0 && f.depth === 0)) return null;
+    const L = md.split('\n'), end = subtreeEnd(L, f);
+    for (let i = line; i < end; i++) {
+      if (!L[i].trim()) continue;
+      L[i] = dir > 0 ? '  ' + L[i] : L[i].replace(/^(\t| {1,2})/, '');
+    }
+    return { md: L.join('\n'), line };
+  }
   /* ---------- an empty state graph for a plain Markdown file: after the title and its intro ---------- */
   function starter(md) {
     const L = md.split('\n'), inFence = new Set();
@@ -2685,7 +2759,7 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     const block = ['## Graph', '', '```mermaid', 'stateDiagram-v2', '```'];
     return [...head, ...(head.length ? [''] : []), ...block, '', ...rest].join('\n');
   }
-  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter };
+  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter, setItem, insertItem, indentItem };
 }
 
 /* ---------- Design mode: a state graph with one tree per node, edited from the canvas ---------- */
@@ -2721,7 +2795,7 @@ async function setDesign(on) {
   if (!S.file || !isMarkdown(S.file.path)) return;
   if (MDP.on) resetMdPreview();
   const path = S.file.path, gen = ++DZ.gen;
-  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null });
+  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null });
   $('#designview').hidden = false; $('#editwrap').classList.add('dz-split');
   $('#b-design').classList.add('on');
   try { DZ.pos = (await api('GET', '/api/layout?path=' + encodeURIComponent(path))).nodes || {}; } catch { DZ.pos = {}; }
@@ -2754,18 +2828,22 @@ function dzSavePos() {  // debounced: arrow keys repeat
 function dzApply(res) {  // one graph edit -> one minimal splice of the editor buffer
   if (!res.said) return false;
   if (editor.readOnly) { toast('This file is read-only here', true); return false; }
-  const next = DC.serialize(res.model, editor.value), e = DC.minimalEdit(editor.value, next);
+  return dzApplyMd(DC.serialize(res.model, editor.value), res.said);
+}
+function dzApplyMd(next, said) {  // the new Markdown, as one undo step of the editor
+  if (editor.readOnly) { toast('This file is read-only here', true); return false; }
+  const e = DC.minimalEdit(editor.value, next);
   if (e.from === e.to && !e.text) return false;
   const line = editor.value.slice(0, e.from).split('\n').length;
   replaceRange(editor, e.from, e.to, e.text);
-  DZ.said = `${res.said} · line ${line}`;
+  DZ.said = `${said} · line ${line}`;
   $('#dz-canvas').focus();
   dzRefresh();
   return true;
 }
 function dzLayout() {
   if (!DZ.model) return;
-  DZ.pos = DC.layout(DZ.model.nodes.map(n => n.id), DZ.model.edges, {}, null);
+  DZ.pos = DC.layout(DZ.model.nodes.map(n => n.id), DZ.model.edges, {}, null); DZ.pinned = false;
   DZ.said = 'laid out the graph (positions only, the Markdown is unchanged)';
   dzRender(); dzSavePos();
 }
@@ -2792,6 +2870,72 @@ function dzClick(id) {
   } else { DZ.active = id; dzRender(); }
   $('#dz-canvas').focus();
 }
+function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves the node
+  if (DZ.link) return dzClick(id);
+  const again = DZ.press && DZ.press.id === id && ev.timeStamp - DZ.press.t < 400;
+  DZ.press = again ? null : { id, t: ev.timeStamp };
+  if (again && id !== '[*]') return dzEditNew(id, null);  // the node is redrawn on press, so no native dblclick
+  dzClick(id);
+  if (!DZ.pos[id]) return;
+  const x0 = ev.clientX, y0 = ev.clientY, start = DZ.pos[id], drag = { id, moved: false };
+  const mv = e => {
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!drag.moved && Math.hypot(dx, dy) < 3) return;  // a shaky click is still a click
+    if (!drag.moved) { drag.moved = true; DZ.drag = drag; $('#dz-canvas').classList.add('dragging'); }
+    DZ.pos[id] = [Math.round(start[0] + dx), Math.round(start[1] + dy)];
+    dzRender();
+  };
+  const up = () => {  // the node's element is redrawn while dragging, so listen on the window
+    window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    if (!drag.moved) return;
+    DZ.drag = null; DZ.pinned = true; $('#dz-canvas').classList.remove('dragging');
+    DZ.said = `moved ${id} (positions only, the Markdown is unchanged)`;
+    dzRender(); dzSavePos();
+  };
+  window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+}
+/* tree items: edited in place, written to the Markdown on Enter, Tab or leaving the box */
+function dzEditNew(id, after) { DZ.edit = { id, line: null, after, value: '' }; DZ.folded.delete(id); DZ.active = id; dzRender(); }
+function dzEditItem(id, it) { DZ.edit = { id, line: it.line, value: it.text, orig: it.text }; DZ.active = id; dzRender(); }
+function dzCommit(ed, value) {  // the item's line afterwards, or null
+  DZ.edit = null;
+  let r = null, said = '';
+  if (ed.line != null) {
+    if (value.trim() === ed.orig.trim()) { dzRender(); return ed.line; }
+    r = DC.setItem(editor.value, ed.line, value); said = `${value.trim() ? 'edited' : 'deleted'} an item of ${ed.id}`;
+  } else if (value.trim()) { r = DC.insertItem(editor.value, ed.id, ed.after, value); said = `added an item to ${ed.id}`; }
+  if (!r || !dzApplyMd(r.md, said)) { dzRender(); return null; }
+  return r.line;
+}
+function dzEditKey(e, ed, inp) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { dzCommit(ed, inp.value); return; }  // then the usual save
+  e.stopPropagation();  // the canvas keys (n, l, Delete, arrows) are letters and edits here
+  if (e.key === 'Escape') { e.preventDefault(); DZ.edit = null; dzRender(); $('#dz-canvas').focus(); }
+  else if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    const line = dzCommit(ed, inp.value);
+    if (line != null) dzEditNew(ed.id, line); else $('#dz-canvas').focus();
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    const text = inp.value, line = dzCommit(ed, text);
+    if (line == null) return;
+    const r = DC.indentItem(editor.value, line, e.shiftKey ? -1 : 1);
+    if (r) dzApplyMd(r.md, `${e.shiftKey ? 'outdented' : 'indented'} an item of ${ed.id}`);
+    else toast(e.shiftKey ? 'Already a top item of the tree' : 'Indent needs an item above it at the same level');
+    DZ.edit = { id: ed.id, line, value: text.trim(), orig: text.trim() }; dzRender();
+  }
+}
+function dzInputLi() { const li = el('li'); li.append(dzInput()); return li; }
+function dzInput() {
+  const ed = DZ.edit, inp = el('input', 'dz-input');
+  inp.value = ed.value; inp.placeholder = ed.line == null ? `new item of ${ed.id}` : '';
+  inp.oninput = () => { ed.value = inp.value; };
+  inp.onkeydown = e => dzEditKey(e, ed, inp);
+  inp.onblur = () => { if (DZ.edit === ed && inp.isConnected) dzCommit(ed, inp.value); };  // a redraw is no blur
+  inp.onpointerdown = e => e.stopPropagation();
+  requestAnimationFrame(() => { if (DZ.edit === ed && inp.isConnected) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } });
+  return inp;
+}
 function dzKey(e) {  // the canvas's own keys; the editor, the New box and the terminal never see these
   const d = undoKey(e);
   if (d) {
@@ -2803,6 +2947,7 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   if (e.ctrlKey || e.metaKey || e.altKey) return;  // Ctrl+S and friends keep their global meaning
   const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   if (k === 'n' || k === 'a') dzAddNode();
+  else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
@@ -2813,12 +2958,20 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   } else return;
   e.preventDefault(); e.stopPropagation();
 }
-function dzTreeList(items) {
-  const ul = el('ul');
+function dzTreeList(items, id) {
+  const ul = el('ul'), ed = DZ.edit && DZ.edit.id === id ? DZ.edit : null;
   for (const it of items) {
-    const li = el('li', null, it.text);
-    if (it.children.length) li.append(dzTreeList(it.children));
+    const li = el('li');
+    if (ed && ed.line === it.line) li.append(dzInput());
+    else {
+      const t = el('span', 'dz-item', it.text);
+      t.title = `Double-click to edit (line ${it.line + 1})`;
+      t.ondblclick = () => dzEditItem(id, it);
+      li.append(t);
+    }
+    if (it.children.length) li.append(dzTreeList(it.children, id));
     ul.append(li);
+    if (ed && ed.line == null && ed.after === it.line) ul.append(dzInputLi());
   }
   return ul;
 }
@@ -2841,7 +2994,10 @@ function dzRender() {
   if (DZ.showMd) $('#dz-mdtext').textContent = dzMarkdown(m);
   const ids = m.nodes.map(n => n.id), W = v.clientWidth || 600, H = v.clientHeight || 400;
   const xs = ids.map(id => DZ.pos[id][0]), ys = ids.map(id => DZ.pos[id][1]);
-  const ox = W / 2 - (Math.min(...xs) + Math.max(...xs)) / 2, oy = H / 2 - (Math.min(...ys) + Math.max(...ys)) / 2 - 20;
+  if (!DZ.drag && !DZ.pinned) {  // centre the graph; not mid-drag or after one, so the node stays where it was dropped
+    DZ.ox = W / 2 - (Math.min(...xs) + Math.max(...xs)) / 2; DZ.oy = H / 2 - (Math.min(...ys) + Math.max(...ys)) / 2 - 20;
+  }
+  const { ox, oy } = DZ;
   const at = id => [DZ.pos[id][0] + ox, DZ.pos[id][1] + oy];
   const mk = (tag, attrs, parent = svg) => { const n = document.createElementNS(SVGNS, tag); for (const [a, b] of Object.entries(attrs)) n.setAttribute(a, b); parent.append(n); return n; };
   const defs = mk('defs', {}), mark = mk('marker', { id: 'dz-arrow', viewBox: '0 0 10 10', refX: 10, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
@@ -2864,16 +3020,23 @@ function dzRender() {
     const [x, y] = at(n.id), [hw, hh] = half(n.id), g = mk('g', { class: 'dz-node' + (n.id === DZ.active ? ' active' : '') + (DZ.link ? ' linking' : ''), 'data-id': n.id });
     if (n.id === '[*]') mk('circle', { cx: x, cy: y, r: 7 }, g);
     else { mk('rect', { x: x - hw, y: y - hh, width: 2 * hw, height: 2 * hh, rx: 8 }, g); mk('text', { x, y: y + 4 }, g).textContent = n.id; }
-    g.addEventListener('pointerdown', ev => { ev.preventDefault(); dzClick(n.id); });
-    const t = m.trees[n.id];
-    if (!t) continue;
-    const fold = DZ.folded.has(n.id), box = el('div', 'dz-tree' + (fold ? ' folded' : '') + (n.id === DZ.active ? ' active' : ''));
+    g.addEventListener('pointerdown', ev => { if (ev.button !== 0) return; ev.preventDefault(); dzPress(n.id, ev); });
+    const t = m.trees[n.id], ed = DZ.edit && DZ.edit.id === n.id ? DZ.edit : null, items = t ? t.items : [];
+    if (!t && !ed) continue;
+    const fold = DZ.folded.has(n.id) && !ed, box = el('div', 'dz-tree' + (fold ? ' folded' : '') + (n.id === DZ.active ? ' active' : ''));
     box.style.left = (x - hw) + 'px'; box.style.top = (y + hh + 4) + 'px';
-    const head = el('button', 'dz-fold', (fold ? '▸ ' : '▾ ') + `${n.id} · ${t.items.length}`);
-    head.title = (fold ? 'Show' : 'Fold') + ` the tree of ${n.id} (line ${t.line + 1})`;
+    const head = el('button', 'dz-fold', (fold ? '▸ ' : '▾ ') + `${n.id} · ${items.length}`);
+    head.title = (fold ? 'Show' : 'Fold') + ` the tree of ${n.id}` + (t ? ` (line ${t.line + 1})` : '');
     head.onclick = () => { DZ.folded[fold ? 'delete' : 'add'](n.id); dzRender(); $('#dz-canvas').focus(); };
-    box.append(head);
-    if (!fold) box.append(dzTreeList(t.items));
+    const add = el('button', 'dz-add', '+');
+    add.title = `Add an item at the end of ${n.id}'s tree (Enter on the node)`;
+    add.onclick = () => dzEditNew(n.id, null);
+    box.append(head, add);
+    if (!fold) {
+      const ul = dzTreeList(items, n.id);
+      if (ed && ed.line == null && ed.after == null) ul.append(dzInputLi());
+      box.append(ul);
+    }
     trees.append(box);
   }
 }
@@ -2882,7 +3045,7 @@ $('#dz-start').onclick = () => dzStart();
 $('#dz-canvas').addEventListener('keydown', dzKey);
 $('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
 $('#dz-mdbtn').onclick = () => { DZ.showMd = !DZ.showMd; dzRender(); $('#dz-canvas').focus(); };
-new ResizeObserver(() => { if (DZ.on) dzRender(); }).observe($('#dz-canvas'));
+new ResizeObserver(() => { if (DZ.on) { DZ.pinned = false; dzRender(); } }).observe($('#dz-canvas'));
 async function compileTypst() {
   if (!S.file || !isTypst(S.file.path)) return;
   if (isDirty()) {
