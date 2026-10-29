@@ -343,3 +343,14 @@ def test_linked_new_node_is_declared_by_its_edge(lib):
     md = "```mermaid\nstateDiagram-v2\n    A --> B\n```\n\n## A\n- a\n"
     r = edit(lib, md, "r = D.addNode(m); r = D.addEdge(r.model, 'A', 'S1')")
     assert r["out"] == "```mermaid\nstateDiagram-v2\n    A --> B\n    A --> S1\n```\n\n## A\n- a\n\n## S1\n"
+
+
+def test_subtree_follows_a_breadth_first_tree_not_back_edges(lib):
+    door = "```mermaid\nstateDiagram-v2\n    [*] --> Closed\n    Closed --> Open\n    Open --> Closed\n    Closed --> Locked\n    Locked --> Closed\n    Open --> Ajar\n    Loose\n```\n"
+    sub = lambda node: run(lib, f"return D.subtree(D.parse(md), '{node}');", md=door)  # noqa: E731
+    assert sub("[*]") == ["Closed", "Open", "Locked", "Ajar"]
+    assert sub("Closed") == ["Open", "Locked", "Ajar"]
+    assert sub("Open") == ["Ajar"]
+    assert sub("Locked") == [] and sub("Loose") == []
+    ring = "```mermaid\nflowchart LR\n  A --> B --> C --> A\n```\n"
+    assert run(lib, "return D.subtree(D.parse(md), 'B');", md=ring) == ["C"]  # no entry point: the first node roots it
