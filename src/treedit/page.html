@@ -228,6 +228,44 @@ body.wrap #editor{overflow-x:hidden}
 #b-md.on{border-color:var(--accent);color:var(--accent)}
 #mdview{flex:1 1 50%;min-width:0;overflow:auto;padding:18px 22px 50px;background:var(--bg)}
 #mdview[hidden]{display:none}
+#editwrap.dz-split #textside{flex:1 1 40%;border-right:1px solid var(--line)}
+#designview{flex:1 1 60%;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+#designview[hidden]{display:none}
+#b-design.on{border-color:var(--accent);color:var(--accent)}
+.dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
+.dz-keys{border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
+.dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
+#dz-canvas:not(:focus) ~ .dz-keys .dz-focus{display:inline}
+.dz-focus{display:none;color:var(--accent)}
+.dz-mode{font-weight:700;color:#fff;background:var(--accent);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
+#dz-link{font-weight:700;color:#fff;background:var(--fb);border-radius:4px;padding:1px 7px}
+#dz-link[hidden]{display:none}
+#dz-said{color:var(--dim);font-family:var(--mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#dz-mdbtn.on{border-color:var(--accent);color:var(--accent)}
+#dz-canvas{flex:1;position:relative;overflow:hidden;outline:none;min-height:0}
+#dz-canvas:focus{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)}
+#dz-svg{position:absolute;inset:0;width:100%;height:100%}
+.dz-edge line,.dz-edge path{stroke:var(--dim);stroke-width:1.4;fill:none}
+.dz-ah{fill:var(--dim)}
+.dz-elabel{fill:var(--dim);font:11px var(--sans);text-anchor:middle}
+.dz-node{cursor:pointer}.dz-node.linking{cursor:crosshair}
+.dz-node rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.dz-node circle{fill:var(--text)}
+.dz-node text{fill:var(--text);font:600 12.5px var(--mono);text-anchor:middle;pointer-events:none}
+.dz-node.active rect{stroke:var(--accent);stroke-width:2.5;fill:var(--sel)}
+.dz-node.active circle{fill:var(--accent)}
+#dz-trees{position:absolute;inset:0;pointer-events:none}
+.dz-tree{position:absolute;max-width:260px;font-size:12px;line-height:1.4;background:color-mix(in srgb,var(--bg) 62%,transparent);border:1px dashed color-mix(in srgb,var(--line) 80%,transparent);border-radius:6px;padding:2px 8px 4px}
+.dz-tree.active{border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+.dz-tree.folded{background:transparent;border-color:transparent;padding:0}
+.dz-fold{pointer-events:auto;border:0;background:none;padding:0;font:600 11px var(--mono);color:var(--dim);cursor:pointer}
+.dz-tree ul{margin:2px 0 0;padding-left:14px}.dz-tree li{margin:0}
+#dz-md{position:absolute;right:8px;top:8px;bottom:8px;width:min(46%,460px);display:flex;flex-direction:column;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:7px}
+#dz-md[hidden]{display:none}
+#dz-md b{padding:5px 9px;font-size:12px;border-bottom:1px solid var(--line)}
+#dz-mdtext{flex:1;margin:0;padding:8px 10px;overflow:auto;font:12px/1.5 var(--mono);white-space:pre}
+#dz-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}
+#dz-empty[hidden]{display:none}
 #mdview .md{max-width:900px;margin:0 auto;font-size:14.5px;line-height:1.62}
 #mdview .md>:first-child{margin-top:0}
 #mdview .md h1,#mdview .md h2,#mdview .md h3,#mdview .md h4,#mdview .md h5,#mdview .md h6{
@@ -534,6 +572,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="b-new" title="Create a file or folder at any depth (Ctrl/Cmd+N) - a name with an extension is a file, without one a folder">New…</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
         <button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams and clickable links">Preview</button>
+        <button id="b-design" hidden title="Edit the state graph of this design file; the Markdown stays the source (one undo step per edit)">Design</button>
         <button id="b-typst" hidden title="Compile this Typst file to PDF and open the PDF">Compile PDF</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
@@ -547,7 +586,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden>No mermaid or d2 state graph found in this file.</div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1729,6 +1768,7 @@ async function openFile(path) {
 }
 function setFile(f, keepView) {
   if (MDP.on && (!S.file || S.file.path !== f.path)) resetMdPreview();
+  if (DZ.on && (!S.file || S.file.path !== f.path)) setDesign(false);
   const plot = f.kind === 'plot';
   if (!plot) Plot.source = false;
   else if (f.source) Plot.source = true;
@@ -1758,6 +1798,7 @@ function setFile(f, keepView) {
   updateFileState(); updatePos(); renderMarks();
   syncChrome();
   if (MDP.on) renderMdPreview(++MDP.gen);  // a disk reload or agent edit updates the preview
+  if (DZ.on) dzRefresh();
 }
 const Plot = { source: false, fit: true, scale: 1, pdfPage: 1, pdfPages: 0 };  // the open plot: picture, or SVG source
 S.plotDoc = null;
@@ -1864,6 +1905,9 @@ function syncChrome() {
   $('#b-md').hidden = !md;
   $('#b-typst').hidden = plotView || !(S.file && isTypst(S.file.path));
   if (!md && MDP.on) resetMdPreview();
+  const dz = md && dzDetect();
+  $('#b-design').hidden = !dz && !DZ.on;
+  if (!md && DZ.on) setDesign(false);
   for (const id of ['b-wrap', 'b-undo', 'b-redo']) $('#' + id).hidden = plotView;
   if (!plotFile) return;
   $('#plot-src').hidden = !(S.plotDoc && S.plotDoc.content != null);
@@ -1876,6 +1920,8 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', showMd: false, folded: new Set(), saveT: 0, timer: 0 };
+const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
 function resetMdPreview() {
@@ -1887,6 +1933,7 @@ function resetMdPreview() {
 }
 function setMdPreview(on) {
   if (!on) return resetMdPreview();
+  if (DZ.on) setDesign(false);
   if (!S.file || !isMarkdown(S.file.path)) return;
   MDP.on = true; MDP.gen++;
   $('#mdview').hidden = false; $('#editwrap').classList.add('md-split');
@@ -2322,6 +2369,480 @@ function renderMdPreview(gen) {
 }
 $('#b-md').onclick = () => setMdPreview(!MDP.on);
 $('#b-md').hidden = true;
+function designCore() {  // pure: parse / edit / serialize a design Markdown file (graph block + one tree per node)
+  const ID = '(?:\\[\\*\\]|[\\p{L}_][\\p{L}\\p{N}_]*)';
+  const SHAPE = '(?:\\[\\[.*?\\]\\]|\\[\\(.*?\\)\\]|\\(\\(.*?\\)\\)|\\[.*?\\]|\\(.*?\\)|\\{.*?\\}|>.*?\\])';
+  const RE = {
+    fence: /^\s{0,3}(`{3,}|~{3,})\s*([\w-]*)/,
+    head: /^(#{1,6})\s+(.*?)\s*#*\s*$/,
+    item: /^(\s*)([-*+]|\d+[.)])\s+(.*)$/,
+    mmdHeader: /^(stateDiagram(?:-v2)?|graph|flowchart)\b/,
+    stEdge: new RegExp(`^(${ID})\\s*-->\\s*(${ID})\\s*(?::\\s*(.*))?$`, 'u'),
+    stDecl: new RegExp(`^(${ID})(?:\\s*:\\s*(.*))?$`, 'u'),
+    stAs: new RegExp(`^state\\s+"[^"]*"\\s+as\\s+(${ID})$`, 'u'),
+    fcTok: new RegExp(`^(${ID})(${SHAPE})?`, 'u'),
+    fcArrow: /^\s*(-->|-\.->|==>)\s*(?:\|([^|]*)\|\s*)?/,
+    d2Tok: /^([\p{L}_][\p{L}\p{N}_]*)/u,
+    d2Arrow: /^\s*(->)\s*/,
+  };
+  const indentOf = s => s.match(/^\s*/)[0];
+  const width = s => s.replace(/\t/g, '    ').length;
+  function fences(lines) {  // [{ lang, open, close }]; close is the closing fence line (or lines.length)
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(RE.fence);
+      if (!m) continue;
+      const mark = m[1], b = { lang: m[2].toLowerCase(), open: i, close: lines.length };
+      for (let j = i + 1; j < lines.length; j++) {
+        const t = lines[j].trim();
+        if (t[0] === mark[0] && t.length >= mark.length && /^(`+|~+)$/.test(t)) { b.close = j; break; }
+      }
+      out.push(b); i = b.close;
+    }
+    return out;
+  }
+  function chain(text, kind) {  // "A --> B --> C" (flowchart) / "a -> b: x" (d2): edges, or null
+    const tok = kind === 'd2' ? RE.d2Tok : RE.fcTok, arrow = kind === 'd2' ? RE.d2Arrow : RE.fcArrow;
+    let rest = text.replace(/;\s*$/, ''), label = null;
+    if (kind === 'd2') { const c = rest.match(/^(.*?):\s*(.*)$/); if (c && c[1].includes('->')) { rest = c[1].trimEnd(); label = c[2]; } }
+    let m = rest.match(tok);
+    if (!m) return null;
+    const toks = [{ id: m[1], tok: m[0] }], arrows = [];
+    rest = rest.slice(m[0].length);
+    while (rest) {
+      const a = rest.match(arrow);
+      if (!a) return null;
+      rest = rest.slice(a[0].length);
+      const t = rest.match(tok);
+      if (!t) return null;
+      arrows.push({ arrow: a[1], label: a[2] != null ? a[2] : null });
+      toks.push({ id: t[1], tok: t[0] });
+      rest = rest.slice(t[0].length);
+    }
+    if (!arrows.length) return { toks, edges: [] };
+    const edges = arrows.map((a, k) => ({ from: toks[k].id, to: toks[k + 1].id, fromTok: toks[k].tok, toTok: toks[k + 1].tok,
+      arrow: a.arrow, label: kind === 'd2' && arrows.length === 1 ? label : a.label }));
+    if (kind === 'd2' && label != null && arrows.length > 1) return null;
+    return { toks, edges };
+  }
+  function graphLine(raw, flavor) {  // { edges, decls } for a line we understand, else null (kept verbatim)
+    const t = raw.trim();
+    if (!t || t.startsWith('%%') || (flavor === 'd2' && t.startsWith('#'))) return null;
+    if (flavor === 'state') {
+      let m = t.match(RE.stEdge);
+      if (m) return { edges: [{ from: m[1], to: m[2], fromTok: m[1], toTok: m[2], arrow: '-->', label: m[3] != null ? m[3] : null }], decls: [] };
+      if (/^(direction|note|classDef|class|style|end)\b/.test(t) || /^state\s+\S+\s*\{$|^\}$/.test(t)) return null;
+      m = t.match(RE.stAs);
+      if (m) return { edges: [], decls: [{ id: m[1], tok: m[1] }] };
+      m = t.match(RE.stDecl);
+      if (m && m[1] !== '[*]') return { edges: [], decls: [{ id: m[1], tok: m[1] }] };
+      return null;
+    }
+    if (flavor === 'flowchart' && /^(subgraph|end|classDef|class|style|linkStyle|click|direction)\b/.test(t)) return null;
+    if (flavor === 'd2' && /[{}]/.test(t)) return null;
+    if (flavor === 'd2' && !t.includes('->')) {
+      const m = t.match(/^([\p{L}_][\p{L}\p{N}_]*)(?:\s*:\s*(.*))?$/u);
+      return m ? { edges: [], decls: [{ id: m[1], tok: m[1] }] } : null;
+    }
+    const c = chain(t, flavor);
+    if (!c) return null;
+    return c.edges.length ? { edges: c.edges, decls: [] } : { edges: [], decls: c.toks };
+  }
+  function parse(md) {  // the design model, or null when MD has no state-graph block
+    const lines = md.split('\n'), blocks = fences(lines);
+    let g = null;
+    for (const b of blocks) {
+      if (b.lang !== 'mermaid' && b.lang !== 'd2') continue;
+      let flavor = b.lang === 'd2' ? 'd2' : null, header = -1;
+      if (!flavor) {
+        for (let i = b.open + 1; i < b.close; i++) {
+          const t = lines[i].trim();
+          if (!t || t.startsWith('%%')) continue;
+          const m = t.match(RE.mmdHeader);
+          if (m) { flavor = m[1].startsWith('state') ? 'state' : 'flowchart'; header = i; }
+          break;
+        }
+        if (!flavor) continue;
+      }
+      g = { flavor, kind: b.lang, open: b.open, close: b.close, header };
+      break;
+    }
+    if (!g) return null;
+    const nodes = [], byId = new Map(), edges = [], lineKinds = new Map();
+    const touch = (id, tok) => { if (!byId.has(id)) { const n = { id, tok, decl: [] }; byId.set(id, n); nodes.push(n); } return byId.get(id); };
+    let depth = 0;
+    for (let i = g.open + 1; i < g.close; i++) {
+      if (i === g.header) continue;
+      const raw = lines[i];
+      if (g.flavor === 'd2') {  // nested d2 containers are scoped: kept verbatim
+        const opens = (raw.match(/\{/g) || []).length, closes = (raw.match(/\}/g) || []).length, was = depth;
+        depth += opens - closes;
+        if (was > 0 || opens || closes) continue;
+      }
+      const r = graphLine(raw, g.flavor);
+      if (!r) continue;
+      r.edges.forEach((e, k) => { touch(e.from, e.fromTok); touch(e.to, e.toTok); edges.push({ ...e, line: i, k }); });
+      for (const d of r.decls) touch(d.id, d.tok).decl.push(i);
+      lineKinds.set(i, r.edges.length);
+    }
+    const inFence = new Set();
+    for (const b of blocks) for (let i = b.open; i <= Math.min(b.close, lines.length - 1); i++) inFence.add(i);
+    const trees = {}, isNode = id => byId.has(id) && id !== '[*]';
+    for (let i = 0; i < lines.length; i++) {
+      if (inFence.has(i)) continue;
+      const h = lines[i].match(RE.head);
+      let tree = null;
+      if (h && isNode(h[2]) && !trees[h[2]]) {
+        let end = i + 1;
+        while (end < lines.length && !(lines[end].match(RE.head) && !inFence.has(end) && lines[end].match(RE.head)[1].length <= h[1].length)) end++;
+        tree = { id: h[2], style: 'heading', level: h[1].length, line: i, end };
+      } else {
+        const b = lines[i].match(RE.item);
+        if (b && !b[1] && isNode(b[3].trim()) && !trees[b[3].trim()]) {
+          let end = i + 1;
+          while (end < lines.length && (!lines[end].trim() || /^\s/.test(lines[end]))) end++;
+          tree = { id: b[3].trim(), style: 'bullet', line: i, end };
+        }
+      }
+      if (!tree) continue;
+      while (tree.end > tree.line + 1 && !lines[tree.end - 1].trim()) tree.end--;
+      tree.items = items(lines, tree.line + 1, tree.end, inFence);
+      trees[tree.id] = tree;
+      i = tree.end - 1;
+    }
+    return { ...g, nodes, edges, trees, nlines: lines.length };
+  }
+  function items(lines, a, b, inFence) {  // nested bullet items: [{ text, line, children }]
+    const root = { children: [] }, stack = [{ w: -1, node: root }];
+    for (let i = a; i < b; i++) {
+      if (inFence.has(i)) continue;
+      const m = lines[i].match(RE.item);
+      if (!m) continue;
+      const w = width(m[1]), it = { text: m[3], line: i, children: [] };
+      while (stack.length > 1 && stack[stack.length - 1].w >= w) stack.pop();
+      stack[stack.length - 1].node.children.push(it);
+      stack.push({ w, node: it });
+    }
+    return root.children;
+  }
+  const isDesign = m => !!m && m.nodes.some(n => m.trees[n.id]);
+  /* ---------- edits: each returns { model, said } and never touches positions ---------- */
+  const clone = m => ({ ...m, nodes: m.nodes.map(n => ({ ...n })), edges: m.edges.map(e => ({ ...e })), trees: { ...m.trees } });
+  function freshId(m, base = 'S') {
+    const have = new Set(m.nodes.map(n => n.id));
+    let i = 1;
+    while (have.has(base + i)) i++;
+    return base + i;
+  }
+  function addNode(m, id) {
+    const c = clone(m);
+    id = id || freshId(m);
+    if (c.nodes.some(n => n.id === id)) return { model: m, said: '' };
+    c.nodes.push({ id, tok: id, decl: [], added: true });
+    return { model: c, said: `added node ${id}`, id };
+  }
+  function addEdge(m, from, to) {
+    if (m.edges.some(e => e.from === from && e.to === to)) return { model: m, said: '' };
+    const c = clone(m);
+    const tok = id => (m.nodes.find(n => n.id === id) || { tok: id }).id;
+    c.edges.push({ from, to, fromTok: tok(from), toTok: tok(to), arrow: m.flavor === 'd2' ? '->' : '-->', label: null, line: null });
+    return { model: c, said: `added edge ${from}->${to}` };
+  }
+  function deleteNode(m, id) {
+    const c = clone(m), n0 = c.edges.length;
+    c.nodes = c.nodes.filter(n => n.id !== id);
+    c.edges = c.edges.filter(e => e.from !== id && e.to !== id);
+    const gone = n0 - c.edges.length, tree = !!m.trees[id];
+    delete c.trees[id];
+    const bits = [gone ? `${gone} edge${gone > 1 ? 's' : ''}` : '', tree ? 'its tree' : ''].filter(Boolean);
+    return { model: c, said: `deleted node ${id}` + (bits.length ? ` (${bits.join(', ')})` : '') };
+  }
+  /* ---------- serialize: splice only the lines an edit touched ---------- */
+  function edgeText(e, flavor) {
+    if (flavor === 'state') return `${e.fromTok} --> ${e.toTok}` + (e.label != null ? ` : ${e.label}` : '');
+    if (flavor === 'd2') return `${e.fromTok} ${e.arrow} ${e.toTok}` + (e.label != null ? `: ${e.label}` : '');
+    return `${e.fromTok} ${e.arrow}${e.label != null ? `|${e.label}|` : ''} ${e.toTok}`;
+  }
+  function serialize(model, originalMd) {
+    const o = parse(originalMd);
+    if (!o) return originalMd;
+    const L = originalMd.split('\n'), del = new Set(), repl = new Map(), after = new Map();
+    const put = (i, s) => { if (!after.has(i)) after.set(i, []); after.get(i).push(s); };
+    const kept = new Set(model.edges.filter(e => e.line != null).map(e => e.line + ':' + e.k));
+    const byLine = new Map();
+    for (const e of o.edges) { if (!byLine.has(e.line)) byLine.set(e.line, []); byLine.get(e.line).push(e); }
+    for (const [i, es] of byLine) {
+      const keep = es.filter(e => kept.has(i + ':' + e.k));
+      if (keep.length === es.length) continue;
+      if (!keep.length) del.add(i);
+      else repl.set(i, keep.map(e => indentOf(L[i]) + edgeText(e, o.flavor)));
+    }
+    const ids = new Set(model.nodes.map(n => n.id));
+    const dropRange = (a, b) => {  // the lines and the blank lines after them, so the next section moves up
+      let e = b;
+      while (e < L.length - 1 && !L[e].trim()) e++;
+      if (e >= L.length - 1 && !L[L.length - 1]) {  // the last section: drop the blank lines before it instead
+        e = b; while (a > 0 && !L[a - 1].trim()) a--;
+      }
+      for (let i = a; i < e; i++) del.add(i);
+    };
+    for (const n of o.nodes) {
+      if (ids.has(n.id)) continue;
+      n.decl.forEach(i => del.add(i));
+      const t = o.trees[n.id];
+      if (t) dropRange(t.line, t.end);
+    }
+    // new graph lines go after the last graph line we understood, indented like it
+    let at = -1;
+    for (let i = o.open + 1; i < o.close; i++) if (byLine.has(i) || o.nodes.some(n => n.decl.includes(i))) at = i;
+    const anchor = at >= 0 ? at : (o.header >= 0 ? o.header : o.open);
+    const ind = at >= 0 ? indentOf(L[at]) : o.flavor === 'd2' ? '' : '    ';
+    for (const n of model.nodes) if (n.added) put(anchor, ind + n.id);
+    for (const e of model.edges) if (e.line == null) put(anchor, ind + edgeText(e, o.flavor));
+    const fresh = model.nodes.filter(n => n.added && n.id !== '[*]');
+    if (fresh.length) {
+      const ts = Object.values(o.trees).sort((a, b) => a.line - b.line), last = ts.filter(t => ids.has(t.id)).pop();
+      const style = ts.length ? ts[ts.length - 1] : { style: 'heading', level: 2 };
+      const head = id => style.style === 'bullet' ? `- ${id}` : `${'#'.repeat(style.level)} ${id}`;
+      const block = fresh.flatMap(n => ['', head(n.id)]);
+      if (last) block.forEach(s => put(last.end - 1, s));
+      else {
+        let e = L.length - 1;
+        if (!L[e]) e--;
+        while (e > 0 && !L[e].trim()) e--;
+        block.forEach(s => put(e, s));
+      }
+    }
+    const out = [];
+    for (let i = 0; i < L.length; i++) {
+      if (!del.has(i)) out.push(...(repl.get(i) || [L[i]]));
+      if (after.has(i)) out.push(...after.get(i));
+    }
+    return out.join('\n');
+  }
+  /* ---------- the smallest single-range replacement that turns A into B ---------- */
+  function minimalEdit(a, b) {
+    let p = 0;
+    const n = Math.min(a.length, b.length);
+    while (p < n && a[p] === b[p]) p++;
+    let s = 0;
+    while (s < n - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+    return { from: p, to: a.length - s, text: b.slice(p, b.length - s) };
+  }
+  /* ---------- a small force-directed layout; FIXED ids keep their place ---------- */
+  function layout(ids, edges, pos, fixed, iters = 300) {
+    const P = {}, n = ids.length || 1;
+    ids.forEach((id, i) => {
+      const a = (2 * Math.PI * i) / n;
+      P[id] = pos[id] ? { x: pos[id][0], y: pos[id][1] } : { x: 200 * Math.cos(a) + (i % 3) * 7, y: 200 * Math.sin(a) + (i % 5) * 5 };
+    });
+    const K = 230;  // the ideal edge length; room for the tree overlays
+    for (let it = 0; it < iters; it++) {
+      const F = {}, cool = 1 - it / iters;
+      ids.forEach(id => { F[id] = { x: 0, y: 0 }; });
+      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+        const A = P[ids[i]], B = P[ids[j]];
+        let dx = A.x - B.x, dy = A.y - B.y, d2 = dx * dx + dy * dy;
+        if (d2 < 0.01) { dx = 0.1 * (i - j); dy = 0.1; d2 = dx * dx + dy * dy; }
+        const d = Math.sqrt(d2), f = (K * K) / d / d;  // repulsion K²/d along the unit vector
+        F[ids[i]].x += dx * f; F[ids[i]].y += dy * f;
+        F[ids[j]].x -= dx * f; F[ids[j]].y -= dy * f;
+      }
+      for (const e of edges) {
+        if (e.from === e.to || !P[e.from] || !P[e.to]) continue;
+        const A = P[e.from], B = P[e.to], dx = A.x - B.x, dy = A.y - B.y, d = Math.sqrt(dx * dx + dy * dy) || 0.1;
+        const f = (d * d) / K / d;
+        F[e.from].x -= dx * f; F[e.from].y -= dy * f; F[e.to].x += dx * f; F[e.to].y += dy * f;
+      }
+      for (const id of ids) {
+        if (fixed && fixed.has(id)) continue;
+        const f = F[id], m = Math.sqrt(f.x * f.x + f.y * f.y) || 1, step = Math.min(m, 30 * cool + 1);
+        P[id].x += (f.x / m) * step; P[id].y += (f.y / m) * step;
+      }
+    }
+    const out = {};
+    for (const id of ids) out[id] = [Math.round(P[id].x), Math.round(P[id].y)];
+    return out;
+  }
+  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout };
+}
+
+/* ---------- Design mode: a state graph with one tree per node, edited from the canvas ---------- */
+// The Markdown stays the source of truth: every graph edit is spliced into the editor buffer as one
+// undo step (drafts, change bars, save, merge and history work unchanged). Positions are view state:
+// they live in the .treedit-layout.json sidecar, never in the Markdown.
+const DZ_STEP = 10, DZ_BIG = 50, SVGNS = 'http://www.w3.org/2000/svg';
+function dzDetect() { return !!(S.file && S.file.kind === 'text' && isMarkdown(S.file.path) && DC.isDesign(DC.parse(editor.value))); }
+async function setDesign(on) {
+  if (!on) {
+    DZ.on = false; DZ.link = false; DZ.gen++;
+    $('#designview').hidden = true; $('#editwrap').classList.remove('dz-split');
+    $('#b-design').classList.remove('on');
+    requestAnimationFrame(() => { syncHL(); renderMarks(); });
+    return;
+  }
+  if (!S.file || !isMarkdown(S.file.path)) return;
+  if (MDP.on) resetMdPreview();
+  const path = S.file.path, gen = ++DZ.gen;
+  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null });
+  $('#designview').hidden = false; $('#editwrap').classList.add('dz-split');
+  $('#b-design').classList.add('on');
+  try { DZ.pos = (await api('GET', '/api/layout?path=' + encodeURIComponent(path))).nodes || {}; } catch { DZ.pos = {}; }
+  if (gen !== DZ.gen) return;
+  dzRefresh();
+  $('#dz-canvas').focus();
+  requestAnimationFrame(() => { syncHL(); renderMarks(); });
+}
+function dzRefresh() {  // re-read the buffer; nodes without a place get one from the layout
+  if (!DZ.on) return;
+  const m = DC.parse(editor.value);
+  DZ.model = m;
+  if (m) {
+    const ids = m.nodes.map(n => n.id), have = new Set(ids.filter(id => DZ.pos[id]));
+    if (have.size < ids.length) Object.assign(DZ.pos, DC.layout(ids, m.edges, DZ.pos, have));
+    if (!ids.includes(DZ.active)) DZ.active = ids.find(id => id !== '[*]') || ids[0] || null;
+  }
+  dzRender();
+}
+function dzSavePos() {  // debounced: arrow keys repeat
+  clearTimeout(DZ.saveT);
+  const path = DZ.path;
+  DZ.saveT = setTimeout(() => {
+    if (!DZ.model || path !== DZ.path) return;
+    const nodes = {};
+    for (const n of DZ.model.nodes) if (DZ.pos[n.id]) nodes[n.id] = DZ.pos[n.id];
+    api('PUT', '/api/layout', { path, nodes }).catch(e => toast('Layout not saved: ' + e.message, true));
+  }, 400);
+}
+function dzApply(res) {  // one graph edit -> one minimal splice of the editor buffer
+  if (!res.said) return false;
+  if (editor.readOnly) { toast('This file is read-only here', true); return false; }
+  const next = DC.serialize(res.model, editor.value), e = DC.minimalEdit(editor.value, next);
+  if (e.from === e.to && !e.text) return false;
+  const line = editor.value.slice(0, e.from).split('\n').length;
+  replaceRange(editor, e.from, e.to, e.text);
+  DZ.said = `${res.said} · line ${line}`;
+  $('#dz-canvas').focus();
+  dzRefresh();
+  return true;
+}
+function dzLayout() {
+  if (!DZ.model) return;
+  DZ.pos = DC.layout(DZ.model.nodes.map(n => n.id), DZ.model.edges, {}, null);
+  DZ.said = 'laid out the graph (positions only, the Markdown is unchanged)';
+  dzRender(); dzSavePos();
+}
+function dzAddNode() {
+  if (!DZ.model) return;
+  const r = DC.addNode(DZ.model), base = DZ.pos[DZ.active] || [0, 0];
+  let p = [base[0] + 90, base[1] + 60];
+  const near = q => Object.values(DZ.pos).some(o => Math.abs(o[0] - q[0]) < 60 && Math.abs(o[1] - q[1]) < 36);
+  for (let k = 0; k < 20 && near(p); k++) p = [p[0], p[1] + 44];
+  DZ.pos[r.id] = p; DZ.active = r.id;
+  dzApply(r); dzSavePos();
+}
+function dzDelete() {
+  if (!DZ.model || !DZ.active) return;
+  const id = DZ.active;
+  if (dzApply(DC.deleteNode(DZ.model, id))) { delete DZ.pos[id]; dzSavePos(); }
+}
+function dzClick(id) {
+  if (DZ.link && DZ.active) {
+    const r = DC.addEdge(DZ.model, DZ.active, id);
+    DZ.link = false;
+    if (!r.said) { toast(`${DZ.active}->${id} is already there`); dzRender(); }
+    else dzApply(r);
+  } else { DZ.active = id; dzRender(); }
+  $('#dz-canvas').focus();
+}
+function dzKey(e) {  // the canvas's own keys; the editor, the New box and the terminal never see these
+  const d = undoKey(e);
+  if (d) {
+    e.preventDefault(); e.stopPropagation();
+    if (S.file && histStep(S.file.path, editor, d)) DZ.said = d < 0 ? 'undo' : 'redo';
+    $('#dz-canvas').focus(); dzRefresh();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;  // Ctrl+S and friends keep their global meaning
+  const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  if (k === 'n' || k === 'a') dzAddNode();
+  else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
+  else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
+  else if (k === 'Delete' || k === 'Backspace') dzDelete();
+  else if (arrows[k] && DZ.active && DZ.pos[DZ.active]) {
+    const s = e.shiftKey ? DZ_BIG : DZ_STEP, p = DZ.pos[DZ.active];
+    DZ.pos[DZ.active] = [p[0] + arrows[k][0] * s, p[1] + arrows[k][1] * s];
+    dzRender(); dzSavePos();
+  } else return;
+  e.preventDefault(); e.stopPropagation();
+}
+function dzTreeList(items) {
+  const ul = el('ul');
+  for (const it of items) {
+    const li = el('li', null, it.text);
+    if (it.children.length) li.append(dzTreeList(it.children));
+    ul.append(li);
+  }
+  return ul;
+}
+function dzMarkdown(m) {  // the two sections as they stand in the file
+  const L = editor.value.split('\n'), parts = [L.slice(m.open, Math.min(m.close + 1, L.length)).join('\n')];
+  for (const t of Object.values(m.trees).sort((a, b) => a.line - b.line)) parts.push(L.slice(t.line, t.end).join('\n'));
+  return parts.join('\n\n');
+}
+function dzRender() {
+  const v = $('#dz-canvas'), svg = $('#dz-svg'), trees = $('#dz-trees'), m = DZ.model;
+  svg.replaceChildren(); trees.replaceChildren();
+  $('#dz-link').hidden = !DZ.link;
+  $('#dz-said').textContent = DZ.said || 'no graph edits yet';
+  $('#dz-md').hidden = !DZ.showMd;
+  $('#dz-mdbtn').classList.toggle('on', DZ.showMd);
+  $('#dz-empty').hidden = !!m;
+  if (!m) return;
+  if (DZ.showMd) $('#dz-mdtext').textContent = dzMarkdown(m);
+  const ids = m.nodes.map(n => n.id), W = v.clientWidth || 600, H = v.clientHeight || 400;
+  const xs = ids.map(id => DZ.pos[id][0]), ys = ids.map(id => DZ.pos[id][1]);
+  const ox = W / 2 - (Math.min(...xs) + Math.max(...xs)) / 2, oy = H / 2 - (Math.min(...ys) + Math.max(...ys)) / 2 - 20;
+  const at = id => [DZ.pos[id][0] + ox, DZ.pos[id][1] + oy];
+  const mk = (tag, attrs, parent = svg) => { const n = document.createElementNS(SVGNS, tag); for (const [a, b] of Object.entries(attrs)) n.setAttribute(a, b); parent.append(n); return n; };
+  const defs = mk('defs', {}), mark = mk('marker', { id: 'dz-arrow', viewBox: '0 0 10 10', refX: 10, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+  mk('path', { d: 'M0,0 L10,5 L0,10 z', class: 'dz-ah' }, mark);
+  const half = id => id === '[*]' ? [8, 8] : [Math.max(28, id.length * 4.2 + 14), 15];
+  for (const e of m.edges) {
+    const [x1, y1] = at(e.from), [x2, y2] = at(e.to), g = mk('g', { class: 'dz-edge' });
+    if (e.from === e.to) {
+      const [hw, hh] = half(e.from);
+      mk('path', { d: `M${x1 + hw - 8},${y1 - hh} C${x1 + hw + 30},${y1 - hh - 40} ${x1 + hw + 40},${y1} ${x1 + hw},${y1 + 2}`, 'marker-end': 'url(#dz-arrow)' }, g);
+    } else {
+      const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1, [hw, hh] = half(e.to), [fw, fh] = half(e.from);
+      const cut = (w, h) => Math.min(Math.abs(w * d / (dx || 1e-9)), Math.abs(h * d / (dy || 1e-9)));
+      const s = cut(fw, fh), t = cut(hw, hh);
+      mk('line', { x1: x1 + dx * s / d, y1: y1 + dy * s / d, x2: x2 - dx * (t + 2) / d, y2: y2 - dy * (t + 2) / d, 'marker-end': 'url(#dz-arrow)' }, g);
+      if (e.label) mk('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 4, class: 'dz-elabel' }, g).textContent = e.label;
+    }
+  }
+  for (const n of m.nodes) {
+    const [x, y] = at(n.id), [hw, hh] = half(n.id), g = mk('g', { class: 'dz-node' + (n.id === DZ.active ? ' active' : '') + (DZ.link ? ' linking' : ''), 'data-id': n.id });
+    if (n.id === '[*]') mk('circle', { cx: x, cy: y, r: 7 }, g);
+    else { mk('rect', { x: x - hw, y: y - hh, width: 2 * hw, height: 2 * hh, rx: 8 }, g); mk('text', { x, y: y + 4 }, g).textContent = n.id; }
+    g.addEventListener('pointerdown', ev => { ev.preventDefault(); dzClick(n.id); });
+    const t = m.trees[n.id];
+    if (!t) continue;
+    const fold = DZ.folded.has(n.id), box = el('div', 'dz-tree' + (fold ? ' folded' : '') + (n.id === DZ.active ? ' active' : ''));
+    box.style.left = (x - hw) + 'px'; box.style.top = (y + hh + 4) + 'px';
+    const head = el('button', 'dz-fold', (fold ? '▸ ' : '▾ ') + `${n.id} · ${t.items.length}`);
+    head.title = (fold ? 'Show' : 'Fold') + ` the tree of ${n.id} (line ${t.line + 1})`;
+    head.onclick = () => { DZ.folded[fold ? 'delete' : 'add'](n.id); dzRender(); $('#dz-canvas').focus(); };
+    box.append(head);
+    if (!fold) box.append(dzTreeList(t.items));
+    trees.append(box);
+  }
+}
+$('#b-design').onclick = () => setDesign(!DZ.on);
+$('#dz-canvas').addEventListener('keydown', dzKey);
+$('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
+$('#dz-mdbtn').onclick = () => { DZ.showMd = !DZ.showMd; dzRender(); $('#dz-canvas').focus(); };
+new ResizeObserver(() => { if (DZ.on) dzRender(); }).observe($('#dz-canvas'));
 async function compileTypst() {
   if (!S.file || !isTypst(S.file.path)) return;
   if (isDirty()) {
@@ -2423,6 +2944,8 @@ editor.addEventListener('input', () => {
       if (MDP.on && S.file && isMarkdown(S.file.path)) renderMdPreview(++MDP.gen);
     }, 350);
   }
+  clearTimeout(DZ.timer);  // typing in the source redraws the graph, and can make a file a design file
+  DZ.timer = setTimeout(() => { if (DZ.on) dzRefresh(); else if (S.file && isMarkdown(S.file.path)) $('#b-design').hidden = !dzDetect(); }, DZ.on ? 120 : 400);
 });
 editor.addEventListener('scroll', syncHL);
 ['keyup', 'click', 'select', 'mouseup'].forEach(ev => editor.addEventListener(ev, () => { updatePos(); updateFbButton(); }));

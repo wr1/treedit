@@ -18,6 +18,14 @@ pulls its commits, pushes yours, and merges annotations and feedback changed on 
 work-file conflict is committed with its markers and pushed for the agent to resolve, by default.
 
 Markdown files preview with Mermaid diagrams, and with D2 diagrams through the installed `d2` CLI.
+A design Markdown file (a ```` ```mermaid ```` state diagram or flowchart, or a ```` ```d2 ```` graph,
+plus one bullet tree per node under a heading or a top bullet named after the node; see
+[examples/door-design.md](examples/door-design.md)) gets a **Design** button: the graph with each
+node's tree as a transparent, foldable overlay. With the graph focused, `n`/`a` adds a node, `l`
+then a click links the active node to another, arrows move it (Shift: bigger steps), Delete removes
+it with its edges and tree, Esc cancels linking, Ctrl+Z undoes. Every edit is one small splice of
+the Markdown in the editor beside it (change bars, drafts, save and undo as for typing); node
+positions go to `.treedit-layout.json`, never into the Markdown.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.
 Right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** to pick a target and
 run it: the command goes into a shell that is already at its prompt (or into a new session if none

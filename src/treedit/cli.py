@@ -100,6 +100,7 @@ DEFAULT_IGNORE = [
     "target",
 ]
 NOTES_NAME = ".treenotes.json"
+LAYOUT_NAME = ".treedit-layout.json"  # Design-mode node positions per file; hidden like other .treedit-* files
 LOG_SUFFIX = ".log.jsonl"  # the change log sits next to the notes file: .treenotes.log.jsonl
 JSON_OUT = False  # set by main() when a command gets --json: machine-readable output
 DEFAULT_SHOW = ["notes"]  # a private notes/ repo is usually git-ignored by the project, but belongs in the tree
@@ -1349,6 +1350,56 @@ class Workspace:
     def mark_ui(self, rel: str) -> None:
         with self.lock:
             self._ui[self.norm(rel)] = time.time()
+
+    # ---------- Design-mode node positions: view state, kept out of the Markdown ----------
+    @property
+    def layout_path(self) -> Path:
+        return self.root / LAYOUT_NAME
+
+    def read_layout(self, rel: str) -> dict:
+        try:
+            data = json.loads(self.layout_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return {}
+        nodes = data.get("files", {}).get(self.norm(rel), {}) if isinstance(data, dict) else {}
+        return nodes if isinstance(nodes, dict) else {}
+
+    def write_layout(self, rel: str, nodes) -> None:
+        rel = self.norm(rel)
+        if not rel:
+            raise HTTPError(400, "a path is required")
+        if not isinstance(nodes, dict):
+            raise HTTPError(400, "nodes must be an object")
+        clean = {}
+        for k, v in nodes.items():
+            if not (isinstance(k, str) and isinstance(v, list) and len(v) == 2):
+                raise HTTPError(400, "a position is [x, y]")
+            try:
+                clean[k] = [round(float(v[0])), round(float(v[1]))]
+            except (TypeError, ValueError) as e:
+                raise HTTPError(400, "a position is [x, y]") from e
+        with self.lock:
+            try:
+                data = json.loads(self.layout_path.read_text("utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            files = data.get("files") if isinstance(data, dict) and isinstance(data.get("files"), dict) else {}
+            if clean:
+                files[rel] = clean
+            else:
+                files.pop(rel, None)
+            if files:
+                # one line per file, so moving nodes in one design file is a one-line diff of this sidecar
+                rows = ",\n".join(
+                    f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(files[k], sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
+                    for k in sorted(files)
+                )
+                atomic_write(self.layout_path, f'{{"version": 1, "files": {{\n{rows}\n}}}}\n'.encode())
+            else:
+                try:
+                    self.layout_path.unlink()
+                except OSError:
+                    pass
 
     # ---------- drafts: unsaved edits, kept as diffs outside the project ----------
     def read_drafts(self) -> dict:
@@ -2712,6 +2763,14 @@ class Mounts:
         _, w, sub = self.split(rel)
         w.set_draft(sub, draft)
 
+    def read_layout(self, rel: str) -> dict:
+        _, w, sub = self.split(rel)
+        return w.read_layout(sub)
+
+    def write_layout(self, rel: str, nodes) -> None:
+        _, w, sub = self.split(rel)
+        w.write_layout(sub, nodes)
+
     # ---------- files ----------
     def read_file(self, rel: str) -> dict:
         name, w, sub = self.split(rel)
@@ -2962,6 +3021,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
+        if method == "GET" and path == "/api/layout":
+            return self.send_json(200, {"nodes": ws.read_layout(q.get("path", ""))})
         if method == "GET" and path == "/api/pdf/info":
             return self.send_json(200, ws.pdf_info(q.get("path", "")))
         if method == "GET" and path == "/api/pdf":
@@ -3001,6 +3062,9 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 ws.write_file(b.get("path", ""), str(b.get("content", "")), b.get("base_hash"), bool(b.get("force"))),
             )
+        if method == "PUT" and path == "/api/layout":
+            ws.write_layout(b.get("path", ""), b.get("nodes"))
+            return self.send_json(200, {"ok": True})
         if method == "PUT" and path == "/api/note":
             ws.set_note(b.get("path", ""), str(b.get("note", "")))
             return self.send_json(200, {"ok": True})

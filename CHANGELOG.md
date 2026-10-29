@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Design mode for design Markdown files (a mermaid `stateDiagram`/`flowchart`/`graph` or a d2 graph
+  block, plus one bullet tree per node): a **Design** toggle beside Preview shows the graph with
+  transparent, foldable tree overlays, a force layout (on load and from **Layout**), a live
+  **View Markdown** panel, a mode badge, a link-mode badge, a key strip and a "what changed" line
+  (`added node S1 · line 16`). Keys act only while the graph has focus: `n`/`a` add a node, `l`
+  link mode then click a target, arrows (Shift: ×5) move, Delete/Backspace delete a node with its
+  edges and tree, Esc cancels linking, Ctrl+Z / Ctrl+Y undo and redo. The Markdown stays the
+  source: `designCore()` parses it and serializes edits as minimal splices (untouched lines,
+  comments, prose and node order stay byte-for-byte), applied to the editor buffer as one undo step
+  each, so drafts, change bars, save, merge, history and `treedit edits` work unchanged. Node
+  positions live in a `.treedit-layout.json` sidecar at the root (one line per file; `GET`/`PUT
+  /api/layout`), so moving nodes never touches the Markdown diff. Sample: `examples/door-design.md`.
 - Typst: a **Compile PDF** button in the file bar saves the `.typ` file, compiles it with
   `typst compile` beside it, and opens the PDF in the viewer. The PDF stays visible in the tree even
   when `.gitignore` hides it, so the viewer can find it.

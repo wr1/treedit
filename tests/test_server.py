@@ -787,3 +787,15 @@ def test_create_in_mounts(tmp_path):
     assert (tmp_path / "two/a/b.txt").exists()
     m.undo(None, "two/a")
     assert not (tmp_path / "two/a").exists()
+
+
+def test_layout_sidecar(server, tree):
+    assert call(server, "GET", "/api/layout?path=d.md")[1] == {"nodes": {}}
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": [1.4, -2.6], "B": [3, 4]}})[0] == 200
+    assert call(server, "GET", "/api/layout?path=d.md")[1] == {"nodes": {"A": [1, -3], "B": [3, 4]}}
+    side = tree / ".treedit-layout.json"
+    assert side.read_text() == '{"version": 1, "files": {\n  "d.md": {"A":[1,-3],"B":[3,4]}\n}}\n'
+    assert "treedit-layout" not in json.dumps(call(server, "GET", "/api/tree")[1]["tree"])  # hidden like .treedit-*
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": "x"}})[0] == 400
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {}})[0] == 200
+    assert not side.exists()
