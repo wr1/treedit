@@ -263,6 +263,7 @@ body.wrap #editor{overflow-x:hidden}
 .dz-tree ul{margin:2px 0 0;padding-left:14px}.dz-tree li{margin:0}
 .dz-item{pointer-events:auto;cursor:text}.dz-item:hover{text-decoration:underline dotted}
 .dz-add{pointer-events:auto;border:0;background:none;padding:0 0 0 6px;font:600 12px var(--mono);color:var(--dim);cursor:pointer}.dz-add:hover{color:var(--accent)}
+.dz-rename{position:absolute;z-index:2;text-align:center;font:600 12.5px var(--mono)!important}
 .dz-input{pointer-events:auto;font:inherit;width:200px;max-width:100%;padding:0 3px;border:1px solid var(--accent);border-radius:3px;background:var(--bg);color:var(--text);outline:none}
 #dz-md{position:absolute;right:8px;top:8px;bottom:8px;width:min(46%,460px);display:flex;flex-direction:column;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:7px}
 #dz-md[hidden]{display:none}
@@ -591,7 +592,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move</span><span>dbl-click/<kbd>Enter</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move</span><span>dbl-click/<kbd>F2</kbd>/<kbd>r</kbd> rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1926,7 +1927,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', showMd: false, folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, edit: null, press: null };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', showMd: false, folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, edit: null, press: null, rename: null };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -2670,6 +2671,52 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     for (const id of ids) out[id] = [Math.round(P[id].x), Math.round(P[id].y)];
     return out;
   }
+  /* ---------- rename a node: its id in the graph lines and its tree heading; labels and prose stay ---------- */
+  function idSpans(raw, flavor) {  // [{ id, at }]: where node ids sit on a graph line we understand
+    if (!graphLine(raw, flavor)) return [];
+    const ind = indentOf(raw).length, t = raw.trim();
+    if (flavor === 'state') {
+      const e = t.match(new RegExp(`^(${ID})(\\s*-->\\s*)(${ID})`, 'u'));
+      if (e) return [{ id: e[1], at: ind }, { id: e[3], at: ind + e[1].length + e[2].length }];
+      const a = t.match(RE.stAs);
+      if (a) return [{ id: a[1], at: ind + t.length - a[1].length }];
+      const d = t.match(RE.stDecl);
+      return d ? [{ id: d[1], at: ind }] : [];
+    }
+    const tok = flavor === 'd2' ? RE.d2Tok : RE.fcTok, arrow = flavor === 'd2' ? RE.d2Arrow : RE.fcArrow, out = [];
+    let rest = t.replace(/;\s*$/, ''), pos = 0;
+    if (flavor === 'd2') { const c = rest.match(/^(.*?):\s*(.*)$/); if (c) rest = c[1].trimEnd(); }
+    for (let first = true; rest; first = false) {
+      if (!first) { const a = rest.match(arrow); if (!a) break; rest = rest.slice(a[0].length); pos += a[0].length; }
+      const m = rest.match(tok);
+      if (!m) break;
+      out.push({ id: m[1], at: ind + pos });
+      rest = rest.slice(m[0].length); pos += m[0].length;
+    }
+    return out;
+  }
+  function renameNode(md, from, to) {  // { md } or { error }
+    const m = parse(md);
+    if (!m || !m.nodes.some(n => n.id === from)) return { error: `no node ${from}` };
+    if (from === '[*]') return { error: 'the start/end state has no name' };
+    if (!new RegExp('^[\\p{L}_][\\p{L}\\p{N}_]*$', 'u').test(to)) return { error: 'a name is a letter or _, then letters, digits or _' };
+    if (m.nodes.some(n => n.id === to)) return { error: `${to} is already a node` };
+    const L = md.split('\n');
+    let depth = 0;
+    for (let i = m.open + 1; i < m.close; i++) {
+      if (i === m.header) continue;
+      if (m.flavor === 'd2') {  // nested d2 containers are scoped: kept verbatim, as parse does
+        const opens = (L[i].match(/\{/g) || []).length, closes = (L[i].match(/\}/g) || []).length, was = depth;
+        depth += opens - closes;
+        if (was > 0 || opens || closes) continue;
+      }
+      for (const sp of idSpans(L[i], m.flavor).filter(sp => sp.id === from).reverse()) L[i] = L[i].slice(0, sp.at) + to + L[i].slice(sp.at + from.length);
+    }
+    const t = m.trees[from];
+    if (t && t.style === 'heading') L[t.line] = `${'#'.repeat(t.level)} ${to}`;
+    else if (t) { const b = L[t.line].match(RE.item); L[t.line] = `${b[1]}${b[2]} ${to}`; }
+    return { md: L.join('\n') };
+  }
   /* ---------- tree items, edited by line: each returns { md, line } (LINE: the item now), or null ---------- */
   function findItem(m, line) {  // { tree, item, sibs, depth } for the item on LINE
     for (const tree of Object.values(m.trees)) {
@@ -2759,7 +2806,7 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     const block = ['## Graph', '', '```mermaid', 'stateDiagram-v2', '```'];
     return [...head, ...(head.length ? [''] : []), ...block, '', ...rest].join('\n');
   }
-  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter, setItem, insertItem, indentItem };
+  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter, setItem, insertItem, indentItem, renameNode };
 }
 
 /* ---------- Design mode: a state graph with one tree per node, edited from the canvas ---------- */
@@ -2795,7 +2842,7 @@ async function setDesign(on) {
   if (!S.file || !isMarkdown(S.file.path)) return;
   if (MDP.on) resetMdPreview();
   const path = S.file.path, gen = ++DZ.gen;
-  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null });
+  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null, rename: null });
   $('#designview').hidden = false; $('#editwrap').classList.add('dz-split');
   $('#b-design').classList.add('on');
   try { DZ.pos = (await api('GET', '/api/layout?path=' + encodeURIComponent(path))).nodes || {}; } catch { DZ.pos = {}; }
@@ -2874,7 +2921,7 @@ function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves th
   if (DZ.link) return dzClick(id);
   const again = DZ.press && DZ.press.id === id && ev.timeStamp - DZ.press.t < 400;
   DZ.press = again ? null : { id, t: ev.timeStamp };
-  if (again && id !== '[*]') return dzEditNew(id, null);  // the node is redrawn on press, so no native dblclick
+  if (again) return dzStartRename(id);  // the node is redrawn on press, so no native dblclick
   dzClick(id);
   if (!DZ.pos[id]) return;
   const x0 = ev.clientX, y0 = ev.clientY, start = DZ.pos[id], drag = { id, moved: false };
@@ -2895,8 +2942,8 @@ function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves th
   window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 }
 /* tree items: edited in place, written to the Markdown on Enter, Tab or leaving the box */
-function dzEditNew(id, after) { DZ.edit = { id, line: null, after, value: '' }; DZ.folded.delete(id); DZ.active = id; dzRender(); }
-function dzEditItem(id, it) { DZ.edit = { id, line: it.line, value: it.text, orig: it.text }; DZ.active = id; dzRender(); }
+function dzEditNew(id, after) { DZ.rename = null; DZ.edit = { id, line: null, after, value: '' }; DZ.folded.delete(id); DZ.active = id; dzRender(); }
+function dzEditItem(id, it) { DZ.rename = null; DZ.edit = { id, line: it.line, value: it.text, orig: it.text }; DZ.active = id; dzRender(); }
 function dzCommit(ed, value) {  // the item's line afterwards, or null
   DZ.edit = null;
   let r = null, said = '';
@@ -2925,6 +2972,41 @@ function dzEditKey(e, ed, inp) {
     DZ.edit = { id: ed.id, line, value: text.trim(), orig: text.trim() }; dzRender();
   }
 }
+/* rename: the id changes in the graph lines and the tree heading; the position moves with it */
+function dzStartRename(id) {
+  if (!id || id === '[*]') return;
+  DZ.edit = null; DZ.link = false; DZ.rename = { id, value: id }; DZ.active = id; dzRender();
+}
+function dzRenameCommit(rn, value) {
+  DZ.rename = null;
+  const to = value.trim(), from = rn.id, back = () => { dzRender(); $('#dz-canvas').focus(); };
+  if (!to || to === from) return back();
+  const r = DC.renameNode(editor.value, from, to);
+  if (r.error) { toast(r.error, true); return back(); }
+  const pos = DZ.pos[from], fold = DZ.folded.has(from);
+  if (pos) { DZ.pos[to] = pos; delete DZ.pos[from]; }
+  if (fold) { DZ.folded.delete(from); DZ.folded.add(to); }
+  DZ.active = to;
+  if (dzApplyMd(r.md, `renamed ${from} to ${to}`)) return dzSavePos();
+  if (pos) { DZ.pos[from] = pos; delete DZ.pos[to]; }  // not written (read-only): as it was
+  if (fold) { DZ.folded.delete(to); DZ.folded.add(from); }
+  DZ.active = from; back();
+}
+function dzRenameInput(rn) {
+  const inp = el('input', 'dz-input dz-rename');
+  inp.value = rn.value; inp.title = 'Enter renames (graph lines and tree heading), Esc cancels';
+  inp.oninput = () => { rn.value = inp.value; };
+  inp.onkeydown = e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { dzRenameCommit(rn, inp.value); return; }
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); DZ.rename = null; dzRender(); $('#dz-canvas').focus(); }
+    else if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); dzRenameCommit(rn, inp.value); }
+  };
+  inp.onblur = () => { if (DZ.rename === rn && inp.isConnected) dzRenameCommit(rn, inp.value); };
+  inp.onpointerdown = e => e.stopPropagation();
+  requestAnimationFrame(() => { if (DZ.rename === rn && inp.isConnected) { inp.focus(); inp.select(); } });
+  return inp;
+}
 function dzInputLi() { const li = el('li'); li.append(dzInput()); return li; }
 function dzInput() {
   const ed = DZ.edit, inp = el('input', 'dz-input');
@@ -2948,6 +3030,7 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   if (k === 'n' || k === 'a') dzAddNode();
   else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
+  else if (k === 'F2' || k === 'r') dzStartRename(DZ.active);
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
@@ -3021,6 +3104,11 @@ function dzRender() {
     if (n.id === '[*]') mk('circle', { cx: x, cy: y, r: 7 }, g);
     else { mk('rect', { x: x - hw, y: y - hh, width: 2 * hw, height: 2 * hh, rx: 8 }, g); mk('text', { x, y: y + 4 }, g).textContent = n.id; }
     g.addEventListener('pointerdown', ev => { if (ev.button !== 0) return; ev.preventDefault(); dzPress(n.id, ev); });
+    if (DZ.rename && DZ.rename.id === n.id) {
+      const inp = dzRenameInput(DZ.rename), w = Math.max(hw, 60);
+      inp.style.left = (x - w) + 'px'; inp.style.top = (y - 11) + 'px'; inp.style.width = (2 * w) + 'px';
+      trees.append(inp);
+    }
     const t = m.trees[n.id], ed = DZ.edit && DZ.edit.id === n.id ? DZ.edit : null, items = t ? t.items : [];
     if (!t && !ed) continue;
     const fold = DZ.folded.has(n.id) && !ed, box = el('div', 'dz-tree' + (fold ? ' folded' : '') + (n.id === DZ.active ? ' active' : ''));

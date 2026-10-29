@@ -5,8 +5,10 @@
 - Design mode: drag nodes with the mouse (the view stays put after a drop; Layout or a resize
   re-centres it), and edit the node trees on the canvas: double-click an item to edit it (empty
   deletes it with its children), Enter writes it and opens the next item, Tab / Shift+Tab indent and
-  outdent, Esc cancels; double-click a node, Enter on it or its `+` adds an item, and a node with no
-  tree gets a new section. Each write is one undo step of the editor.
+  outdent, Esc cancels; Enter on a node or its `+` adds an item, and a node with no tree gets a new
+  section. Double-click a node (or F2 / `r`) to rename it in place: the id changes in the graph
+  lines (edges, declarations, `state "…" as`) and the tree heading, never in labels or prose, and its
+  position moves with it. Each write is one undo step of the editor.
 - Design mode on any Markdown file: the **Design** button shows for every `.md` (lit when a graph is
   found), Ctrl+Shift+D toggles it, and the tree's right-click menu has **Open in Design mode**. A
   file without a graph gets **Start a state graph** (or `n`), which inserts an empty mermaid

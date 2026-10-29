@@ -28,8 +28,9 @@ empty mermaid block after the title; the file reopens in Design mode until you l
 then a click links the active node to another, dragging or the arrows move it (Shift: bigger steps),
 Delete removes it with its edges and tree, Esc cancels linking, Ctrl+Z undoes. The trees edit in
 place: double-click an item to change it (empty deletes it with its children), Enter writes it and
-opens the next, Tab / Shift+Tab indent and outdent; double-click a node, press Enter on it or click
-`+` to add an item (a node without a tree gets one). Every edit is one small splice of
+opens the next, Tab / Shift+Tab indent and outdent; press Enter on a node or click `+` to add an
+item (a node without a tree gets one). Double-click a node (or F2 / `r`) to rename it: the id changes
+in the graph lines and its tree heading, while edge labels and prose stay as they are. Every edit is one small splice of
 the Markdown in the editor beside it (change bars, drafts, save and undo as for typing); node
 positions go to `.treedit-layout.json`, never into the Markdown.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.

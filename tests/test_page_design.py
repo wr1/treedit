@@ -296,3 +296,44 @@ def test_indent_items(lib):
     assert diff(TREES, r["md"]) == ["-  - one.a", "-    more of one.a", "+- one.a", "+  more of one.a"]
     assert tree_edit(lib, TREES, "D.indentItem(md, 7, 1)") is None  # the first item has nothing to go under
     assert tree_edit(lib, TREES, "D.indentItem(md, 7, -1)") is None  # already a top item
+
+
+def test_rename_node_in_graph_and_tree_only(lib):
+    md = (
+        "```mermaid\nstateDiagram-v2\n    [*] --> Open\n    Open --> Closed : Open the door\n"
+        '    state "Wide open" as Open\n    Open\n```\n\n## Open\n- Open stays prose\n\n## Closed\n'
+    )
+    r = run(lib, "return D.renameNode(md, 'Open', 'Ajar');", md=md)
+    assert diff(md, r["md"]) == [
+        "-    [*] --> Open",
+        "-    Open --> Closed : Open the door",
+        '-    state "Wide open" as Open',
+        "-    Open",
+        "+    [*] --> Ajar",
+        "+    Ajar --> Closed : Open the door",
+        '+    state "Wide open" as Ajar',
+        "+    Ajar",
+        "-## Open",
+        "+## Ajar",
+    ]
+    r = run(lib, "return D.renameNode(md, 'Busy', 'Working');", md=FLOW)
+    assert diff(FLOW, r["md"]) == [
+        "-  Idle[Waiting] -->|start| Busy --> Done",
+        "-  Busy -.-> Idle",
+        "+  Idle[Waiting] -->|start| Working --> Done",
+        "+  Working -.-> Idle",
+        "-- Busy",
+        "+- Working",
+    ]
+    r = run(lib, "return D.renameNode(md, 'idle', 'rest');", md=D2)
+    assert diff(D2, r["md"]) == [
+        "-idle -> busy: start",
+        "-busy -> idle",
+        "+rest -> busy: start",
+        "+busy -> rest",
+        "-## idle",
+        "+## rest",
+    ]
+    assert "error" in run(lib, "return D.renameNode(md, 'Open', 'Closed');", md=md)
+    assert "error" in run(lib, "return D.renameNode(md, 'Open', 'two words');", md=md)
+    assert "error" in run(lib, "return D.renameNode(md, '[*]', 'Start');", md=md)
