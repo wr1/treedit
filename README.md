@@ -25,17 +25,17 @@ transparent, foldable overlay. Any Markdown file can go into Design mode: the **
 when the file already holds a graph), Ctrl+Shift+D, or **Open in Design mode** on the tree's
 right-click menu. A file without a graph offers **Start a state graph** (or press `n`), which adds
 an empty mermaid block after the title; the file reopens in Design mode until you leave it. With the
-graph focused, `n` adds a node linked from the active one, `a` a loose node, `l` then a click links
-the active node to another, dragging or the arrows move it (Shift: bigger steps), Delete removes it
-with its edges and tree, Esc cancels linking, Ctrl+Z undoes. The trees edit in place: double-click
-an item to change it (empty deletes it with its children), Enter writes it and opens the next, Tab /
-Shift+Tab indent and outdent; press Enter on a node or click `+` to add an item (a node without a
-tree gets one). Double-click a node (or `e` / F2) to rename it: the id changes in the graph lines
-and its tree heading, while edge labels and prose stay as they are. Clicking a node shows its
-section in the editor beside the graph (its tree, else its first graph line), and clicking a tree
-item shows that item's line; the keys stay with the graph. Every edit is one small splice of the
-Markdown in the editor beside it (change bars, drafts, save and undo as for typing); node positions
-go to `.treedit-layout.json`, never into the Markdown.
+graph focused, `n` adds a node linked from the active one, `a` a loose node (either way the next
+typing names it), `l` then a click links the active node to another, dragging or the arrows move it
+(Shift: bigger steps), Delete removes it with its edges and tree, Esc cancels linking, Ctrl+Z
+undoes. The trees edit in place: double-click an item to change it (empty deletes it with its
+children), Enter writes it and opens the next, Tab / Shift+Tab indent and outdent; press Enter on a
+node or click `+` to add an item (a node without a tree gets one). Double-click a node (or `e` / F2)
+to rename it: the id changes in the graph lines and its tree heading, while edge labels and prose
+stay as they are. Clicking a node shows its section in the editor beside the graph (its tree, else
+its first graph line), and clicking a tree item shows that item's line; the keys stay with the
+graph. Every edit is one small splice of the Markdown in the editor beside it (change bars, drafts,
+save and undo as for typing); node positions go to `.treedit-layout.json`, never into the Markdown.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.
 Right-click a Makefile (or a `*.mk`) in the tree and choose **Make targets…** to pick a target and
 run it: the command goes into a shell that is already at its prompt (or into a new session if none

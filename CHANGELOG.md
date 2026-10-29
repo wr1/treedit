@@ -10,7 +10,7 @@
   lines (edges, declarations, `state "…" as`) and the tree heading, never in labels or prose, and its
   position moves with it. Each write is one undo step of the editor.
 - Design mode: `n` adds a node linked from the active node (one undo step; the new edge line declares
-  it), `a` adds a loose node.
+  it), `a` adds a loose node; either opens the new node's name box, so the next typing names it.
 - Design mode: clicking a node selects its section in the editor beside the graph and scrolls it in
   (its tree, else the first graph line naming it); clicking a tree item does the same for its line.
   The graph keeps keyboard focus.
