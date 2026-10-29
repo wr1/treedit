@@ -260,7 +260,7 @@ body.wrap #editor{overflow-x:hidden}
 .dz-tree.folded{background:transparent;border-color:transparent;padding:0}
 .dz-fold{pointer-events:auto;border:0;background:none;padding:0;font:600 11px var(--mono);color:var(--dim);cursor:pointer}
 .dz-tree ul{margin:2px 0 0;padding-left:14px}.dz-tree li{margin:0}
-.dz-item{pointer-events:auto;cursor:text}.dz-item:hover{text-decoration:underline dotted}
+.dz-item{pointer-events:auto;cursor:text;border:0;background:none;color:inherit;font:inherit;text-align:left;padding:0}.dz-item:focus-visible{outline:2px solid var(--accent)}.dz-item:hover{text-decoration:underline dotted}
 .dz-add{pointer-events:auto;border:0;background:none;padding:0 0 0 6px;font:600 12px var(--mono);color:var(--dim);cursor:pointer}.dz-add:hover{color:var(--accent)}
 .dz-rename{position:absolute;z-index:2;text-align:center;font:600 12.5px var(--mono)!important}
 .dz-input{pointer-events:auto;font:inherit;width:200px;max-width:100%;padding:0 3px;border:1px solid var(--accent);border-radius:3px;background:var(--bg);color:var(--text);outline:none}
@@ -587,7 +587,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges</span><span><kbd>Del</kbd> delete</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit">Fit</button><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom</span><span><kbd>Del</kbd> delete</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1922,7 +1922,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, edit: null, press: null, rename: null };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -2858,7 +2858,7 @@ async function setDesign(on) {
   if (!S.file || !isMarkdown(S.file.path)) return;
   if (MDP.on) resetMdPreview();
   const path = S.file.path, gen = ++DZ.gen;
-  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null, rename: null });
+  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null, rename: null, zoom: 1, fitNext: true });
   $('#designview').hidden = false; $('#editwrap').classList.add('dz-split');
   $('#b-design').classList.add('on');
   try { DZ.pos = (await api('GET', '/api/layout?path=' + encodeURIComponent(path))).nodes || {}; } catch { DZ.pos = {}; }
@@ -2911,21 +2911,38 @@ function dzExtent(id) {  // [left, top, right, bottom] of a node and its tree ov
   if (!t) return [hw, hh, hw, hh];
   const rows = [], walk = (items, d) => { for (const it of items) { rows.push(it.text.length + 2 * d); walk(it.children, d + 1); } };
   if (!DZ.folded.has(id)) walk(t.items, 0);
-  const w = Math.min(276, Math.max(id.length + 8, ...rows) * 6.6 + 40), h = 22 + 17 * rows.length;
+  const w = Math.min(276, Math.max(id.length + 8, ...rows) * 6.6 + 40), h = 22 + 17 * rows.reduce((sum, length) => sum + Math.max(1, Math.ceil(length * 6.6 / Math.max(40, w - 40))), 0);
   return [hw, hh, Math.max(hw, w - hw), hh + 4 + h];
 }
-function dzFit(pos) {  // shrink POS about its centre so the nodes and their trees fit the canvas
-  const v = $('#dz-canvas'), W = v.clientWidth, H = v.clientHeight, ids = Object.keys(pos);
-  if (!W || !H || ids.length < 2) return pos;
-  const xs = ids.map(id => pos[id][0]), ys = ids.map(id => pos[id][1]), ex = ids.map(dzExtent), pad = 24;
-  const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
-  const room = (span, a, b) => span - 2 * pad - Math.max(...ex.map(e => e[a])) - Math.max(...ex.map(e => e[b]));
-  const s = Math.max(0.15, Math.min(1, bw ? room(W, 0, 2) / bw : 1, bh ? room(H, 1, 3) / bh : 1));
-  if (s >= 1) return pos;
-  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2, out = {};
-  for (const id of ids) out[id] = [Math.round(cx + (pos[id][0] - cx) * s), Math.round(cy + (pos[id][1] - cy) * s)];
+function dzFit(pos) {  // keep full-size trees apart before fitting the viewport
+  const out = {}, gap = 24;
+  for (const [id, point] of Object.entries(pos)) {
+    let [x, y] = point;
+    const [l, t, r, b] = dzExtent(id);
+    for (let pass = 0; pass <= Object.keys(out).length; pass++) {
+      let bottom = y;
+      for (const [other, [u, v]] of Object.entries(out)) {
+        const [ol, ot, or, ob] = dzExtent(other);
+        if (x - l < u + or + gap && x + r + gap > u - ol && y - t < v + ob + gap && y + b + gap > v - ot)
+          bottom = Math.max(bottom, v + ob + gap + t);
+      }
+      if (bottom === y) break;
+      y = bottom;
+    }
+    out[id] = [x, y];
+  }
+  DZ.fitNext = true;
   return out;
 }
+function dzZoom(factor, x, y) {
+  const v = $('#dz-canvas'), old = DZ.zoom;
+  x ??= v.clientWidth / 2; y ??= v.clientHeight / 2;
+  DZ.zoom = Math.max(0.05, Math.min(4, old * factor));
+  DZ.ox = x - (x - DZ.ox) * DZ.zoom / old;
+  DZ.oy = y - (y - DZ.oy) * DZ.zoom / old;
+  DZ.pinned = true; dzRender();
+}
+function dzFitView() { DZ.fitNext = true; DZ.pinned = false; dzRender(); }
 function dzLayout() {
   if (!DZ.model) return;
   DZ.pos = dzFit(DC.layout(DZ.model.nodes.map(n => n.id), DZ.model.edges, {}, null)); DZ.pinned = false;
@@ -2942,7 +2959,7 @@ function dzAddNode(linked) {  // LINKED: with an edge from the active node, in t
   const near = q => Object.values(DZ.pos).some(o => Math.abs(o[0] - q[0]) < 60 && Math.abs(o[1] - q[1]) < 36);
   for (let k = 0; k < 20 && near(p); k++) p = [p[0], p[1] + 44];
   DZ.pos[r.id] = p; DZ.active = r.id;
-  if (dzApply(r)) { dzSavePos(); dzStartRename(r.id); }  // the next typing names it; Esc keeps the default
+  if (dzApply(r)) { dzSavePos(); dzEnsureVisible(); dzStartRename(r.id); }  // the next typing names it; Esc keeps the default
 }
 function dzDelete() {
   if (!DZ.model || !DZ.active) return;
@@ -2967,7 +2984,7 @@ function dzRevealNode(id) {  // its tree section, else the first graph line that
 }
 function dzClick(id) {
   if (DZ.link && DZ.active) {
-    const r = DC.addEdge(DZ.model, DZ.active, id);
+    const r = DC.addEdge(DZ.model, DZ.linkFrom || DZ.active, id);
     DZ.link = false;
     if (!r.said) { toast(`${DZ.active}->${id} is already there`); dzRender(); }
     else dzApply(r);
@@ -2984,7 +3001,7 @@ function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves th
   const group = [id, ...(ev.shiftKey ? [] : DC.subtree(DZ.model, id))].filter(g => DZ.pos[g]);
   const x0 = ev.clientX, y0 = ev.clientY, start = new Map(group.map(g => [g, DZ.pos[g]])), drag = { id, moved: false };
   const mv = e => {
-    const dx = e.clientX - x0, dy = e.clientY - y0;
+    const dx = (e.clientX - x0) / DZ.zoom, dy = (e.clientY - y0) / DZ.zoom;
     if (!drag.moved && Math.hypot(dx, dy) < 3) return;  // a shaky click is still a click
     if (!drag.moved) { drag.moved = true; DZ.drag = drag; $('#dz-canvas').classList.add('dragging'); }
     for (const [g, p] of start) DZ.pos[g] = [Math.round(p[0] + dx), Math.round(p[1] + dy)];
@@ -3081,7 +3098,9 @@ function dzInput() {
   requestAnimationFrame(() => { if (DZ.edit === ed && inp.isConnected) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } });
   return inp;
 }
-function dzKey(e) {  // the canvas's own keys; the editor, the New box and the terminal never see these
+function dzKey(e) {
+  if (e.target.closest?.('button')) return;  // native button activation and Tab remain available
+  // the canvas's own keys; the editor, the New box and the terminal never see these
   const d = undoKey(e);
   if (d) {
     e.preventDefault(); e.stopPropagation();
@@ -3092,14 +3111,32 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   if (e.ctrlKey || e.metaKey || e.altKey) return;  // Ctrl+S and friends keep their global meaning
   const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   if (k === 'n' || k === 'a') dzAddNode(k === 'n');
+  else if (k === '[' || k === ']') dzCycle(k === ']' ? 1 : -1);
+  else if (k === 'Enter' && DZ.link && DZ.active) { const target = DZ.active; DZ.active = DZ.linkFrom || DZ.active; dzClick(target); }
   else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
   else if (k === 'F2' || k === 'e') dzStartRename(DZ.active);
-  else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
+  else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; DZ.linkFrom = DZ.active; dzRender(); } }
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
   else if (arrows[k] && !e.shiftKey) dzWalk(arrows[k]);
   else return;
   e.preventDefault(); e.stopPropagation();
+}
+function dzCycle(direction) {
+  const ids = DZ.model ? DZ.model.nodes.map(n => n.id) : [];
+  if (!ids.length) return;
+  DZ.active = ids[(Math.max(0, ids.indexOf(DZ.active)) + direction + ids.length) % ids.length];
+  dzRender(); dzRevealNode(DZ.active); dzEnsureVisible();
+}
+function dzEnsureVisible() {
+  const p = DZ.pos[DZ.active], v = $('#dz-canvas');
+  if (!p) return;
+  const x = p[0] * DZ.zoom + DZ.ox, y = p[1] * DZ.zoom + DZ.oy;
+  if (x < 40 || x > v.clientWidth - 40 || y < 40 || y > v.clientHeight - 40) {
+    DZ.ox = v.clientWidth / 2 - p[0] * DZ.zoom;
+    DZ.oy = v.clientHeight / 2 - p[1] * DZ.zoom;
+    DZ.pinned = true; dzRender();
+  }
 }
 function dzWalk([dx, dy]) {  // along an edge (either way) to the neighbour lying most in direction (DX, DY)
   const m = DZ.model, a = DZ.active;
@@ -3114,7 +3151,7 @@ function dzWalk([dx, dy]) {  // along an edge (either way) to the neighbour lyin
     if (c > 0.1 && d / (c * c) < score) { score = d / (c * c); best = b; }  // near and in line beats far or sideways
   }
   if (!best) { DZ.said = `no edge from ${a} leads that way`; return dzRender(); }
-  DZ.active = best; dzRender(); dzRevealNode(best);
+  DZ.active = best; dzRender(); dzRevealNode(best); dzEnsureVisible();
 }
 function dzTreeList(items, id) {
   const ul = el('ul'), ed = DZ.edit && DZ.edit.id === id ? DZ.edit : null;
@@ -3122,7 +3159,12 @@ function dzTreeList(items, id) {
     const li = el('li');
     if (ed && ed.line === it.line) li.append(dzInput());
     else {
-      const t = el('span', 'dz-item', it.text);
+      const t = el('button', 'dz-item', it.text);
+      t.type = 'button';
+      t.onkeydown = e => {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); dzEditItem(id, it); }
+      };
+      t.onfocus = () => { DZ.active = id; dzReveal(it.line); };
       t.title = `Click to show line ${it.line + 1} in the editor, double-click to edit`;
       t.onclick = () => dzReveal(it.line);
       t.ondblclick = () => dzEditItem(id, it);
@@ -3138,20 +3180,29 @@ function dzRender() {
   const v = $('#dz-canvas'), svg = $('#dz-svg'), trees = $('#dz-trees'), m = DZ.model;
   svg.replaceChildren(); trees.replaceChildren();
   $('#dz-link').hidden = !DZ.link;
+  $('#dz-link-node').setAttribute('aria-pressed', String(DZ.link));
+  $('#dz-link-node').disabled = !m || !DZ.active;
   $('#dz-said').textContent = DZ.said || 'no graph edits yet';
   $('#dz-empty').hidden = !!m && m.nodes.length > 0;
   $('#dz-start').hidden = !!m;
   $('#dz-emptytext').textContent = m ? 'An empty graph: press n to add the first node' : 'No mermaid or d2 state graph in this file yet';
   if (!m || !m.nodes.length) return;
   const ids = m.nodes.map(n => n.id), W = v.clientWidth || 600, H = v.clientHeight || 400;
-  if (!DZ.drag && !DZ.pinned) {  // centre the graph with its trees; not mid-drag or after one, so a node stays where it was dropped
+  if (!DZ.drag && (!DZ.pinned || DZ.fitNext)) {  // centre the graph with its trees; not mid-drag or after one, so a node stays where it was dropped
     const ex = ids.map(id => { const [l, t, r, b] = dzExtent(id), [x, y] = DZ.pos[id]; return [x - l, y - t, x + r, y + b]; });
-    DZ.ox = W / 2 - (Math.min(...ex.map(e => e[0])) + Math.max(...ex.map(e => e[2]))) / 2;
-    DZ.oy = H / 2 - (Math.min(...ex.map(e => e[1])) + Math.max(...ex.map(e => e[3]))) / 2;
+    const left = Math.min(...ex.map(e => e[0])), right = Math.max(...ex.map(e => e[2]));
+    const top = Math.min(...ex.map(e => e[1])), bottom = Math.max(...ex.map(e => e[3]));
+    if (DZ.fitNext) { DZ.zoom = Math.max(0.05, Math.min(1, (W - 48) / (right - left || 1), (H - 48) / (bottom - top || 1))); DZ.fitNext = false; }
+    DZ.ox = W / 2 - (left + right) * DZ.zoom / 2;
+    DZ.oy = H / 2 - (top + bottom) * DZ.zoom / 2;
   }
   const { ox, oy } = DZ;
-  const at = id => [DZ.pos[id][0] + ox, DZ.pos[id][1] + oy];
-  const mk = (tag, attrs, parent = svg) => { const n = document.createElementNS(SVGNS, tag); for (const [a, b] of Object.entries(attrs)) n.setAttribute(a, b); parent.append(n); return n; };
+  const at = id => DZ.pos[id];
+  const scene = document.createElementNS(SVGNS, 'g');
+  scene.setAttribute('transform', `translate(${ox} ${oy}) scale(${DZ.zoom})`); svg.append(scene);
+  trees.style.transformOrigin = '0 0';
+  trees.style.transform = `translate(${ox}px, ${oy}px) scale(${DZ.zoom})`;
+  const mk = (tag, attrs, parent = scene) => { const n = document.createElementNS(SVGNS, tag); for (const [a, b] of Object.entries(attrs)) n.setAttribute(a, b); parent.append(n); return n; };
   const defs = mk('defs', {}), mark = mk('marker', { id: 'dz-arrow', viewBox: '0 0 10 10', refX: 10, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
   mk('path', { d: 'M0,0 L10,5 L0,10 z', class: 'dz-ah' }, mark);
   const half = dzHalf;
@@ -3160,12 +3211,15 @@ function dzRender() {
     if (e.from === e.to) {
       const [hw, hh] = half(e.from);
       mk('path', { d: `M${x1 + hw - 8},${y1 - hh} C${x1 + hw + 30},${y1 - hh - 40} ${x1 + hw + 40},${y1} ${x1 + hw},${y1 + 2}`, 'marker-end': 'url(#dz-arrow)' }, g);
+      if (e.label) mk('text', { x: x1 + hw + 28, y: y1 - hh - 25, class: 'dz-elabel' }, g).textContent = e.label;
     } else {
       const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1, [hw, hh] = half(e.to), [fw, fh] = half(e.from);
       const cut = (w, h) => Math.min(Math.abs(w * d / (dx || 1e-9)), Math.abs(h * d / (dy || 1e-9)));
       const s = cut(fw, fh), t = cut(hw, hh);
-      mk('line', { x1: x1 + dx * s / d, y1: y1 + dy * s / d, x2: x2 - dx * (t + 2) / d, y2: y2 - dy * (t + 2) / d, 'marker-end': 'url(#dz-arrow)' }, g);
-      if (e.label) mk('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 4, class: 'dz-elabel' }, g).textContent = e.label;
+      const paired = m.edges.some(other => other.from === e.to && other.to === e.from);
+      const bend = paired ? 40 : 0, cx = (x1 + x2) / 2 - dy / d * bend, cy = (y1 + y2) / 2 + dx / d * bend;
+      mk('path', { d: `M${x1 + dx * s / d},${y1 + dy * s / d} Q${cx},${cy} ${x2 - dx * (t + 2) / d},${y2 - dy * (t + 2) / d}`, 'marker-end': 'url(#dz-arrow)' }, g);
+      if (e.label) mk('text', { x: (x1 + x2) / 2 - dy / d * bend / 2, y: (y1 + y2) / 2 + dx / d * bend / 2 - 4, class: 'dz-elabel' }, g).textContent = e.label;
     }
   }
   for (const n of m.nodes) {
@@ -3198,7 +3252,26 @@ function dzRender() {
   }
 }
 $('#b-design').onclick = () => dzToggle(!DZ.on);
-$('#dz-start').onclick = () => dzStart();
+$('#dz-start').onclick = () => dzAddNode(false);
+$('#dz-add-node').onclick = () => dzAddNode(true);
+$('#dz-add-loose').onclick = () => dzAddNode(false);
+$('#dz-link-node').onclick = () => { DZ.link = !DZ.link; DZ.linkFrom = DZ.active; dzRender(); $('#dz-canvas').focus(); };
+$('#dz-zoom-in').onclick = () => dzZoom(1.25);
+$('#dz-zoom-out').onclick = () => dzZoom(0.8);
+$('#dz-fit').onclick = dzFitView;
+$('#dz-canvas').addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = $('#dz-canvas').getBoundingClientRect();
+  dzZoom(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1) * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+$('#dz-canvas').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('.dz-node, .dz-tree, input, button')) return;
+  e.preventDefault(); $('#dz-canvas').focus();
+  const x = e.clientX, y = e.clientY, ox = DZ.ox, oy = DZ.oy;
+  const move = ev => { DZ.ox = ox + ev.clientX - x; DZ.oy = oy + ev.clientY - y; DZ.pinned = true; dzRender(); };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+});
 $('#dz-canvas').addEventListener('keydown', dzKey);
 $('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
 new ResizeObserver(() => { if (DZ.on) { DZ.pinned = false; dzRender(); } }).observe($('#dz-canvas'));

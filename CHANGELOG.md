@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Design UX: visible node/link controls, background pan, zoom and Fit, tree-aware layout spacing, separate return-edge labels and visible self-loop labels. Keyboard users can cycle all nodes with `[` / `]`, link with Enter, and Tab to editable tree items.
+
 - Design mode: drag nodes with the mouse (the view stays put after a drop; Layout or a resize
   re-centres it), and edit the node trees on the canvas: double-click an item to edit it (empty
   deletes it with its children), Enter writes it and opens the next item, Tab / Shift+Tab indent and
