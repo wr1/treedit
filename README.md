@@ -37,6 +37,10 @@ Clicking a node shows its section in the editor beside the graph (its tree, else
 line), and clicking a tree item shows that item's line; the keys stay with the graph. Every edit is
 one small splice of the Markdown in the editor beside it (change bars, drafts, save and undo as for
 typing); node positions go to `.treedit-layout.json`, never into the Markdown.
+Click an edge to label it with its event or condition (empty removes the label); after a link, the
+next typing labels the new edge. **Start a state graph** also writes skill-style front matter
+(`name`, a `description` to fill in, `treedit: design`), so a prompt built from the file says what
+the system is; a file marked `treedit: design` opens in Design mode until you leave it.
 The graph toolbar also offers Add node, Loose node and Link. Drag the background to pan, scroll or use +/− to zoom, and choose Fit to see the whole graph. Layout separates nodes and their trees before fitting them. In Link mode, select a target with `[` / `]` and press Enter, or click it.
 
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.

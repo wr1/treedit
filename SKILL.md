@@ -63,7 +63,8 @@ Agent roll - when the user asks you to "roll" (pick up their manual edits and ac
    so their own diff and your tidy-up stay apart. Files with unsaved drafts: merge the draft in
    first (3c), then tidy the result.
    - Frontmatter: add or repair it where the file type expects it (a SKILL.md needs `name` and
-     `description`); follow the convention of neighbouring files and invent no fields.
+     `description`; a design file with `treedit: design` needs a real one-line `description` of
+     the system in place of the TODO); follow the convention of neighbouring files and invent no fields.
    - Names: when a new file or folder has a placeholder or unclear name, propose a better one in
      your reply; rename (`git mv`) only once the user agrees.
    - Language: fix spelling, grammar and punctuation in their prose with a light touch - keep their

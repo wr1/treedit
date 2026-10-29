@@ -227,23 +227,53 @@ def test_minimal_edit_and_layout(lib):
     assert min(abs(p[0] - q[0]) + abs(p[1] - q[1]) for i, p in enumerate(pts) for q in pts[i + 1 :]) > 40
 
 
-def test_starter_graph_goes_after_the_title_and_intro(lib):
+FM = "---\nname: door\ndescription: TODO - what this system is, and what each node's tree lists\ntreedit: design\n---\n"
+
+
+def test_starter_writes_front_matter_then_the_graph_after_the_title_and_intro(lib):
     md = "---\ntags: [x]\n---\n# Title\n\nIntro.\n\n## Later\n\n- keep\n"
-    out = run(lib, "return D.starter(md);", md=md)
+    out = run(lib, "return D.starter(md, 'door');", md=md)
     assert out == (
-        "---\ntags: [x]\n---\n# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n```\n\n## Later\n\n- keep\n"
+        "---\ntags: [x]\nname: door\ndescription: TODO - what this system is, and what each node's tree lists\n"
+        "treedit: design\n---\n# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n```\n\n## Later\n\n- keep\n"
     )
-    assert run(lib, "return D.starter(md);", md="") == "## Graph\n\n```mermaid\nstateDiagram-v2\n```\n"
-    assert run(lib, "return D.starter(md);", md="Just prose.\n").startswith("## Graph\n\n```mermaid")
-    m = run(lib, "return D.parse(D.starter(md));", md=md)
+    assert run(lib, "return D.starter(md, 'door');", md="") == FM + "\n## Graph\n\n```mermaid\nstateDiagram-v2\n```\n"
+    assert run(lib, "return D.starter(md, 'door');", md="Just prose.\n").startswith(FM + "\n## Graph\n\n```mermaid")
+    keep = "---\nname: mine\ndescription: Kept.\ntreedit: design\n---\n"
+    assert run(lib, "return D.starter(md, 'door');", md=keep).startswith(keep)  # nothing to add
+    m = run(lib, "return D.parse(D.starter(md, 'door'));", md=md)
     assert (m["flavor"], m["nodes"]) == ("state", [])
 
 
+def test_front_matter_fields_and_no_trees_inside_it(lib):
+    md = '---\nname: door\ndescription: "Quoted: yes"\ntreedit: design\nlist:\n- A\n---\n```mermaid\nstateDiagram-v2\n    A --> B\n```\n'
+    fm = run(lib, "return D.frontMatter(md);", md=md)
+    assert fm == {"end": 7, "fields": {"name": "door", "description": "Quoted: yes", "treedit": "design", "list": ""}}
+    assert run(lib, "return D.parse(md).trees;", md=md) == {}  # the YAML "- A" is not A's tree
+    assert run(lib, "return D.frontMatter(md);", md="# No front matter\n") == {"end": 0, "fields": {}}
+
+
 def test_first_node_in_a_starter_graph(lib):
-    md = run(lib, "return D.starter(md);", md="# Title\n\nIntro.\n")
+    md = run(lib, "return D.starter(md, 'door');", md="# Title\n\nIntro.\n")
     r = edit(lib, md, "r = D.addNode(m)")
-    assert r["out"] == "# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n    S1\n```\n\n## S1\n"
+    assert r["out"] == FM + "\n# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n    S1\n```\n\n## S1\n"
     assert run(lib, "return D.isDesign(D.parse(md));", md=r["out"]) is True
+
+
+def test_edge_labels_in_each_flavor(lib):
+    md = "```mermaid\nstateDiagram-v2\n    A --> B\n    B --> A : back\n```\n"
+    r = run(lib, "return D.setEdgeLabel(md, 2, 0, '  press   go ');", md=md)
+    assert diff(md, r["md"]) == ["-    A --> B", "+    A --> B : press go"]
+    r = run(lib, "return D.setEdgeLabel(md, 3, 0, '');", md=md)
+    assert diff(md, r["md"]) == ["-    B --> A : back", "+    B --> A"]
+    r = run(lib, "return D.setEdgeLabel(md, 7, 1, 'a|b');", md=FLOW)  # second edge of a chain; | would end the label
+    assert diff(FLOW, r["md"]) == [
+        "-  Idle[Waiting] -->|start| Busy --> Done",
+        "+  Idle[Waiting] -->|start| Busy -->|a/b| Done",
+    ]
+    r = run(lib, "return D.setEdgeLabel(md, 5, 0, 'stop');", md=D2)
+    assert diff(D2, r["md"]) == ["-busy -> idle", "+busy -> idle: stop"]
+    assert "error" in run(lib, "return D.setEdgeLabel(md, 2, 5, 'x');", md=md)
 
 
 TREES = """```mermaid

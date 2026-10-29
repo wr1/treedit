@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Design mode: click an edge to label it (state `A --> B : x`, flowchart `A -->|x| B`, d2 `a -> b: x`;
+  empty removes it), and a new link opens its label box so the next typing labels it. **Start a
+  state graph** writes skill-style front matter (`name` from the file name, a `description`
+  placeholder, `treedit: design`); `treedit: design` lights the Design button and opens the file in
+  Design mode unless you left it, and the parser never reads front matter as a node tree.
 - Design UX: visible node/link controls, background pan, zoom and Fit, tree-aware layout spacing, separate return-edge labels and visible self-loop labels. Keyboard users can cycle all nodes with `[` / `]`, link with Enter, and Tab to editable tree items.
 
 - Design mode: drag nodes with the mouse (the view stays put after a drop; Layout or a resize
