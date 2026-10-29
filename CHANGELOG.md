@@ -29,8 +29,8 @@
   file, so a design file reopens in it.
 - Design mode for design Markdown files (a mermaid `stateDiagram`/`flowchart`/`graph` or a d2 graph
   block, plus one bullet tree per node): a **Design** toggle beside Preview shows the graph with
-  transparent, foldable tree overlays, a force layout (on load and from **Layout**), a live
-  **View Markdown** panel, a mode badge, a link-mode badge, a key strip and a "what changed" line
+  transparent, foldable tree overlays, a force layout (on load and from **Layout**), a
+  mode badge, a link-mode badge, a key strip and a "what changed" line
   (`added node S1 · line 16`). Keys act only while the graph has focus: `n`/`a` add a node, `l`
   link mode then click a target, arrows (Shift: ×5) move, Delete/Backspace delete a node with its
   edges and tree, Esc cancels linking, Ctrl+Z / Ctrl+Y undo and redo. The Markdown stays the
