@@ -2908,13 +2908,29 @@ function dzDelete() {
   const id = DZ.active;
   if (dzApply(DC.deleteNode(DZ.model, id))) { delete DZ.pos[id]; dzSavePos(); }
 }
+function dzReveal(a, b = a) {  // the editor's caret on line A (0-based), lines A..B scrolled in; the canvas keeps focus
+  const L = editor.value.split('\n');
+  if (a == null || a >= L.length) return;
+  let s = 0;
+  for (let i = 0; i < a; i++) s += L[i].length + 1;
+  editor.setSelectionRange(s, s + L[a].length);
+  editor.scrollTop = Math.max(0, lineBox(editor)(a + 1, Math.min(b, L.length - 1) + 1)[0] - editor.clientHeight / 4);
+  updatePos(); updateFbButton();
+}
+function dzRevealNode(id) {  // its tree section, else the first graph line that names it
+  const m = DZ.model, t = m && m.trees[id];
+  if (!m) return;
+  if (t) return dzReveal(t.line, t.end - 1);
+  const n = m.nodes.find(n => n.id === id), e = m.edges.find(e => e.from === id || e.to === id);
+  dzReveal(n && n.decl.length ? n.decl[0] : e ? e.line : null);
+}
 function dzClick(id) {
   if (DZ.link && DZ.active) {
     const r = DC.addEdge(DZ.model, DZ.active, id);
     DZ.link = false;
     if (!r.said) { toast(`${DZ.active}->${id} is already there`); dzRender(); }
     else dzApply(r);
-  } else { DZ.active = id; dzRender(); }
+  } else { DZ.active = id; dzRender(); dzRevealNode(id); }
   $('#dz-canvas').focus();
 }
 function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves the node
@@ -3048,7 +3064,8 @@ function dzTreeList(items, id) {
     if (ed && ed.line === it.line) li.append(dzInput());
     else {
       const t = el('span', 'dz-item', it.text);
-      t.title = `Double-click to edit (line ${it.line + 1})`;
+      t.title = `Click to show line ${it.line + 1} in the editor, double-click to edit`;
+      t.onclick = () => dzReveal(it.line);
       t.ondblclick = () => dzEditItem(id, it);
       li.append(t);
     }

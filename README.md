@@ -30,7 +30,9 @@ Delete removes it with its edges and tree, Esc cancels linking, Ctrl+Z undoes. T
 place: double-click an item to change it (empty deletes it with its children), Enter writes it and
 opens the next, Tab / Shift+Tab indent and outdent; press Enter on a node or click `+` to add an
 item (a node without a tree gets one). Double-click a node (or F2 / `r`) to rename it: the id changes
-in the graph lines and its tree heading, while edge labels and prose stay as they are. Every edit is one small splice of
+in the graph lines and its tree heading, while edge labels and prose stay as they are. Clicking a
+node shows its section in the editor beside the graph (its tree, else its first graph line), and
+clicking a tree item shows that item's line; the keys stay with the graph. Every edit is one small splice of
 the Markdown in the editor beside it (change bars, drafts, save and undo as for typing); node
 positions go to `.treedit-layout.json`, never into the Markdown.
 The agent pane folds to a thin coloured strip on the right, one segment per running agent.

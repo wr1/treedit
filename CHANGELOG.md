@@ -9,6 +9,9 @@
   section. Double-click a node (or F2 / `r`) to rename it in place: the id changes in the graph
   lines (edges, declarations, `state "…" as`) and the tree heading, never in labels or prose, and its
   position moves with it. Each write is one undo step of the editor.
+- Design mode: clicking a node selects its section in the editor beside the graph and scrolls it in
+  (its tree, else the first graph line naming it); clicking a tree item does the same for its line.
+  The graph keeps keyboard focus.
 - Design mode on any Markdown file: the **Design** button shows for every `.md` (lit when a graph is
   found), Ctrl+Shift+D toggles it, and the tree's right-click menu has **Open in Design mode**. A
   file without a graph gets **Start a state graph** (or `n`), which inserts an empty mermaid
