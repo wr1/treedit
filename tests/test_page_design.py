@@ -201,7 +201,7 @@ def test_flowchart_chain_split_keeps_the_rest(lib):
 
 def test_new_tree_follows_bullet_style_and_d2_syntax(lib):
     r = edit(lib, FLOW, "r = D.addNode(m, 'Failed'); r = D.addEdge(r.model, 'Busy', 'Failed')")
-    assert diff(FLOW, r["out"]) == ["+  Failed", "+  Busy --> Failed", "+- Failed", "+"]
+    assert diff(FLOW, r["out"]) == ["+  Busy --> Failed", "+- Failed", "+"]  # the edge declares the node
     r = edit(lib, D2, "r = D.addEdge(m, 'busy', 'done')")
     assert diff(D2, r["out"]) == ["+busy -> done"]
 
@@ -337,3 +337,9 @@ def test_rename_node_in_graph_and_tree_only(lib):
     assert "error" in run(lib, "return D.renameNode(md, 'Open', 'Closed');", md=md)
     assert "error" in run(lib, "return D.renameNode(md, 'Open', 'two words');", md=md)
     assert "error" in run(lib, "return D.renameNode(md, '[*]', 'Start');", md=md)
+
+
+def test_linked_new_node_is_declared_by_its_edge(lib):
+    md = "```mermaid\nstateDiagram-v2\n    A --> B\n```\n\n## A\n- a\n"
+    r = edit(lib, md, "r = D.addNode(m); r = D.addEdge(r.model, 'A', 'S1')")
+    assert r["out"] == "```mermaid\nstateDiagram-v2\n    A --> B\n    A --> S1\n```\n\n## A\n- a\n\n## S1\n"

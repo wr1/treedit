@@ -6,9 +6,11 @@
   re-centres it), and edit the node trees on the canvas: double-click an item to edit it (empty
   deletes it with its children), Enter writes it and opens the next item, Tab / Shift+Tab indent and
   outdent, Esc cancels; Enter on a node or its `+` adds an item, and a node with no tree gets a new
-  section. Double-click a node (or F2 / `r`) to rename it in place: the id changes in the graph
+  section. Double-click a node (or `e` / F2) to rename it in place: the id changes in the graph
   lines (edges, declarations, `state "…" as`) and the tree heading, never in labels or prose, and its
   position moves with it. Each write is one undo step of the editor.
+- Design mode: `n` adds a node linked from the active node (one undo step; the new edge line declares
+  it), `a` adds a loose node.
 - Design mode: clicking a node selects its section in the editor beside the graph and scrolls it in
   (its tree, else the first graph line naming it); clicking a tree item does the same for its line.
   The graph keeps keyboard focus.

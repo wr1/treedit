@@ -592,7 +592,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move</span><span>dbl-click/<kbd>F2</kbd>/<kbd>r</kbd> rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -2604,7 +2604,8 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     for (let i = o.open + 1; i < o.close; i++) if (byLine.has(i) || o.nodes.some(n => n.decl.includes(i))) at = i;
     const anchor = at >= 0 ? at : (o.header >= 0 ? o.header : o.open);
     const ind = at >= 0 ? indentOf(L[at]) : o.flavor === 'd2' ? '' : '    ';
-    for (const n of model.nodes) if (n.added) put(anchor, ind + n.id);
+    const linked = id => model.edges.some(e => e.line == null && (e.from === id || e.to === id));  // its new edge declares it
+    for (const n of model.nodes) if (n.added && !linked(n.id)) put(anchor, ind + n.id);
     for (const e of model.edges) if (e.line == null) put(anchor, ind + edgeText(e, o.flavor));
     const fresh = model.nodes.filter(n => n.added && n.id !== '[*]');
     if (fresh.length) {
@@ -2894,9 +2895,12 @@ function dzLayout() {
   DZ.said = 'laid out the graph (positions only, the Markdown is unchanged)';
   dzRender(); dzSavePos();
 }
-function dzAddNode() {
+function dzAddNode(linked) {  // LINKED: with an edge from the active node, in the same undo step
   if (!DZ.model && !dzStart()) return;
-  const r = DC.addNode(DZ.model), base = DZ.pos[DZ.active] || [0, 0];
+  const from = linked && DZ.model.nodes.some(n => n.id === DZ.active) ? DZ.active : null;
+  let r = DC.addNode(DZ.model);
+  const base = DZ.pos[DZ.active] || [0, 0];
+  if (from) r = { ...DC.addEdge(r.model, from, r.id), id: r.id, said: `${r.said}, linked from ${from}` };
   let p = [base[0] + 90, base[1] + 60];
   const near = q => Object.values(DZ.pos).some(o => Math.abs(o[0] - q[0]) < 60 && Math.abs(o[1] - q[1]) < 36);
   for (let k = 0; k < 20 && near(p); k++) p = [p[0], p[1] + 44];
@@ -3044,9 +3048,9 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;  // Ctrl+S and friends keep their global meaning
   const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-  if (k === 'n' || k === 'a') dzAddNode();
+  if (k === 'n' || k === 'a') dzAddNode(k === 'n');
   else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
-  else if (k === 'F2' || k === 'r') dzStartRename(DZ.active);
+  else if (k === 'F2' || k === 'e') dzStartRename(DZ.active);
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
