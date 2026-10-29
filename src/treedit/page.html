@@ -592,7 +592,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges</span><span><kbd>Del</kbd> delete</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -2834,7 +2834,7 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
 // The Markdown stays the source of truth: every graph edit is spliced into the editor buffer as one
 // undo step (drafts, change bars, save, merge and history work unchanged). Positions are view state:
 // they live in the .treedit-layout.json sidecar, never in the Markdown.
-const DZ_STEP = 10, DZ_BIG = 50, SVGNS = 'http://www.w3.org/2000/svg';
+const SVGNS = 'http://www.w3.org/2000/svg';
 const dzRemembered = path => load('design', []).includes(path);
 function dzToggle(on) {  // a user's choice, kept per file: the file reopens in Design mode
   const was = load('design', []).filter(p => p !== (S.file && S.file.path));
@@ -3080,12 +3080,24 @@ function dzKey(e) {  // the canvas's own keys; the editor, the New box and the t
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; dzRender(); } }
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
-  else if (arrows[k] && DZ.active && DZ.pos[DZ.active]) {
-    const s = e.shiftKey ? DZ_BIG : DZ_STEP, p = DZ.pos[DZ.active];
-    DZ.pos[DZ.active] = [p[0] + arrows[k][0] * s, p[1] + arrows[k][1] * s];
-    dzRender(); dzSavePos();
-  } else return;
+  else if (arrows[k] && !e.shiftKey) dzWalk(arrows[k]);
+  else return;
   e.preventDefault(); e.stopPropagation();
+}
+function dzWalk([dx, dy]) {  // along an edge (either way) to the neighbour lying most in direction (DX, DY)
+  const m = DZ.model, a = DZ.active;
+  if (!m || !m.nodes.length) return;
+  if (!a || !DZ.pos[a]) { DZ.active = m.nodes[0].id; dzRender(); return dzRevealNode(DZ.active); }
+  const [x0, y0] = DZ.pos[a];
+  let best = null, score = Infinity;
+  for (const e of m.edges) {
+    const b = e.from === a ? e.to : e.to === a ? e.from : null;
+    if (!b || b === a || !DZ.pos[b]) continue;
+    const vx = DZ.pos[b][0] - x0, vy = DZ.pos[b][1] - y0, d = Math.hypot(vx, vy) || 1, c = (vx * dx + vy * dy) / d;
+    if (c > 0.1 && d / (c * c) < score) { score = d / (c * c); best = b; }  // near and in line beats far or sideways
+  }
+  if (!best) { DZ.said = `no edge from ${a} leads that way`; return dzRender(); }
+  DZ.active = best; dzRender(); dzRevealNode(best);
 }
 function dzTreeList(items, id) {
   const ul = el('ul'), ed = DZ.edit && DZ.edit.id === id ? DZ.edit : null;

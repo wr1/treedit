@@ -9,6 +9,9 @@
   section. Double-click a node (or `e` / F2) to rename it in place: the id changes in the graph
   lines (edges, declarations, `state "…" as`) and the tree heading, never in labels or prose, and its
   position moves with it. Each write is one undo step of the editor.
+- Design mode: the arrow keys walk the graph instead of moving the node: each goes along an edge (in
+  or out) to the neighbour lying most in that direction, selecting it and showing its section in the
+  editor. Nodes move by dragging.
 - Design mode: dragging a node moves the nodes under it too (its descendants in a breadth-first tree
   from `[*]` and the nodes nothing points to, so back edges never drag the whole graph); Shift+drag
   moves only the node.
