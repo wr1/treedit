@@ -225,3 +225,22 @@ def test_minimal_edit_and_layout(lib):
     assert out["b"]["Closed"] == [5, 5]  # fixed nodes stay put
     pts = list(out["a"].values())
     assert min(abs(p[0] - q[0]) + abs(p[1] - q[1]) for i, p in enumerate(pts) for q in pts[i + 1 :]) > 40
+
+
+def test_starter_graph_goes_after_the_title_and_intro(lib):
+    md = "---\ntags: [x]\n---\n# Title\n\nIntro.\n\n## Later\n\n- keep\n"
+    out = run(lib, "return D.starter(md);", md=md)
+    assert out == (
+        "---\ntags: [x]\n---\n# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n```\n\n## Later\n\n- keep\n"
+    )
+    assert run(lib, "return D.starter(md);", md="") == "## Graph\n\n```mermaid\nstateDiagram-v2\n```\n"
+    assert run(lib, "return D.starter(md);", md="Just prose.\n").startswith("## Graph\n\n```mermaid")
+    m = run(lib, "return D.parse(D.starter(md));", md=md)
+    assert (m["flavor"], m["nodes"]) == ("state", [])
+
+
+def test_first_node_in_a_starter_graph(lib):
+    md = run(lib, "return D.starter(md);", md="# Title\n\nIntro.\n")
+    r = edit(lib, md, "r = D.addNode(m)")
+    assert r["out"] == "# Title\n\nIntro.\n\n## Graph\n\n```mermaid\nstateDiagram-v2\n    S1\n```\n\n## S1\n"
+    assert run(lib, "return D.isDesign(D.parse(md));", md=r["out"]) is True

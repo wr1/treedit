@@ -232,6 +232,7 @@ body.wrap #editor{overflow-x:hidden}
 #designview{flex:1 1 60%;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
 #designview[hidden]{display:none}
 #b-design.on{border-color:var(--accent);color:var(--accent)}
+#b-design.found:not(.on){color:var(--accent)}
 .dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
 .dz-keys{border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
 .dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
@@ -264,7 +265,8 @@ body.wrap #editor{overflow-x:hidden}
 #dz-md[hidden]{display:none}
 #dz-md b{padding:5px 9px;font-size:12px;border-bottom:1px solid var(--line)}
 #dz-mdtext{flex:1;margin:0;padding:8px 10px;overflow:auto;font:12px/1.5 var(--mono);white-space:pre}
-#dz-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim)}
+#dz-empty{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:var(--dim);pointer-events:none}
+#dz-empty button{pointer-events:auto}
 #dz-empty[hidden]{display:none}
 #mdview .md{max-width:900px;margin:0 auto;font-size:14.5px;line-height:1.62}
 #mdview .md>:first-child{margin-top:0}
@@ -572,7 +574,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="b-new" title="Create a file or folder at any depth (Ctrl/Cmd+N) - a name with an extension is a file, without one a folder">New…</button>
         <button id="b-rename">Rename / move</button><button id="b-delete" class="danger">Delete</button>
         <button id="b-md" hidden title="Preview this Markdown, with Mermaid and D2 diagrams and clickable links">Preview</button>
-        <button id="b-design" hidden title="Edit the state graph of this design file; the Markdown stays the source (one undo step per edit)">Design</button>
+        <button id="b-design" hidden title="Edit this Markdown as a state graph with one tree per node; the Markdown stays the source (one undo step per edit). Ctrl+Shift+D; remembered per file">Design</button>
         <button id="b-typst" hidden title="Compile this Typst file to PDF and open the PDF">Compile PDF</button>
       </div>
       <div id="fbbox"><div class="fbhead"><span>Feedback for the agent</span><span id="fbcount"></span><span class="spacer"></span><button id="b-fb" title="Select lines in the editor first to comment on them">+ Feedback</button></div><div id="fbcompose"></div><div id="fblist"></div></div>
@@ -586,7 +588,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden>No mermaid or d2 state graph found in this file.</div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click the target node · Esc cancels</span><span id="dz-said"></span><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button><button id="dz-mdbtn" title="Show the graph block and the node trees as they stand in the file">View Markdown</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n does the same and adds the first node">Start a state graph</button></div><div id="dz-md" hidden><b>Markdown (live, from the file)</b><pre id="dz-mdtext"></pre></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd>/<kbd>a</kbd> add node</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> move (<kbd>Shift</kbd> ×5)</span><span><kbd>Del</kbd> delete</span><span>click select</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1764,6 +1766,7 @@ async function openFile(path) {
       S.bufs.delete(path); S.file.original = b.original; S.file.hash = b.hash; updateFileState();
       if (b.hash !== disk.hash) showConflict({ type: 'changed', disk });
     }
+    if (!DZ.on && dzRemembered(path) && S.file && S.file.path === path && S.file.kind === 'text' && isMarkdown(path)) setDesign(true);
   } catch (e) { toast(e.message, true); }
 }
 function setFile(f, keepView) {
@@ -1905,8 +1908,8 @@ function syncChrome() {
   $('#b-md').hidden = !md;
   $('#b-typst').hidden = plotView || !(S.file && isTypst(S.file.path));
   if (!md && MDP.on) resetMdPreview();
-  const dz = md && dzDetect();
-  $('#b-design').hidden = !dz && !DZ.on;
+  $('#b-design').hidden = !md;
+  $('#b-design').classList.toggle('found', md && !DZ.on && dzDetect());
   if (!md && DZ.on) setDesign(false);
   for (const id of ['b-wrap', 'b-undo', 'b-redo']) $('#' + id).hidden = plotView;
   if (!plotFile) return;
@@ -2664,7 +2667,25 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     for (const id of ids) out[id] = [Math.round(P[id].x), Math.round(P[id].y)];
     return out;
   }
-  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout };
+  /* ---------- an empty state graph for a plain Markdown file: after the title and its intro ---------- */
+  function starter(md) {
+    const L = md.split('\n'), inFence = new Set();
+    for (const b of fences(L)) for (let i = b.open; i <= Math.min(b.close, L.length - 1); i++) inFence.add(i);
+    let i = 0;
+    if (L[0] === '---') { const e = L.indexOf('---', 1); if (e > 0) i = e + 1; }  // YAML front matter stays first
+    while (i < L.length && !L[i].trim()) i++;
+    let at = i;
+    if (i < L.length && /^#\s/.test(L[i])) {  // after the title and its intro prose, before the first section
+      at = i + 1;
+      while (at < L.length && !(RE.head.test(L[at]) && !inFence.has(at))) at++;
+    }
+    let a = at;
+    while (a > 0 && !L[a - 1].trim()) a--;
+    const head = L.slice(0, a), rest = L.slice(at);
+    const block = ['## Graph', '', '```mermaid', 'stateDiagram-v2', '```'];
+    return [...head, ...(head.length ? [''] : []), ...block, '', ...rest].join('\n');
+  }
+  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter };
 }
 
 /* ---------- Design mode: a state graph with one tree per node, edited from the canvas ---------- */
@@ -2672,6 +2693,22 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
 // undo step (drafts, change bars, save, merge and history work unchanged). Positions are view state:
 // they live in the .treedit-layout.json sidecar, never in the Markdown.
 const DZ_STEP = 10, DZ_BIG = 50, SVGNS = 'http://www.w3.org/2000/svg';
+const dzRemembered = path => load('design', []).includes(path);
+function dzToggle(on) {  // a user's choice, kept per file: the file reopens in Design mode
+  const was = load('design', []).filter(p => p !== (S.file && S.file.path));
+  store('design', on && S.file ? [...was, S.file.path].slice(-200) : was);
+  setDesign(on);
+}
+function dzStart() {  // a plain Markdown file -> an empty mermaid state graph, as one undo step
+  if (DZ.model) return true;
+  if (editor.readOnly) { toast('This file is read-only here', true); return false; }
+  const next = DC.starter(editor.value), e = DC.minimalEdit(editor.value, next);
+  replaceRange(editor, e.from, e.to, e.text);
+  DZ.said = `added a state graph block · line ${editor.value.slice(0, e.from).split('\n').length}`;
+  dzRefresh();
+  $('#dz-canvas').focus();
+  return !!DZ.model;
+}
 function dzDetect() { return !!(S.file && S.file.kind === 'text' && isMarkdown(S.file.path) && DC.isDesign(DC.parse(editor.value))); }
 async function setDesign(on) {
   if (!on) {
@@ -2733,7 +2770,7 @@ function dzLayout() {
   dzRender(); dzSavePos();
 }
 function dzAddNode() {
-  if (!DZ.model) return;
+  if (!DZ.model && !dzStart()) return;
   const r = DC.addNode(DZ.model), base = DZ.pos[DZ.active] || [0, 0];
   let p = [base[0] + 90, base[1] + 60];
   const near = q => Object.values(DZ.pos).some(o => Math.abs(o[0] - q[0]) < 60 && Math.abs(o[1] - q[1]) < 36);
@@ -2797,8 +2834,10 @@ function dzRender() {
   $('#dz-said').textContent = DZ.said || 'no graph edits yet';
   $('#dz-md').hidden = !DZ.showMd;
   $('#dz-mdbtn').classList.toggle('on', DZ.showMd);
-  $('#dz-empty').hidden = !!m;
-  if (!m) return;
+  $('#dz-empty').hidden = !!m && m.nodes.length > 0;
+  $('#dz-start').hidden = !!m;
+  $('#dz-emptytext').textContent = m ? 'An empty graph: press n to add the first node' : 'No mermaid or d2 state graph in this file yet';
+  if (!m || !m.nodes.length) return;
   if (DZ.showMd) $('#dz-mdtext').textContent = dzMarkdown(m);
   const ids = m.nodes.map(n => n.id), W = v.clientWidth || 600, H = v.clientHeight || 400;
   const xs = ids.map(id => DZ.pos[id][0]), ys = ids.map(id => DZ.pos[id][1]);
@@ -2838,7 +2877,8 @@ function dzRender() {
     trees.append(box);
   }
 }
-$('#b-design').onclick = () => setDesign(!DZ.on);
+$('#b-design').onclick = () => dzToggle(!DZ.on);
+$('#dz-start').onclick = () => dzStart();
 $('#dz-canvas').addEventListener('keydown', dzKey);
 $('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
 $('#dz-mdbtn').onclick = () => { DZ.showMd = !DZ.showMd; dzRender(); $('#dz-canvas').focus(); };
@@ -2945,7 +2985,7 @@ editor.addEventListener('input', () => {
     }, 350);
   }
   clearTimeout(DZ.timer);  // typing in the source redraws the graph, and can make a file a design file
-  DZ.timer = setTimeout(() => { if (DZ.on) dzRefresh(); else if (S.file && isMarkdown(S.file.path)) $('#b-design').hidden = !dzDetect(); }, DZ.on ? 120 : 400);
+  DZ.timer = setTimeout(() => { if (DZ.on) dzRefresh(); else if (S.file && isMarkdown(S.file.path)) $('#b-design').classList.toggle('found', dzDetect()); }, DZ.on ? 120 : 400);
 });
 editor.addEventListener('scroll', syncHL);
 ['keyup', 'click', 'select', 'mouseup'].forEach(ev => editor.addEventListener(ev, () => { updatePos(); updateFbButton(); }));
@@ -4480,6 +4520,18 @@ function openCtx(x, y, path) {
     mk.onclick = () => { hideCtx(); makeMenu(path); };
     menu.append(mk);
   }
+  if (paths.length === 1 && node && node.type === 'file' && isMarkdown(path)) {
+    const dz = el('button'); dz.type = 'button';
+    const on = DZ.on && S.file && S.file.path === path;
+    dz.append(el('span', '', on ? 'Leave Design mode' : 'Open in Design mode'), el('kbd', '', 'Ctrl+Shift+D'));
+    dz.title = 'Edit this Markdown as a state graph with one tree per node (remembered per file)';
+    dz.onclick = async () => {
+      hideCtx();
+      await select(path);
+      if (S.file && S.file.path === path) dzToggle(!on);
+    };
+    menu.append(dz);
+  }
   if (paths.length === 1 && node && node.type === 'file' && /\.svg$/i.test(path)) {
     const ink = el('button'); ink.type = 'button';
     ink.append(el('span', '', 'Open in Inkscape'), el('kbd', '', '↗'));
@@ -4626,6 +4678,7 @@ document.addEventListener('keydown', e => {
     if (k === 'q' || (k === 'w' && !inTerm)) { e.preventDefault(); quitApp(); return; }
   }
   if (inTerm) return;  // keys belong to the shell / agent
+  if (chord && e.code === 'KeyD' && S.file && S.file.kind === 'text' && isMarkdown(S.file.path)) { e.preventDefault(); dzToggle(!DZ.on); return; }
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n' && !$('#modal').open) {
     e.preventDefault(); newAtDepth(); return;
   }

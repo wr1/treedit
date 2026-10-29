@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Design mode on any Markdown file: the **Design** button shows for every `.md` (lit when a graph is
+  found), Ctrl+Shift+D toggles it, and the tree's right-click menu has **Open in Design mode**. A
+  file without a graph gets **Start a state graph** (or `n`), which inserts an empty mermaid
+  `stateDiagram-v2` block after the title and intro as one undo step. The mode is remembered per
+  file, so a design file reopens in it.
 - Design mode for design Markdown files (a mermaid `stateDiagram`/`flowchart`/`graph` or a d2 graph
   block, plus one bullet tree per node): a **Design** toggle beside Preview shows the graph with
   transparent, foldable tree overlays, a force layout (on load and from **Layout**), a live

@@ -20,8 +20,11 @@ work-file conflict is committed with its markers and pushed for the agent to res
 Markdown files preview with Mermaid diagrams, and with D2 diagrams through the installed `d2` CLI.
 A design Markdown file (a ```` ```mermaid ```` state diagram or flowchart, or a ```` ```d2 ```` graph,
 plus one bullet tree per node under a heading or a top bullet named after the node; see
-[examples/door-design.md](examples/door-design.md)) gets a **Design** button: the graph with each
-node's tree as a transparent, foldable overlay. With the graph focused, `n`/`a` adds a node, `l`
+[examples/door-design.md](examples/door-design.md)) opens as a graph with each node's tree as a
+transparent, foldable overlay. Any Markdown file can go into Design mode: the **Design** button (lit
+when the file already holds a graph), Ctrl+Shift+D, or **Open in Design mode** on the tree's
+right-click menu. A file without a graph offers **Start a state graph** (or press `n`), which adds an
+empty mermaid block after the title; the file reopens in Design mode until you leave it. With the graph focused, `n`/`a` adds a node, `l`
 then a click links the active node to another, arrows move it (Shift: bigger steps), Delete removes
 it with its edges and tree, Esc cancels linking, Ctrl+Z undoes. Every edit is one small splice of
 the Markdown in the editor beside it (change bars, drafts, save and undo as for typing); node
