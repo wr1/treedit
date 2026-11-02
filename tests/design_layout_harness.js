@@ -105,9 +105,30 @@ function minimalPan(id, margin = 40) {  // the smallest view shift (px) that bri
 const key = (k, mods = {}) => dzKey({ key: k, target: {}, preventDefault() {}, stopPropagation() {}, ...mods });
 
 /* ---------- opening a file the way setDesign does (no saved layout, or a given one) ---------- */
-function open(md, saved = null) {
+function open(md, saved = null, folded = []) {
   Object.assign(DZ, { on: true, path: 'x.md', link: false, said: '', pos: saved ? clone(saved) : {}, active: null, drag: null, pinned: false,
-    edit: null, press: null, rename: null, label: null, zoom: 1, fitNext: true, folded: new Set() });
+    edit: null, press: null, rename: null, label: null, zoom: 1, fitNext: true, folded: new Set(folded), ox: 0, oy: 0 });
   editor.value = md;
   dzRefresh();
 }
+
+/* ---------- the picture as layoutMetrics (tests/layout_metrics.js) reads it ---------- */
+function scene() {
+  if (typeof dzScene === 'function') return dzScene();
+  // the d6abe34 engine: one see-through overlay box per tree below the node, straight centre-to-centre edges
+  const nodes = {}, maps = {}, edges = [];
+  for (const n of DZ.model.nodes) {
+    const [x, y] = DZ.pos[n.id], [hw, hh] = dzHalf(n.id);
+    nodes[n.id] = [x - hw, y - hh, x + hw, y + hh];
+    if (DZ.model.trees[n.id] && !DZ.folded.has(n.id)) {
+      const [, , r, b] = dzExtent(n.id), box = [x - hw, y + hh + 4, x + r, y + b];
+      maps[n.id] = { box, items: [{ box, parent: -1 }] };
+    } else maps[n.id] = { box: null, items: [] };
+  }
+  for (const e of DZ.model.edges) edges.push({ from: e.from, to: e.to, pts: e.from === e.to ? [] : [DZ.pos[e.from], DZ.pos[e.to]] });
+  return { nodes, maps, edges };
+}
+const metrics = () => layoutMetrics(scene(), DZ, CANVAS);
+const shownCentres = () => Object.fromEntries(Object.entries(scene().nodes).map(([id, r]) => [id, [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2]]));
+const view = () => [DZ.ox, DZ.oy, DZ.zoom];
+const fold = (id, on) => (typeof dzFold === 'function' ? dzFold(id, on) : (DZ.folded[on ? 'add' : 'delete'](id), dzRender()));

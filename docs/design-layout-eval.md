@@ -157,3 +157,41 @@ too small" and "jittery". The line numbers refer to `src/treedit/page.html` at t
 
 Remeasure after each step with `make layout-eval`, and turn the matching xfail in
 `tests/test_design_layout_eval.py` into a plain assert.
+
+## State graph + mind maps (two layout levels)
+
+Design mode draws two things: (a) the **state graph**, the `##`-less mermaid/d2 states and their edges, and
+(b) one **mind map** per state, the state's bullet tree branching out of it the way Minder draws a map. The
+Minder criteria apply mainly to (b) and to how (b) shares room with (a). `tests/layout_metrics.js`
+(`layoutMetrics(scene, view, canvas)`) computes them from one picture; the harness feeds it the page's scene
+(for the d6abe34 engine an adapter treats each tree overlay as the map and each edge as a straight line).
+Two more samples exercise (b): `deep-5` (5 states, 3-level trees) and `wide-12` (12 states off a hub).
+
+| # | criterion | metric | threshold |
+|---|---|---|---|
+| M1 | a mind map never covers another state, another map, or an edge | `scene.mapStateOverlaps`, `mapMapOverlaps`, `edgeMapHits`, `edgeNodeHits` | 0 |
+| M2 | branches beside their parent at one gap, siblings evenly spaced | `scene.branchGap` (item left − parent right), `scene.siblingGap.std` | gap ≥ 16 px, spread ≤ 2 px; std ≤ 1 px |
+| M3 | a map stays near its state | `scene.mapReachPx` (farthest item box from the state box) | ≤ 640 px (≈ two Minder `node_width`s) |
+| U1 | unfolding reserves room | after unfolding one map (all others folded): overlaps + edge hits | 0 |
+| U2 | other states move only as needed | `fold.overNeed` = max move − (map size + 40) | ≤ 0 |
+| U3 | folding gives the room back, the camera holds | `fold.restoreMaxMove`, `fold.cameraChanges` | 0, 0 |
+| E1 | state edges in a band, uncrossed | `scene.edgeLen.ratio` (max/median), `scene.crossings` | ≤ 3, 0 |
+
+Baseline at the metrics commit (worst of the two canvases; "–" = not measurable: no item boxes):
+
+| criterion | door | chain-8 | branchy-10 | cycle-6 | tree-20 | deep-5 | wide-12 |
+|---|---|---|---|---|---|---|---|
+| min node text px (L1, ≥11) | 5.4 | 0.9 | 1.7 | 5.9 | 1 | 1.7 | 1.2 |
+| mind map over a state/map (M1, 0) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| edge segments through a mind map (M1, 0) | 5 | 8 | 8 | 7 | 10 | 6 | 12 |
+| branch gap min..max px (M2, ≥16, spread ≤2) | -78.4..-61.6 | -78.4..-78.4 | -86.8..-61.6 | -86.8..-61.6 | -56..-56 | -103.6..-70 | -56..-56 |
+| sibling gap std px (M2, ≤1) | – | – | – | – | – | – | – |
+| map reach px (M3, ≤640) | 175 | 122 | 139 | 130 | 71 | 272 | 154 |
+| unfold: overlaps + edge hits (U1, 0) | 3 | 1 | 2 | 2 | 3 | 4 | 3 |
+| unfold: max other-state move px (U2) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| fold/unfold camera changes (U3, 0) | 1 | 0 | 2 | 0 | 1 | 0 | 2 |
+| edge len max/median (E1, ≤3) | 1.22 | 1.03 | 1.43 | 1.08 | 1.97 | 2.54 | 1.37 |
+| min block gap px on screen (S2, ≥12) | 10.4 | 14.7 | 19.2 | 50.2 | 9.4 | 3.3 | 9.2 |
+| view shift on edit px (T3, ≤2) | 52 | 102.7 | 0 | 245.4 | 0 | 38.3 | 0 |
+| new-node overlaps (P1, 0) | 2 | 1 | 1 | 1 | 1 | 1 | 1 |
+| excess pan px (F3, ≤20) | 142 | 317 | 335 | 436 | 434 | 356 | 362 |

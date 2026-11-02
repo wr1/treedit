@@ -53,8 +53,8 @@ def design_md(title: str, edges: list[tuple[str, str]], trees: dict[str, list[st
     lines = ["---", f"name: {title}", "treedit: design", "---", f"# {title}", "", "```mermaid", "stateDiagram-v2"]
     lines += [f"    {a} --> {b}" for a, b in edges]
     lines += ["```", ""]
-    for node, items in trees.items():
-        lines += [f"## {node}", ""] + [f"- {it}" for it in items] + [""]
+    for node, items in trees.items():  # an item starting with a space is a nested line, written as is
+        lines += [f"## {node}", ""] + [it if it.startswith(" ") else f"- {it}" for it in items] + [""]
     return "\n".join(lines)
 
 
@@ -73,6 +73,23 @@ def samples() -> dict[str, str]:
     )
     big_edges = [("[*]", "n00")] + [(f"n{(i - 1) // 3:02d}", f"n{i:02d}") for i in range(1, 20)]
     big_nodes = [f"n{i:02d}" for i in range(20)]
+    # deep mind maps: 5 states, each with a 3-level bullet tree (what Minder is for)
+    deep_states = ["draft", "review", "approved", "published", "archived"]
+    deep_edges = [("[*]", "draft")] + list(zip(deep_states, deep_states[1:])) + [("review", "draft")]
+
+    def deep_tree(k):
+        out = []
+        for i in range(2 + k % 2):
+            out.append(item(k + i, 2 + i % 2))
+            for j in range(1 + (k + i) % 3):
+                out.append("  - " + item(k + i + j, 2 + j % 3))
+                out += ["    - " + item(k + j, 2)] * ((k + j) % 2)
+        return out
+
+    # wide: 12 states, fan-out from a hub plus a return edge, mixed tree sizes
+    wide = [f"s{i:02d}" for i in range(12)]
+    wide_edges = [("[*]", "hub")] + [("hub", s) for s in wide[:4]] + [(wide[i], wide[i + 4]) for i in range(8)]
+    wide_edges += [("s11", "hub")]
     return {
         "door (examples/)": EXAMPLE.read_text("utf-8"),
         "chain-8": design_md(
@@ -85,6 +102,10 @@ def samples() -> dict[str, str]:
         ),
         "cycle-6": design_md("cycle", cyc_edges, {n: [item(i, 4), item(i + 2, 2)] for i, n in enumerate(cyc)}),
         "tree-20": design_md("tree", big_edges, {n: [item(i, 2)] for i, n in enumerate(big_nodes) if i % 2 == 0}),
+        "deep-5": design_md("deep", deep_edges, {n: deep_tree(i) for i, n in enumerate(deep_states)}),
+        "wide-12": design_md(
+            "wide", wide_edges, {n: [item(i, 2 + i % 3)] * (1 + i % 4) for i, n in enumerate(["hub"] + wide)}
+        ),
     }
 
 
@@ -95,6 +116,7 @@ const R = {};
 open(MD);
 const firstPos = clone(DZ.pos);
 R.open = { ...legibility(), ...spacing() };
+R.scene = metrics();
 open(MD); R.deterministic = JSON.stringify(DZ.pos) === JSON.stringify(firstPos);
 // a saved layout reopens unchanged
 open(MD, firstPos); R.reopenSavedMaxMove = moved(firstPos, DZ.pos).max;
@@ -173,6 +195,31 @@ open(MD);
   R.cycle = { steps: DZ.model.nodes.length, pans, needlessPans: needless, nodeBoxOutOfView: outOfView, maxExcessPanPx: Math.round(excess) };
 }
 
+// fold: open with every mind map folded, then unfold one at a time and fold it back
+{
+  const withTree = Object.keys(DC.parse(MD).trees);
+  open(MD, null, withTree);
+  const base = shownCentres(), v0 = view();
+  const F = { maps: 0, overlaps: 0, edgeHits: 0, otherMaxMove: 0, otherMovedMax: 0, overNeed: 0, cameraChanges: 0, restoreMaxMove: 0 };
+  for (const id of withTree) {
+    if (!DZ.model.nodes.some(n => n.id === id)) continue;
+    F.maps++;
+    fold(id, false);
+    const s = shownCentres(), M = metrics(), mv = moved(base, s, [id]), mb = scene().maps[id].box;
+    F.overlaps = Math.max(F.overlaps, M.mapStateOverlaps + M.mapMapOverlaps);
+    F.edgeHits = Math.max(F.edgeHits, M.edgeMapHits);
+    F.otherMaxMove = Math.max(F.otherMaxMove, mv.max);
+    F.otherMovedMax = Math.max(F.otherMovedMax, Object.keys(base).filter(k => k !== id && Math.hypot(s[k][0] - base[k][0], s[k][1] - base[k][1]) > 0.5).length);
+    // a state should move at most by the size of what appeared (the map's height, or width) plus a gap
+    if (mb) F.overNeed = Math.max(F.overNeed, Math.round(mv.max - (Math.max(mb[2] - mb[0], mb[3] - mb[1]) + 40)));
+    F.cameraChanges += view().join() !== v0.join();
+    fold(id, true);
+    F.cameraChanges += view().join() !== v0.join();
+    F.restoreMaxMove = Math.max(F.restoreMaxMove, moved(base, shownCentres()).max);
+  }
+  R.fold = F;
+}
+
 // keys: what each Minder default does here (state before/after)
 R.keys = {};
 for (const [name, k, mods] of KEYS) {
@@ -215,6 +262,7 @@ KEYS = [
 
 def measure(md: str, w: int, h: int) -> dict:
     prog = f"const CANVAS = {{W: {w}, H: {h}}};\n"
+    prog += (HERE / "layout_metrics.js").read_text("utf-8") + "\n"
     prog += (HERE / "design_layout_harness.js").read_text("utf-8") + "\n" + page_code() + "\n"
     prog += f"const MD = {json.dumps(md)};\nconst KEYS = {json.dumps(KEYS)};\n" + SCENARIO
     out = subprocess.run([NODE, "-e", prog], capture_output=True, text=True)
@@ -244,6 +292,10 @@ def main(argv: list[str]) -> None:
                 f"overlaps {[i['newOverlaps'] for i in ins]} | item {r['treeItemScreenMaxMove']} | "
                 f"typed {r['typed']} | layout {r['layoutButton']} | cycle {r['cycle']}"
             )
+    print("\n## Minder criteria (scene + fold)")
+    for sample, per in data.items():
+        for canvas, r in per.items():
+            print(f"  {sample:18} {canvas[:9]:9} scene {json.dumps(r['scene'])} fold {json.dumps(r['fold'])}")
     print("\n## keys (door, first canvas)")
     for k, v in data["door (examples/)"][next(iter(CANVASES))]["keys"].items():
         print(f"  {k:36} {v}")

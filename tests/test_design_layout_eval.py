@@ -109,3 +109,48 @@ def test_minder_default_keys(runs):
     ]
     assert [k for k in wanted if keys[k] == "nothing"] == []
     assert "adds node" in keys["Enter (Minder: add sibling)"]
+
+
+# two levels (docs/design-layout-eval.md, "State graph + mind maps"): (a) the state graph, (b) one mind map per state ----
+
+REACH_MAX_PX = 640  # proposed: a mind map stays within about two Minder node widths (node_width 300) of its state
+EDGE_LEN_RATIO = 3  # proposed: the longest state edge at most 3x the median one
+
+
+def test_mind_map_reach_stays_near_its_state(runs):
+    assert not misses(runs, lambda r: r["scene"]["mapReachPx"] > REACH_MAX_PX)
+
+
+def test_unfold_moves_other_states_no_more_than_needed(runs):
+    assert not misses(runs, lambda r: r["fold"]["overNeed"] > 0)
+
+
+def test_state_edges_in_a_length_band_without_crossings(runs):
+    s = lambda r: r["scene"]  # noqa: E731
+    assert not misses(runs, lambda r: s(r)["crossings"] or (s(r)["edgeLen"] and s(r)["edgeLen"]["ratio"] > EDGE_LEN_RATIO))
+
+
+@pytest.mark.xfail(strict=True, reason="tree overlays sit under straight centre-to-centre edges")
+def test_mind_maps_clear_of_states_maps_and_edges(runs):
+    s = lambda r: r["scene"]  # noqa: E731
+    keys = ("stateOverlaps", "mapStateOverlaps", "mapMapOverlaps", "edgeMapHits", "edgeNodeHits")
+    assert not misses(runs, lambda r: any(s(r)[k] for k in keys))
+
+
+@pytest.mark.xfail(strict=True, reason="a tree is one overlay box below the node, not branches beside it")
+def test_mind_map_branches_evenly_spaced_beside_parent(runs):
+    def bad(r):
+        sib, br = r["scene"]["siblingGap"], r["scene"]["branchGap"]
+        return not br or br["min"] < 16 or br["max"] - br["min"] > 2 or (sib and sib["std"] > 1)
+
+    assert not misses(runs, bad)
+
+
+@pytest.mark.xfail(strict=True, reason="unfolding a tree does not reserve room: edges (and in deep-5 a box) run over it")
+def test_unfold_reserves_space(runs):
+    assert not misses(runs, lambda r: r["fold"]["overlaps"] or r["fold"]["edgeHits"])
+
+
+@pytest.mark.xfail(strict=True, reason="dzRender re-centres the unpinned view when a fold changes the bounds")
+def test_fold_gives_space_back_and_keeps_camera(runs):
+    assert not misses(runs, lambda r: r["fold"]["restoreMaxMove"] or r["fold"]["cameraChanges"])
