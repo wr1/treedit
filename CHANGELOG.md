@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Design mode: the bar of keys under the canvas is now a small `?` button in the canvas corner. The full
+  list appears on hover, on keyboard focus, or with `?` while the graph has focus, and Esc hides it.
+  Clicking `?` leaves focus where it was, and typing in a name or item box never opens the list. The
+  drawing gets the space back: at 1366×768 the canvas is 495 px tall instead of 220. The DESIGN and
+  LINK badges are smaller.
+
 - Design mode now has two layout levels. **States** are laid out as a fixed tidy tree: one row per rank,
   each parent over its children, and no edge crossings in the sample graphs. Saved positions are kept;
   Layout gives the same picture every time. Each state's bullet tree is drawn as a **mind map**

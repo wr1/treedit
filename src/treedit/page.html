@@ -229,17 +229,22 @@ body.wrap #editor{overflow-x:hidden}
 #mdview{flex:1 1 50%;min-width:0;overflow:auto;padding:18px 22px 50px;background:var(--bg)}
 #mdview[hidden]{display:none}
 #editwrap.dz-split #textside{flex:1 1 40%;border-right:1px solid var(--line)}
-#designview{flex:1 1 60%;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+#designview{flex:1 1 60%;min-width:0;display:flex;flex-direction:column;background:var(--bg);position:relative}
 #designview[hidden]{display:none}
 #b-design.on{border-color:var(--accent);color:var(--accent)}
 #b-design.found:not(.on){color:var(--accent)}
-.dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
-.dz-keys{border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
-.dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
-#dz-canvas:not(:focus) ~ .dz-keys .dz-focus{display:inline}
+.dz-top{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
+/* help: a small corner button over the canvas; the shortcut list shows on hover, on keyboard focus, or with ? */
+#dz-help{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;flex-direction:column;align-items:flex-end;gap:0;pointer-events:none}
+#dz-help-btn{pointer-events:auto;width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--mono);opacity:.7;background:var(--panel)}
+#dz-help-btn:hover,#dz-help-btn:focus-visible,#dz-help.open #dz-help-btn{opacity:1}
+#dz-help .dz-keys{display:none;order:-1;pointer-events:auto;flex-direction:column;align-items:flex-start;gap:3px;max-width:min(520px,calc(100vw - 40px));max-height:min(420px,70vh);overflow:auto;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 4px 14px rgb(0 0 0 / .18);font:11.5px var(--mono);color:var(--dim)}
+#dz-help:hover .dz-keys,#dz-help:focus-within .dz-keys,#dz-help.open .dz-keys{display:flex}
+.dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--bg)}
+#dz-canvas:not(:focus) ~ #dz-help .dz-focus{display:inline}
 .dz-focus{display:none;color:var(--accent)}
-.dz-mode{font-weight:700;color:#fff;background:var(--accent);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
-#dz-link{font-weight:700;color:#fff;background:var(--fb);border-radius:4px;padding:1px 7px}
+.dz-mode{font-weight:700;font-size:10px;color:#fff;background:var(--accent);border-radius:3px;padding:0 5px;letter-spacing:.04em}
+#dz-link{font-weight:700;font-size:10px;color:#fff;background:var(--fb);border-radius:3px;padding:0 5px}
 #dz-link[hidden]{display:none}
 #dz-said{color:var(--dim);font-family:var(--mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #dz-canvas{flex:1;position:relative;overflow:hidden;outline:none;min-height:0}
@@ -588,7 +593,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit" title="Fit everything in view (Ctrl+1); Ctrl+0 actual size, Ctrl+2 or Shift+C the selected node">Fit</button><button id="dz-layout" title="Lay the states out top to bottom again, each mind map on its right (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom · <kbd>Ctrl+0</kbd> actual size · <kbd>Ctrl+1</kbd> fit · <kbd>Shift+C</kbd> centre</span><span><kbd>f</kbd> fold the mind map · click <kbd>−</kbd>/<kbd>+N</kbd> to fold a branch</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add mind-map item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit" title="Fit everything in view (Ctrl+1); Ctrl+0 actual size, Ctrl+2 or Shift+C the selected node">Fit</button><button id="dz-layout" title="Lay the states out top to bottom again, each mind map on its right (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div id="dz-help"><div class="dz-keys" role="note" id="dz-keys"><span class="dz-focus">click the graph to use these keys</span><span><kbd>?</kbd> show or hide this list · <kbd>Esc</kbd> hide it</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom · <kbd>Ctrl+0</kbd> actual size · <kbd>Ctrl+1</kbd> fit · <kbd>Shift+C</kbd> centre</span><span><kbd>f</kbd> fold the mind map · click <kbd>−</kbd>/<kbd>+N</kbd> to fold a branch</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add mind-map item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div><button id="dz-help-btn" aria-label="Design keys" aria-describedby="dz-keys" aria-expanded="false" title="Keys (?)">?</button></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1923,7 +1928,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, at: null, geo: null, home: true, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null, label: null };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, at: null, geo: null, home: true, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null, label: null, help: false };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -3179,6 +3184,8 @@ function dzKey(e) {
   else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
   else if (k === 'F2' || k === 'e') dzStartRename(DZ.active);
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; DZ.linkFrom = DZ.active; dzRender(); } }
+  else if (k === '?') dzHelp(!DZ.help);
+  else if (k === 'Escape' && DZ.help) dzHelp(false);  // Esc closes the key list first, then cancels a link
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
   else if (k === 'f' && DZ.active && DZ.model && DZ.model.trees[DZ.active]) dzFold(DZ.active);
@@ -3186,6 +3193,11 @@ function dzKey(e) {
   else if (arrows[k] && !e.shiftKey) dzWalk(arrows[k]);
   else return;
   e.preventDefault(); e.stopPropagation();
+}
+function dzHelp(open) {  // the ? key list; a class only, so focus and the name box are never touched
+  DZ.help = !!open;
+  $('#dz-help').classList.toggle('open', DZ.help);
+  $('#dz-help-btn').setAttribute?.('aria-expanded', String(DZ.help));
 }
 function dzCycle(direction) {
   const ids = DZ.model ? DZ.model.nodes.map(n => n.id) : [];
@@ -3625,6 +3637,8 @@ $('#dz-canvas').addEventListener('pointerdown', e => {
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 });
 $('#dz-canvas').addEventListener('keydown', dzKey);
+$('#dz-help-btn').onmousedown = e => e.preventDefault();  // a click toggles the list but leaves focus where it was
+$('#dz-help-btn').onclick = () => dzHelp(!DZ.help);
 $('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
 {
   let size = '';  // a resize keeps the view where it is; one that does not change the canvas size is no reason to redraw

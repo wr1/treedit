@@ -81,3 +81,32 @@ console.log(JSON.stringify(out));
     )
     assert sorted(label["text"] for label in labels) == ["forward", "retry", "return"]
     assert len({(label["x"], label["y"]) for label in labels}) == 3
+
+
+KEY = "const press = k => dzKey({key: k, target: {}, preventDefault() {}, stopPropagation() {}});"
+
+
+def test_question_mark_toggles_the_key_list_and_esc_closes_it_before_cancelling_a_link():
+    result = run(
+        DOOR,
+        KEY
+        + """
+const seen = [DZ.help]; press('?'); seen.push(DZ.help); press('?'); seen.push(DZ.help);
+DZ.active = 'Closed'; press('l'); press('?'); press('Escape'); seen.push(DZ.help, DZ.link); press('Escape'); seen.push(DZ.link);
+console.log(JSON.stringify(seen));
+""",
+    )
+    assert result == [False, True, False, False, True, False]
+
+
+def test_key_list_is_a_corner_popover_not_a_bar_under_the_canvas():
+    html = (HERE.parent / "src" / "treedit" / "page.html").read_text("utf-8")
+    view = html[html.index('<div id="designview"') :]
+    view = view[: view.index("</div></div></div>")]
+    assert view.index('<div id="dz-canvas"') < view.index('<div id="dz-help">'), "help follows the canvas"
+    assert '<div id="dz-help"><div class="dz-keys"' in view, "the key list lives in the help popover"
+    assert 'id="dz-help-btn"' in view
+    css = html[: html.index("</style>")]
+    assert "#dz-help .dz-keys{display:none" in css, "hidden until hover, focus or ?"
+    assert "#dz-help:hover .dz-keys,#dz-help:focus-within .dz-keys,#dz-help.open .dz-keys{display:flex}" in css
+    assert "onmousedown = e => e.preventDefault()" in html, "clicking ? keeps focus on the canvas or name box"
