@@ -799,3 +799,17 @@ def test_layout_sidecar(server, tree):
     assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": "x"}})[0] == 400
     assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {}})[0] == 200
     assert not side.exists()
+
+
+def test_layout_sidecar_keeps_folded_mind_maps(server, tree):
+    """Folded mind maps and branches sit next to the positions; a PUT without "folded" keeps them."""
+    keys = ["B", "A › door › lock"]
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": [1, 2]}, "folded": keys})[0] == 200
+    assert call(server, "GET", "/api/layout?path=d.md")[1] == {"nodes": {"A": [1, 2]}, "folded": sorted(keys)}
+    side = tree / ".treedit-layout.json"
+    assert json.loads(side.read_text())["folded"] == {"d.md": sorted(keys)}
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": [5, 6]}})[0] == 200
+    assert call(server, "GET", "/api/layout?path=d.md")[1]["folded"] == sorted(keys)
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {"A": [5, 6]}, "folded": "B"})[0] == 400
+    assert call(server, "PUT", "/api/layout", {"path": "d.md", "nodes": {}, "folded": []})[0] == 200
+    assert not side.exists()

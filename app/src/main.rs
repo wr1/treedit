@@ -47,7 +47,26 @@ fn start_server(bin: &str, root: &str, port: u16) -> Child {
     child
 }
 
+/// WebKitGTK's DMA-BUF renderer allocates the page through GBM. On the NVIDIA
+/// kernel module `DRM_IOCTL_MODE_CREATE_DUMB` fails with EACCES (`Failed to
+/// create GBM buffer`), and the window stays blank. Shared-memory rendering
+/// still paints the page. A value already in the environment wins, including
+/// `0`, which keeps DMA-BUF on. Other GPUs stay on the faster path.
+#[cfg(target_os = "linux")]
+fn prefer_shm_on_nvidia() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some() {
+        return;
+    }
+    let sys = std::path::Path::new("/sys/module");
+    if sys.join("nvidia").is_dir() || sys.join("nvidia_drm").is_dir() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "linux")]
+    prefer_shm_on_nvidia();
+
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (url, child) = match args.as_slice() {
         [flag, url] if flag == "--url" => (url.clone(), None),
