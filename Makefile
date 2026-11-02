@@ -8,7 +8,7 @@ APP_PC := webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 gtk+-3.0 dbus-1
 APP_DEPS := libdbus-1-dev libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libssl-dev build-essential pkg-config
 
 .DEFAULT_GOAL := help
-.PHONY: help install open web print lint test build skill tool icons desktop app app-build app-deps app-check clean
+.PHONY: help install open web print lint test layout-eval build skill tool icons desktop app app-build app-deps app-check clean
 
 help: ## Show this help (override ROOT=path PORT=n AGENT=claude)
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -36,6 +36,9 @@ lint: ## Run ruff check and format on src and tests
 
 test: ## Run the tests with coverage
 	uv run pytest
+
+layout-eval: ## Measure Design-mode layout quality (docs/design-layout-eval.md)
+	uv run python tests/design_layout_eval.py
 
 build: ## Build the sdist and wheel into dist/
 	uv build
