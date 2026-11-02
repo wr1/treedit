@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Design mode now has two layout levels. **States** are laid out as a fixed tidy tree: one row per rank,
+  each parent over its children, and no edge crossings in the sample graphs. Saved positions are kept;
+  Layout gives the same picture every time. Each state's bullet tree is drawn as a **mind map**
+  branching to the right of the state, in Minder's style: even branch and sibling spacing, and a `−`/`+`
+  on each branch to fold it (`f` folds the active state's map). An unfolded map reserves its own space,
+  so it never covers another state, map or edge. Other states move only as far as needed, and folding
+  gives the space back. Fold state is saved as `"folded"` in `.treedit-layout.json`.
+- Design mode: the view no longer shrinks the graph to fit (this replaces the "shrink to fit" entry
+  below). It opens at actual size, and on an edit it pans only as far as needed to show the node, with
+  a 200 ms ease. Ctrl+0 is actual size, Ctrl+1 fits, and Shift+C centres. A new node goes to the
+  nearest free spot by its source, and a rename that makes a node wider moves only that node. Neither
+  pushes other states.
+- Design mode: fixed the name box losing focus right after `n`/`a` in Chrome. A redraw from the resize
+  observer blurred the input and committed the default name, so the next keys went to the canvas.
+
 - Design mode: click an edge to label it (state `A --> B : x`, flowchart `A -->|x| B`, d2 `a -> b: x`;
   empty removes it), and a new link opens its label box so the next typing labels it. **Start a
   state graph** writes skill-style front matter (`name` from the file name, a `description`

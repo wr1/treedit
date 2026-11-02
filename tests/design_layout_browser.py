@@ -25,7 +25,7 @@ VIEWPORTS = {"laptop 1366x768": (1366, 768), "desktop 1920x1080": (1920, 1080)}
 PROBE = r"""() => {
   const c = document.querySelector('#dz-canvas'), cr = c.getBoundingClientRect();
   const text = document.querySelector('.dz-node text');
-  const rects = [...document.querySelectorAll('.dz-node rect, .dz-tree')].map(e => {
+  const rects = [...document.querySelectorAll('.dz-node rect, .dz-item')].map(e => {
     const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom, e.tagName];
   });
   let overlaps = 0;
@@ -33,10 +33,8 @@ PROBE = r"""() => {
     const a = rects[i], b = rects[j];
     if (a[0] < b[2] - 1 && b[0] < a[2] - 1 && a[1] < b[3] - 1 && b[1] < a[3] - 1) overlaps++;
   }
-  const est = [...document.querySelectorAll('.dz-tree')].map(e => {
-    const r = e.getBoundingClientRect(), id = e.querySelector('.dz-fold').textContent.slice(2).split(' · ')[0], x = dzExtent(id);
-    return [r.width / DZ.zoom, r.height / DZ.zoom, x[0] + x[2], x[3] - x[1] - 4];
-  }).filter(Boolean);
+  // each mind-map item is sized from dzTextW's estimate; the real text must fit in it (scroll size within 1px)
+  const est = [...document.querySelectorAll('.dz-item')].map(e => [e.scrollWidth, e.clientWidth, e.scrollHeight, e.clientHeight]);
   const nodes = {};
   for (const g of document.querySelectorAll('.dz-node')) {
     const r = g.getBoundingClientRect(); nodes[g.dataset.id] = [r.left + r.width / 2, r.top + r.height / 2];
@@ -45,7 +43,7 @@ PROBE = r"""() => {
     canvas: [Math.round(cr.width), Math.round(cr.height)], zoom: DZ.zoom,
     nodeFontCss: text && parseFloat(getComputedStyle(text).fontSize),
     nodeTextPx: text && Math.round(parseFloat(getComputedStyle(text).fontSize) * DZ.zoom * 10) / 10,
-    renderedOverlaps: overlaps, treeExtentRealVsEstimate: est, nodes,
+    renderedOverlaps: overlaps, itemTextOverflows: est.filter(([sw, cw, sh, ch]) => sw > cw + 1 || sh > ch + 1).length, items: est.length, nodes,
   };
 }"""
 
@@ -127,13 +125,10 @@ def main():
         return
     for name, per in out.items():
         for vname, r in per.items():
-            est = r["treeExtentRealVsEstimate"]
-            err = max((a / c - 1 for a, b, c, d in est), key=abs, default=0)  # + : real tree larger than estimated
-            herr = max((b / d - 1 for a, b, c, d in est), key=abs, default=0)
             print(
                 f"{name:18} {vname:18} canvas {r['canvas']} zoom {r['zoom']:.2f} node text {r['nodeTextPx']}px "
                 f"overlaps {r['renderedOverlaps']} -> {r['afterInsert']['renderedOverlaps']} "
-                f"insert shift {r['afterInsert']['screenShiftPx']}px tree real/est-1 w {err:+.0%} h {herr:+.0%}"
+                f"insert shift {r['afterInsert']['screenShiftPx']}px items {r['items']} text overflowing {r['itemTextOverflows']}"
             )
 
 

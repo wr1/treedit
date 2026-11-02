@@ -125,17 +125,19 @@ open(MD, firstPos); R.reopenSavedMaxMove = moved(firstPos, DZ.pos).max;
 open(MD);
 R.insert = [];
 for (let k = 0; k < 3; k++) {
-  const parent = DZ.active, model0 = clone(DZ.pos), screen0 = screenPos(), z0 = DZ.zoom, B0 = boxes();
+  const parent = DZ.active, model0 = clone(SHOWN()), screen0 = screenPos(), z0 = DZ.zoom, B0 = boxes(), v0 = view();
   key('n');
   const id = DZ.active, rn = DZ.rename;
-  const afterAdd = screenPos();
+  const afterAdd = screenPos(), vA = view(), excessAdd = viewExcess(v0, panNeed(scene().nodes[id], v0));
   if (rn) dzRenameCommit(rn, `added_step_${k}`);
+  const excessName = viewExcess(vA, panNeed(scene().nodes[DZ.active], vA));
   const nid = DZ.active, B = boxes(), nb = B[nid];
   const hits = Object.entries(B).filter(([o, b]) => o !== nid && b[0] < nb[2] && nb[0] < b[2] && b[1] < nb[3] && nb[1] < b[3]).map(([o]) => o);
   R.insert.push({
-    parent, modelMaxMove: moved(model0, DZ.pos).max, screenMaxMoveOnAdd: moved(screen0, afterAdd).max,
+    parent, modelMaxMove: moved(model0, SHOWN()).max, screenMaxMoveOnAdd: moved(screen0, afterAdd).max,
     screenMaxMoveOnName: moved(afterAdd, screenPos(), [id]).max, zoomChanged: DZ.zoom !== z0,
-    offsetFromParent: [DZ.pos[nid][0] - model0[parent][0], DZ.pos[nid][1] - model0[parent][1]],
+    viewExcessOnAdd: excessAdd, viewExcessOnName: excessName,
+    offsetFromParent: [SHOWN()[nid][0] - model0[parent][0], SHOWN()[nid][1] - model0[parent][1]],
     newOverlaps: hits.length, overlapped: hits, gapToParentPx: Math.round(boxGap(B0[parent], nb)),
     rightOfParent: nb[0] >= B0[parent][2], inView: inView(nid).node,
   });
@@ -144,21 +146,25 @@ R.afterInserts = spacing();
 
 // Enter on a node: add a tree item, then commit it
 {
-  const a = DZ.active, s0 = screenPos();
-  dzEditNew(a, null); dzCommit(DZ.edit, 'a new tree item with a few more words in it');
+  const a = DZ.active, s0 = screenPos(), v0 = view();
+  dzEditNew(a, null);
+  const need = panNeed(editBox(), v0);
+  dzCommit(DZ.edit, 'a new tree item with a few more words in it');
   R.treeItemScreenMaxMove = moved(s0, screenPos()).max;
+  R.treeItemViewExcess = viewExcess(v0, need);
 }
 
 // a node typed into the Markdown (graph line added by hand)
 open(MD);
 {
-  const m0 = clone(DZ.pos), s0 = screenPos(), src = DZ.model.nodes.find(n => n.id !== '[*]').id;
+  const m0 = clone(SHOWN()), s0 = screenPos(), v0 = view(), src = DZ.model.nodes.find(n => n.id !== '[*]').id;
   editor.value = editor.value.replace(/stateDiagram-v2\n/, `stateDiagram-v2\n    ${src} --> typed_node\n`);
   dzRefresh();
+  const typedExcess = viewExcess(v0, panNeed(scene().nodes.typed_node, v0));
   const B = boxes(), nb = B.typed_node;
   R.typed = {
-    modelMaxMove: moved(m0, DZ.pos).max, screenMaxMove: moved(s0, screenPos()).max,
-    distanceFromParent: Math.round(Math.hypot(DZ.pos.typed_node[0] - DZ.pos[src][0], DZ.pos.typed_node[1] - DZ.pos[src][1])),
+    modelMaxMove: moved(m0, SHOWN()).max, screenMaxMove: moved(s0, screenPos()).max, viewExcess: typedExcess,
+    distanceFromParent: Math.round(Math.hypot(SHOWN().typed_node[0] - SHOWN()[src][0], SHOWN().typed_node[1] - SHOWN()[src][1])),
     gapToParentPx: Math.round(boxGap(B[src], nb)),
     newOverlaps: Object.entries(B).filter(([o, b]) => o !== 'typed_node' && b[0] < nb[2] && nb[0] < b[2] && b[1] < nb[3] && nb[1] < b[3]).length,
     inView: inView('typed_node').node,
@@ -169,7 +175,7 @@ open(MD);
 open(MD);
 {
   const id = DZ.model.nodes.find(n => n.id !== '[*]').id;
-  DZ.pos[id] = [DZ.pos[id][0] + 120, DZ.pos[id][1] + 40]; DZ.pinned = true;
+  DZ.pos[id] = [SHOWN()[id][0] + 120, SHOWN()[id][1] + 40]; DZ.pinned = true;
   const m0 = clone(DZ.pos), z0 = DZ.zoom;
   dzLayout();
   const m1 = clone(DZ.pos);
@@ -187,7 +193,7 @@ open(MD);
     const need = minimalPan(next);
     key(']');
     excess = Math.max(excess, Math.hypot(DZ.ox - v0[0], DZ.oy - v0[1]) - need);
-    const wasVisible = (() => { const z = DZ.zoom, [x, y] = DZ.pos[DZ.active]; const sx = x * v0[2] + v0[0], sy = y * v0[2] + v0[1]; return sx >= 40 && sy >= 40 && sx <= CANVAS.W - 40 && sy <= CANVAS.H - 40; })();
+    const wasVisible = nodeSeen(DZ.active, v0);
     const panned = DZ.ox !== v0[0] || DZ.oy !== v0[1] || DZ.zoom !== v0[2];
     pans += panned; needless += panned && wasVisible;
     outOfView += !inView(DZ.active).node;
