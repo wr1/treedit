@@ -8,6 +8,7 @@
   placeholder, `treedit: design`); `treedit: design` lights the Design button and opens the file in
   Design mode unless you left it, and the parser never reads front matter as a node tree.
 - Design UX: visible node/link controls, background pan, zoom and Fit, tree-aware layout spacing, separate return-edge labels and visible self-loop labels. Keyboard users can cycle all nodes with `[` / `]`, link with Enter, and Tab to editable tree items.
+- Design mode: the key strip below the graph is one line, with **all keys** opening the full list over the graph. It no longer grows or shrinks with the pane, so resizing the window does not change the canvas height and re-centre the graph.
 
 - Design mode: drag nodes with the mouse (the view stays put after a drop; Layout or a resize
   re-centres it), and edit the node trees on the canvas: double-click an item to edit it (empty

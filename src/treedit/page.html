@@ -233,9 +233,15 @@ body.wrap #editor{overflow-x:hidden}
 #designview[hidden]{display:none}
 #b-design.on{border-color:var(--accent);color:var(--accent)}
 #b-design.found:not(.on){color:var(--accent)}
-.dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
-.dz-keys{border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
-.dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
+.dz-top{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
+.dz-keys{position:relative;flex:0 0 auto;padding:5px 10px;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:12px}
+.dz-keys>summary{display:block;list-style:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.dz-keys>summary::-webkit-details-marker{display:none}
+.dz-keys[open]>summary{color:var(--text)}
+.dz-keys-more{color:var(--accent)}
+.dz-keys-body{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:5;display:flex;flex-wrap:wrap;gap:6px 8px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.28);max-height:40vh;overflow:auto;white-space:normal;line-height:1.5}
+.dz-keys-body>span{flex:0 1 auto}
+.dz-keys kbd,.dz-keys-body kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
 #dz-canvas:not(:focus) ~ .dz-keys .dz-focus{display:inline}
 .dz-focus{display:none;color:var(--accent)}
 .dz-mode{font-weight:700;color:#fff;background:var(--accent);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
@@ -589,7 +595,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit">Fit</button><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit">Fit</button><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><details class="dz-keys"><summary><span class="dz-focus">click the graph to use these keys ·</span><kbd>n</kbd> add node · <kbd>a</kbd> loose node · <kbd>l</kbd> link · <kbd>←↑↓→</kbd> walk · <kbd>Tab</kbd> tree controls · <kbd>Del</kbd> delete · <span class="dz-keys-more">all keys</span></summary><div class="dz-keys-body"><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></details></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -3321,7 +3327,7 @@ function dzRender() {
     if (!t && !ed) continue;
     const fold = DZ.folded.has(n.id) && !ed, box = el('div', 'dz-tree' + (fold ? ' folded' : '') + (n.id === DZ.active ? ' active' : ''));
     box.style.left = (x - hw) + 'px'; box.style.top = (y + hh + 4) + 'px';
-    const head = el('button', 'dz-fold', (fold ? '▸ ' : '▾ ') + `${n.id} · ${items.length}`);
+    const head = el('button', 'dz-fold', (fold ? '▸ ' : '▾ ') + `${items.length} item${items.length === 1 ? '' : 's'}`);
     head.title = (fold ? 'Show' : 'Fold') + ` the tree of ${n.id}` + (t ? ` (line ${t.line + 1})` : '');
     head.onclick = () => { DZ.folded[fold ? 'delete' : 'add'](n.id); dzRender(); $('#dz-canvas').focus(); };
     const add = el('button', 'dz-add', '+');
@@ -3358,6 +3364,9 @@ $('#dz-canvas').addEventListener('pointerdown', e => {
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 });
 $('#dz-canvas').addEventListener('keydown', dzKey);
+const dzKeysHelp = $('.dz-keys');
+$('#dz-canvas').addEventListener('pointerdown', () => { dzKeysHelp.open = false; });
+dzKeysHelp.addEventListener('keydown', e => { if (e.key === 'Escape') { dzKeysHelp.open = false; e.stopPropagation(); } });
 $('#dz-layout').onclick = () => { dzLayout(); $('#dz-canvas').focus(); };
 new ResizeObserver(() => { if (DZ.on) { DZ.pinned = false; dzRender(); } }).observe($('#dz-canvas'));
 async function compileTypst() {

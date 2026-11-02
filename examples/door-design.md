@@ -13,6 +13,9 @@ stateDiagram-v2
     Open --> Closed : close
     Closed --> Locked : lock
     Locked --> Closed : unlock
+    S2
+    Locked --> S2
+    S2 --> [*]
 ```
 
 ## Closed
@@ -35,6 +38,12 @@ stateDiagram-v2
 - accepts
   - unlock (with a valid badge)
 
+## S1
+
+## S2
+- one issue 
+  - second issue
+  - third
 ## Notes
 
 Anything after the trees is ordinary Markdown.
