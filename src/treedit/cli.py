@@ -1364,7 +1364,20 @@ class Workspace:
         nodes = data.get("files", {}).get(self.norm(rel), {}) if isinstance(data, dict) else {}
         return nodes if isinstance(nodes, dict) else {}
 
-    def write_layout(self, rel: str, nodes) -> None:
+    def read_folded(self, rel: str) -> list:
+        """The folded mind maps and branches of one design file: node ids and "id › item › item" keys."""
+        try:
+            data = json.loads(self.layout_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return []
+        keys = (
+            data.get("folded", {}).get(self.norm(rel), [])
+            if isinstance(data, dict) and isinstance(data.get("folded"), dict)
+            else []
+        )
+        return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+    def write_layout(self, rel: str, nodes, folded=None) -> None:
         rel = self.norm(rel)
         if not rel:
             raise HTTPError(400, "a path is required")
@@ -1378,23 +1391,36 @@ class Workspace:
                 clean[k] = [round(float(v[0])), round(float(v[1]))]
             except (TypeError, ValueError) as e:
                 raise HTTPError(400, "a position is [x, y]") from e
+        if folded is not None and not (isinstance(folded, list) and all(isinstance(k, str) for k in folded)):
+            raise HTTPError(400, "folded is a list of strings")
         with self.lock:
             try:
                 data = json.loads(self.layout_path.read_text("utf-8"))
             except (OSError, ValueError):
                 data = {}
             files = data.get("files") if isinstance(data, dict) and isinstance(data.get("files"), dict) else {}
+            folds = data.get("folded") if isinstance(data, dict) and isinstance(data.get("folded"), dict) else {}
             if clean:
                 files[rel] = clean
             else:
                 files.pop(rel, None)
-            if files:
+            if folded is not None:
+                if folded:
+                    folds[rel] = sorted(set(folded))
+                else:
+                    folds.pop(rel, None)
+            if files or folds:
                 # one line per file, so moving nodes in one design file is a one-line diff of this sidecar
-                rows = ",\n".join(
-                    f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(files[k], sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
-                    for k in sorted(files)
-                )
-                atomic_write(self.layout_path, f'{{"version": 1, "files": {{\n{rows}\n}}}}\n'.encode())
+                def rows(m):
+                    return ",\n".join(
+                        f"  {json.dumps(k, ensure_ascii=False)}: {json.dumps(m[k], sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
+                        for k in sorted(m)
+                    )
+
+                text = f'{{"version": 1, "files": {{\n{rows(files)}\n}}'
+                if folds:
+                    text += f', "folded": {{\n{rows(folds)}\n}}'
+                atomic_write(self.layout_path, (text + "}\n").encode())
             else:
                 try:
                     self.layout_path.unlink()
@@ -2767,9 +2793,13 @@ class Mounts:
         _, w, sub = self.split(rel)
         return w.read_layout(sub)
 
-    def write_layout(self, rel: str, nodes) -> None:
+    def read_folded(self, rel: str) -> list:
         _, w, sub = self.split(rel)
-        w.write_layout(sub, nodes)
+        return w.read_folded(sub)
+
+    def write_layout(self, rel: str, nodes, folded=None) -> None:
+        _, w, sub = self.split(rel)
+        w.write_layout(sub, nodes, folded)
 
     # ---------- files ----------
     def read_file(self, rel: str) -> dict:
@@ -3022,7 +3052,10 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/file":
             return self.send_json(200, ws.read_file(q.get("path", "")))
         if method == "GET" and path == "/api/layout":
-            return self.send_json(200, {"nodes": ws.read_layout(q.get("path", ""))})
+            folded = ws.read_folded(q.get("path", ""))
+            return self.send_json(
+                200, {"nodes": ws.read_layout(q.get("path", ""))} | ({"folded": folded} if folded else {})
+            )
         if method == "GET" and path == "/api/pdf/info":
             return self.send_json(200, ws.pdf_info(q.get("path", "")))
         if method == "GET" and path == "/api/pdf":
@@ -3063,7 +3096,7 @@ class Handler(BaseHTTPRequestHandler):
                 ws.write_file(b.get("path", ""), str(b.get("content", "")), b.get("base_hash"), bool(b.get("force"))),
             )
         if method == "PUT" and path == "/api/layout":
-            ws.write_layout(b.get("path", ""), b.get("nodes"))
+            ws.write_layout(b.get("path", ""), b.get("nodes"), b.get("folded"))
             return self.send_json(200, {"ok": True})
         if method == "PUT" and path == "/api/note":
             ws.set_note(b.get("path", ""), str(b.get("note", "")))

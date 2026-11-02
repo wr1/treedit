@@ -48,7 +48,7 @@ function layoutMetrics(scene, view, canvas, fonts = { node: 12.5, tree: 12 }) {
     const n = scene.nodes[a], byParent = new Map();
     m.items.forEach((it, i) => { (byParent.get(it.parent) || byParent.set(it.parent, []).get(it.parent)).push(it); });
     for (const kids of byParent.values()) {
-      const ys = kids.map(k => k.box).sort((p, q) => p[1] - q[1]);
+      const ys = kids.map(k => k.slot || k.box).sort((p, q) => p[1] - q[1]);
       for (let i = 1; i < ys.length; i++) sib.push(ys[i][1] - ys[i - 1][3]);
     }
     for (const it of m.items) {
@@ -65,6 +65,10 @@ function layoutMetrics(scene, view, canvas, fonts = { node: 12.5, tree: 12 }) {
   // (a) the state graph: edge lengths (centre to centre) and crossings of the drawn polylines
   const ctr = r => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
   const lens = scene.edges.filter(e => e.from !== e.to).map(e => { const [p, q] = [ctr(scene.nodes[e.from]), ctr(scene.nodes[e.to])]; return Math.hypot(q[0] - p[0], q[1] - p[1]); }).sort((a, b) => a - b);
+  const band = l => l.length ? { median: Math.round(l[l.length >> 1]), max: Math.round(l[l.length - 1]), ratio: +(l[l.length - 1] / (l[l.length >> 1] || 1)).toFixed(2) } : null;
+  // forward: edges drawn downwards (target centre below the source's), the direction a top-down state diagram reads;
+  // back edges (loops to an earlier state) are routed around the drawing and are reported in edgeLen only
+  S.edgeLenForward = band(scene.edges.filter(e => e.from !== e.to && ctr(scene.nodes[e.to])[1] > ctr(scene.nodes[e.from])[1]).map(e => { const [p, q] = [ctr(scene.nodes[e.from]), ctr(scene.nodes[e.to])]; return Math.hypot(q[0] - p[0], q[1] - p[1]); }).sort((a, b) => a - b));
   S.edgeLen = lens.length ? { median: Math.round(lens[lens.length >> 1]), max: Math.round(lens[lens.length - 1]), ratio: +(lens[lens.length - 1] / (lens[lens.length >> 1] || 1)).toFixed(2) } : null;
   const ccw = (a, b, c) => (c[1] - a[1]) * (b[0] - a[0]) - (b[1] - a[1]) * (c[0] - a[0]);
   let cross = 0;
