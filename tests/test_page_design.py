@@ -10,7 +10,7 @@ import pytest
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="needs node")
-SAMPLE = Path(__file__).resolve().parent.parent / "examples" / "door-design.md"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "door-design.md"  # frozen: examples/ is the user's to edit
 
 
 def js_function(src: str, name: str) -> str:

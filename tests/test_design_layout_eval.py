@@ -117,11 +117,11 @@ def test_new_node_placed_next_to_source(runs):
     )
 
 
-@pytest.mark.xfail(strict=True, reason="Tab does nothing; Enter opens a mind-map item, not a sibling state")
 def test_minder_edit_keys(runs):
+    # a state is Minder's root: Tab adds a child (a mind-map item, typed in place), Enter another root (a state, named in place)
     keys = runs[0][1]["keys"]
-    assert keys["Tab (Minder: add child)"] != "nothing"
-    assert "adds node" in keys["Enter (Minder: add sibling)"]
+    assert keys["Tab (Minder: add child)"] == "tree item box"
+    assert "adds node" in keys["Enter (Minder: add sibling)"] and "name box" in keys["Enter (Minder: add sibling)"]
 
 
 # two levels (docs/design-layout-eval.md, "State graph + mind maps"): (a) the state graph, (b) one mind map per state ----

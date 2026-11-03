@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Design mode: Minder's mind-map keys (phase1geo/Minder defaults). The mind map now has its own
+  keyboard selection: click an item or press `→` on a state to enter it. On an item, `Tab` adds a child,
+  `Enter` adds a sibling after it (`Shift+Enter`: before) and `Shift+Tab` adds a parent. `→` / `←` go to
+  the child / parent and `↑` / `↓` to the siblings, without wrapping; `h j k l`, `a`, `c`, `m`, `n` / `p`
+  and PageUp / PageDown also work. `Alt+↑` / `Alt+↓` reorder, `Alt+←` moves an item out a level, and
+  `Alt+→` lifts its children. `Del` / Backspace deletes the branch (`Shift`: only the item, its children
+  stay), `f` folds it (`Shift+F`: the whole branch), `e` / `F2` edits it, `Shift+C` / `2` centres it, and
+  `Esc` goes back to the state. On a state, `Tab` adds a mind-map item and `Enter` adds a state
+  (`Shift+Enter`: a linked one). While typing, `Enter` opens the next sibling, `Tab` a child and
+  `Shift+Tab` a parent; `Esc` ends the edit and keeps the text. `0`, `1`, `=` and `-` zoom without
+  `Ctrl` (Chrome takes `Ctrl+1` / `Ctrl+2`). `Ctrl+?` toggles the key list, and `Ctrl+Shift+Z` redoes.
+  Every change is one undo step and touches only its own lines.
+  **Changed keys:** `Enter` on a state used to add a mind-map item (now `Tab`); `Tab` used to move to the
+  tree controls; `Tab` / `Shift+Tab` while typing used to indent / outdent; `Esc` while typing used to
+  discard the edit.
+
 - Design mode: the bar of keys under the canvas is now a small `?` button in the canvas corner. The full
   list appears on hover, on keyboard focus, or with `?` while the graph has focus, and Esc hides it.
   Clicking `?` leaves focus where it was, and typing in a name or item box never opens the list. The

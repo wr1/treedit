@@ -238,7 +238,7 @@ body.wrap #editor{overflow-x:hidden}
 #dz-help{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;flex-direction:column;align-items:flex-end;gap:0;pointer-events:none}
 #dz-help-btn{pointer-events:auto;width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--mono);opacity:.7;background:var(--panel)}
 #dz-help-btn:hover,#dz-help-btn:focus-visible,#dz-help.open #dz-help-btn{opacity:1}
-#dz-help .dz-keys{display:none;order:-1;pointer-events:auto;flex-direction:column;align-items:flex-start;gap:3px;max-width:min(520px,calc(100vw - 40px));max-height:min(420px,70vh);overflow:auto;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 4px 14px rgb(0 0 0 / .18);font:11.5px var(--mono);color:var(--dim)}
+#dz-help .dz-keys{display:none;order:-1;pointer-events:auto;flex-direction:column;align-items:flex-start;gap:3px;max-width:min(470px,calc(100vw - 40px));max-height:min(360px,70vh);overflow:auto;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 4px 14px rgb(0 0 0 / .18);font:11px/1.45 var(--mono);color:var(--dim)}
 #dz-help:hover .dz-keys,#dz-help:focus-within .dz-keys,#dz-help.open .dz-keys{display:flex}
 .dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--bg)}
 #dz-canvas:not(:focus) ~ #dz-help .dz-focus{display:inline}
@@ -266,7 +266,7 @@ body.wrap #editor{overflow-x:hidden}
 .dz-fold{position:absolute;pointer-events:auto;min-width:12px;height:12px;line-height:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);padding:0 2px;font:600 9px var(--mono);color:var(--dim);cursor:pointer;text-align:center}.dz-fold:hover,.dz-fold:focus-visible{color:var(--accent);border-color:var(--accent)}
 .dz-fold.folded{color:var(--text)}
 .dz-item{position:absolute;box-sizing:border-box;pointer-events:auto;cursor:text;border:0;border-bottom:2px solid var(--line);border-radius:0;background:none;color:var(--text);font:12px/16px var(--sans);white-space:pre;overflow:visible;text-align:left;padding:2px 4px 0}.dz-item:focus-visible{outline:2px solid var(--accent)}.dz-item:hover{background:color-mix(in srgb,var(--sel) 60%,transparent)}
-.dz-item.active{font-weight:500}
+.dz-item.active{font-weight:500}.dz-item.current{background:color-mix(in srgb,var(--accent) 22%,transparent);outline:2px solid var(--accent);outline-offset:-1px}
 .dz-add{position:absolute;pointer-events:auto;width:14px;height:14px;line-height:12px;border:1px solid var(--accent);border-radius:7px;background:var(--bg);padding:0;font:600 11px var(--mono);color:var(--accent);cursor:pointer;text-align:center}
 .dz-rename{position:absolute;z-index:2;text-align:center;font:600 12.5px var(--mono)!important}
 .dz-input{box-sizing:border-box;pointer-events:auto;font:12px var(--sans);width:200px;max-width:100%;padding:0 3px;border:1px solid var(--accent);border-radius:3px;background:var(--bg);color:var(--text);outline:none}
@@ -593,7 +593,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit" title="Fit everything in view (Ctrl+1); Ctrl+0 actual size, Ctrl+2 or Shift+C the selected node">Fit</button><button id="dz-layout" title="Lay the states out top to bottom again, each mind map on its right (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div id="dz-help"><div class="dz-keys" role="note" id="dz-keys"><span class="dz-focus">click the graph to use these keys</span><span><kbd>?</kbd> show or hide this list · <kbd>Esc</kbd> hide it</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom · <kbd>Ctrl+0</kbd> actual size · <kbd>Ctrl+1</kbd> fit · <kbd>Shift+C</kbd> centre</span><span><kbd>f</kbd> fold the mind map · click <kbd>−</kbd>/<kbd>+N</kbd> to fold a branch</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add mind-map item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div><button id="dz-help-btn" aria-label="Design keys" aria-describedby="dz-keys" aria-expanded="false" title="Keys (?)">?</button></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit" title="Fit everything in view (1 or Ctrl+1); 0 actual size, 2 or Shift+C the selected node">Fit</button><button id="dz-layout" title="Lay the states out top to bottom again, each mind map on its right (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div id="dz-help"><div class="dz-keys" role="note" id="dz-keys"><span class="dz-focus">click the graph to use these keys (Minder's)</span><span><kbd>?</kbd> this list · <kbd>Esc</kbd> hide it</span><span><b>State</b> <kbd>Tab</kbd> add item · <kbd>Enter</kbd> add state (<kbd>Shift</kbd>: linked) · <kbd>n</kbd>/<kbd>a</kbd> linked/loose · <kbd>l</kbd> link</span><span><kbd>e</kbd> rename · <kbd>Del</kbd> delete · <kbd>f</kbd> fold (<kbd>Shift+F</kbd> all) · <kbd>←↑↓</kbd> edges · <kbd>→</kbd> into map · <kbd>[</kbd>/<kbd>]</kbd> cycle</span><span><b>Item</b> <kbd>Tab</kbd> child · <kbd>Enter</kbd> sibling (<kbd>Shift</kbd>: above) · <kbd>Shift+Tab</kbd> parent · <kbd>e</kbd> edit</span><span><kbd>←</kbd><kbd>→</kbd> parent/child · <kbd>↑↓</kbd> siblings · <kbd>Alt+↑↓</kbd> reorder · <kbd>Alt+←</kbd> out · <kbd>Alt+→</kbd> lift kids</span><span><kbd>Del</kbd> delete (<kbd>Shift</kbd>: keep kids) · <kbd>f</kbd> fold (<kbd>Shift+F</kbd> deep) · <kbd>Esc</kbd> to state</span><span><b>Typing</b> <kbd>Enter</kbd> sibling · <kbd>Tab</kbd> child · <kbd>Esc</kbd> done, keeps text · empty box closes</span><span><kbd>0</kbd> 1:1 · <kbd>1</kbd> fit · <kbd>2</kbd>/<kbd>Shift+C</kbd> centre · <kbd>=</kbd>/<kbd>-</kbd> zoom · drag pan · click edge: label</span><span><kbd>Ctrl+Z</kbd> undo · <kbd>Ctrl+Shift+Z</kbd> redo</span></div><button id="dz-help-btn" aria-label="Design keys" aria-describedby="dz-keys" aria-expanded="false" title="Keys (?)">?</button></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1928,7 +1928,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, at: null, geo: null, home: true, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null, label: null, help: false };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, at: null, geo: null, home: true, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null, label: null, help: false, cur: null, lastKid: {}, pressItem: null };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -2754,17 +2754,17 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     return { md: L.join('\n') };
   }
   /* ---------- tree items, edited by line: each returns { md, line } (LINE: the item now), or null ---------- */
-  function findItem(m, line) {  // { tree, item, sibs, depth } for the item on LINE
+  function findItem(m, line) {  // { tree, item, sibs, depth, parent } for the item on LINE (PARENT: null for a top item)
     for (const tree of Object.values(m.trees)) {
-      const walk = (sibs, depth) => {
+      const walk = (sibs, depth, parent) => {
         for (const item of sibs) {
-          if (item.line === line) return { tree, item, sibs, depth };
-          const r = walk(item.children, depth + 1);
+          if (item.line === line) return { tree, item, sibs, depth, parent };
+          const r = walk(item.children, depth + 1, item);
           if (r) return r;
         }
         return null;
       };
-      const r = walk(tree.items, 0);
+      const r = walk(tree.items, 0, null);
       if (r) return r;
     }
     return null;
@@ -2824,6 +2824,74 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     }
     return { md: L.join('\n'), line };
   }
+  /* Minder's structural edits (src/MapModel.vala, src/MindMap.vala swap_nodes), as line moves of the bullet tree */
+  const shift = (ls, n) => ls.map(s => !s.trim() ? s : n > 0 ? ' '.repeat(n) + s : s.replace(new RegExp(`^(\\t| {0,${-n}})`), ''));
+  const itemAt = (md, line) => {  // [m, f, L, bullet match, subtree end] or null
+    const m = parse(md), f = m && findItem(m, line);
+    if (!f) return null;
+    const L = md.split('\n');
+    return [m, f, L, L[line].match(RE.item), subtreeEnd(L, f)];
+  };
+  const wOf = (L, line) => width(L[line].match(RE.item)[1]);
+  function addChild(md, line, text) {  // Tab: the last child of the item on LINE
+    const a = itemAt(md, line);
+    if (!a || !text.trim()) return null;
+    const [, f, L, b, end] = a, kid = f.item.children[0] && L[f.item.children[0].line].match(RE.item);
+    L.splice(end, 0, `${kid ? kid[1] : b[1] + '  '}${kid ? kid[2] : b[2]} ${text.trim()}`);
+    return { md: L.join('\n'), line: end };
+  }
+  function insertBefore(md, line, text) {  // Shift+Enter: a sibling just above the item on LINE
+    const a = itemAt(md, line);
+    if (!a || !text.trim()) return null;
+    const [, , L, b] = a;
+    L.splice(line, 0, `${b[1]}${b[2]} ${text.trim()}`);
+    return { md: L.join('\n'), line };
+  }
+  function wrapItem(md, line, text) {  // Shift+Tab: a new item in its place, with the item (and its children) under it
+    const a = itemAt(md, line);
+    if (!a || !text.trim()) return null;
+    const [, , L, b, end] = a;
+    L.splice(line, end - line, `${b[1]}${b[2]} ${text.trim()}`, ...shift(L.slice(line, end), 2));
+    return { md: L.join('\n'), line };
+  }
+  function deleteItem(md, line, only) {  // Delete: it and its children; ONLY (Shift+Delete): it alone, its children take its place.
+    const a = itemAt(md, line);  // LINE afterwards: the next sibling, else the previous one, else the parent (Minder node_remove)
+    if (!a) return null;
+    const [, f, L, , end] = a, i = f.sibs.indexOf(f.item), kids = f.item.children;
+    if (only && kids.length) {
+      const d = wOf(L, kids[0].line) - wOf(L, line);
+      L.splice(line, end - line, ...shift(L.slice(line + 1, end), -d));
+      return { md: L.join('\n'), line };
+    }
+    L.splice(line, end - line);
+    const next = f.sibs[i + 1], prev = f.sibs[i - 1];
+    return { md: L.join('\n'), line: next ? next.line - (end - line) : prev ? prev.line : f.parent ? f.parent.line : null };
+  }
+  function swapItem(md, line, dir) {  // Alt+Up / Alt+Down: trade places with the sibling above or below (its children go along)
+    const a = itemAt(md, line), o = a && a[1].sibs[a[1].sibs.indexOf(a[1].item) + dir];
+    if (!o) return null;
+    const [, f, L] = a, first = dir < 0 ? o : f.item, second = dir < 0 ? f.item : o;
+    const s1 = first.line, e1 = subtreeEnd(L, { ...f, item: first }), s2 = second.line, e2 = subtreeEnd(L, { ...f, item: second });
+    const A = L.slice(s1, e1), mid = L.slice(e1, s2), B = L.slice(s2, e2);
+    L.splice(s1, e2 - s1, ...B, ...mid, ...A);
+    return { md: L.join('\n'), line: dir < 0 ? s1 : s1 + B.length + mid.length };
+  }
+  function outdentItem(md, line) {  // Alt+Left: a sibling of its parent, just above the parent (Minder make_parent_sibling)
+    const a = itemAt(md, line);
+    if (!a || !a[1].parent) return null;
+    const [, f, L, , end] = a, p = f.parent.line, block = shift(L.slice(line, end), -(wOf(L, line) - wOf(L, p)));
+    L.splice(line, end - line);
+    L.splice(p, 0, ...block);
+    return { md: L.join('\n'), line: p };
+  }
+  function liftChildren(md, line) {  // Alt+Right: its children become its siblings, just above it (Minder make_children_siblings)
+    const a = itemAt(md, line);
+    if (!a || !a[1].item.children.length) return null;
+    const [, f, L, , end] = a, block = shift(L.slice(line + 1, end), -(wOf(L, f.item.children[0].line) - wOf(L, line)));
+    const own = L[line];
+    L.splice(line, end - line, ...block, own);
+    return { md: L.join('\n'), line: line + block.length };
+  }
   /* ---------- an empty state graph for a plain Markdown file: after the title and its intro ---------- */
   function frontMatter(md) {  // { end, fields }: END is the line after the closing ---, 0 without front matter
     const L = md.split('\n'), e = L[0] === '---' ? L.indexOf('---', 1) : -1, fields = {};
@@ -2860,7 +2928,7 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     const block = ['## Graph', '', '```mermaid', 'stateDiagram-v2', '```'];
     return [...head, ...(head.length ? [''] : []), ...block, '', ...rest].join('\n');
   }
-  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter, setItem, insertItem, indentItem, renameNode, subtree, frontMatter, setEdgeLabel };
+  return { parse, serialize, isDesign, addNode, addEdge, deleteNode, freshId, minimalEdit, layout, starter, setItem, insertItem, indentItem, addChild, insertBefore, wrapItem, deleteItem, swapItem, outdentItem, liftChildren, findItem, renameNode, subtree, frontMatter, setEdgeLabel };
 }
 
 /* ---------- Design mode: a state graph with one tree per node, edited from the canvas ---------- */
@@ -3008,7 +3076,7 @@ function dzClick(id) {
       const e = DZ.model && DZ.model.edges.find(x => x.from === from && x.to === id);
       if (e) return dzStartLabel(e, true);
     }
-  } else { DZ.active = id; dzRender(); dzRevealNode(id); }
+  } else { DZ.active = id; DZ.cur = null; dzRender(); dzRevealNode(id); }
   $('#dz-canvas').focus();
 }
 function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves the node and the nodes under it (Shift: only the node)
@@ -3039,41 +3107,83 @@ function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves th
   window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 }
 /* tree items: edited in place, written to the Markdown on Enter, Tab or leaving the box */
-function dzEditNew(id, after) { DZ.rename = null; DZ.label = null; DZ.edit = { id, line: null, after, value: '' }; DZ.folded.delete(id); DZ.active = id; dzRender(); dzSeeEdit(); }
+function dzEditSlot(id, slot) {  // a new item: SLOT { after } a sibling below, { before } above, { parent } a last child, { wrap } a new parent, {} the last top item
+  DZ.rename = null; DZ.label = null; DZ.edit = { id, line: null, value: '', ...slot }; DZ.folded.delete(id); DZ.active = id; dzRender(); dzSeeEdit();
+}
+function dzEditNew(id, after) { dzEditSlot(id, { after }); }
 function dzEditItem(id, it) { DZ.rename = null; DZ.label = null; DZ.edit = { id, line: it.line, value: it.text, orig: it.text }; DZ.active = id; dzRender(); dzSeeEdit(); }
+const dzSlotAt = ed => ed.after ?? ed.parent ?? ed.before ?? ed.wrap ?? null;  // the item a new slot hangs from
+const dzSlotTop = ed => ed.line == null && dzSlotAt(ed) == null;  // a new last top item
 function dzSeeEdit() {  // the item being typed stays in view: the least pan, no zoom
   const mp = DZ.edit && DZ.geo && DZ.geo.maps[DZ.edit.id], it = mp && mp.items.find(i => i.edit);
   if (it) dzSeeBox(it.box);
 }
-function dzCommit(ed, value) {  // the item's line afterwards, or null
+function dzItemKey(id, line) {  // the fold key of the item on LINE of ID's tree, or null
+  const t = DZ.model && DZ.model.trees[id];
+  const walk = (its, path) => {
+    for (const it of its) {
+      const p = [...path, it.text];
+      if (it.line === line) return dzKeyOf(id, p);
+      const r = walk(it.children, p);
+      if (r) return r;
+    }
+    return null;
+  };
+  return t ? walk(t.items, []) : null;
+}
+function dzItemOp(id, r, said) {  // a structural edit of ID's tree: one undo step, then the item r.line selected (Minder)
+  if (!r) return false;
+  const keep = DZ.cur;
+  DZ.cur = r.line != null ? { id, line: r.line } : null;
+  if (!dzApplyMd(r.md, said)) { DZ.cur = keep; dzRender(); return false; }
+  dzSeeCur();
+  return true;
+}
+function dzCommit(ed, value) {  // the item's line afterwards, or null; the item stays selected
   DZ.edit = null;
   let r = null, said = '';
   if (ed.line != null) {
-    if (value.trim() === ed.orig.trim()) { dzRender(); return ed.line; }
+    if (value.trim() === ed.orig.trim()) { DZ.cur = { id: ed.id, line: ed.line }; dzRender(); return ed.line; }
     r = DC.setItem(editor.value, ed.line, value); said = `${value.trim() ? 'edited' : 'deleted'} an item of ${ed.id}`;
-  } else if (value.trim()) { r = DC.insertItem(editor.value, ed.id, ed.after, value); said = `added an item to ${ed.id}`; }
-  if (!r || !dzApplyMd(r.md, said)) { dzRender(); return null; }
+  } else if (value.trim()) {
+    const md = editor.value;
+    r = ed.parent != null ? DC.addChild(md, ed.parent, value) : ed.before != null ? DC.insertBefore(md, ed.before, value)
+      : ed.wrap != null ? DC.wrapItem(md, ed.wrap, value) : DC.insertItem(md, ed.id, ed.after ?? null, value);
+    said = `added an item to ${ed.id}`;
+    if (r && ed.parent != null) { const k = dzItemKey(ed.id, ed.parent); if (k) DZ.folded.delete(k); }  // the new child shows
+  }
+  const keep = DZ.cur;
+  if (r) DZ.cur = r.line != null ? { id: ed.id, line: r.line } : null;
+  if (!r || !dzApplyMd(r.md, said)) { DZ.cur = keep; dzRender(); return null; }
   return r.line;
 }
-function dzEditKey(e, ed, inp) {
+function dzEditKey(e, ed, inp) {  // Minder's edit keys with "new node from edit" on: Enter a sibling, Tab a child, Esc ends the edit
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { dzCommit(ed, inp.value); return; }  // then the usual save
   e.stopPropagation();  // the canvas keys (n, l, Delete, arrows) are letters and edits here
-  if (e.key === 'Escape') { e.preventDefault(); DZ.edit = null; dzRender(); $('#dz-canvas').focus(); }
+  const blank = ed.line == null && !inp.value.trim(), to = slot => { DZ.edit = { id: ed.id, line: null, value: '', ...slot }; dzRender(); dzSeeEdit(); };
+  const close = () => {  // nothing typed: the slot goes, the item it hung from stays selected
+    DZ.edit = null;
+    const at = dzSlotAt(ed);
+    if (at != null) DZ.cur = { id: ed.id, line: at };
+    dzRender(); $('#dz-canvas').focus();
+  };
+  if (e.key === 'Escape') { e.preventDefault(); if (blank) return close(); dzCommit(ed, inp.value); $('#dz-canvas').focus(); }  // Minder keeps the text
   else if (e.key === 'Enter' && !e.isComposing) {
     e.preventDefault();
+    if (blank) return close();
     const line = dzCommit(ed, inp.value);
-    if (line != null) dzEditNew(ed.id, line); else $('#dz-canvas').focus();
+    if (line != null) to(e.shiftKey ? { before: line } : { after: line }); else $('#dz-canvas').focus();
   } else if (e.key === 'Tab') {
     e.preventDefault();
-    const text = inp.value, line = dzCommit(ed, text);
-    if (line == null) return;
-    const r = DC.indentItem(editor.value, line, e.shiftKey ? -1 : 1);
-    if (r) dzApplyMd(r.md, `${e.shiftKey ? 'outdented' : 'indented'} an item of ${ed.id}`);
-    else toast(e.shiftKey ? 'Already a top item of the tree' : 'Indent needs an item above it at the same level');
-    DZ.edit = { id: ed.id, line, value: text.trim(), orig: text.trim() }; dzRender();
+    if (blank) {  // an empty slot moves: Tab under the item above it, Shift+Tab out beside its parent
+      if (!e.shiftKey && ed.after != null) return to({ parent: ed.after });
+      if (e.shiftKey && ed.parent != null) return to({ after: ed.parent });
+      return toast(e.shiftKey ? 'Already a top item of the tree' : 'A child needs an item above it');
+    }
+    const line = dzCommit(ed, inp.value);
+    if (line != null) to(e.shiftKey ? { wrap: line } : { parent: line });
   }
 }
-/* rename: the id changes in the graph lines and the tree heading; the position moves with it */
 function dzStartRename(id) {
   if (!id || id === '[*]') return;
   DZ.edit = null; DZ.label = null; DZ.link = false; DZ.rename = { id, value: id, fresh: true }; DZ.active = id; dzRender();
@@ -3164,8 +3274,85 @@ function dzInput() {
   requestAnimationFrame(() => { if (DZ.edit === ed && inp.isConnected) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } });
   return inp;
 }
+/* the mind-map item selection (Minder's current node): DZ.cur { id, line }; null means the state DZ.active itself */
+function dzCurItem() {  // { id, g, items }: the selected item as drawn, or null
+  const mp = DZ.cur && DZ.geo && DZ.geo.maps[DZ.cur.id], g = mp && mp.items.find(i => !i.edit && i.it.line === DZ.cur.line);
+  return g ? { id: DZ.cur.id, g, items: mp.items } : null;
+}
+function dzSeeCur() { const c = dzCurItem(); if (c) dzSeeBox(c.g.box); }
+function dzSelectItem(id, line) {
+  const f = DZ.model && DC.findItem(DZ.model, line);
+  if (!f) return;
+  DZ.lastKid[`${id}:${f.parent ? f.parent.line : -1}`] = line;  // Minder's last_selected_child: Right comes back here
+  DZ.active = id; DZ.cur = { id, line }; DZ.link = false;
+  dzRender(); dzReveal(line); dzSeeCur();
+}
+function dzSelectState(id) { DZ.cur = null; DZ.active = id; dzRender(); dzRevealNode(id); dzEnsureVisible(); }
+function dzFirstItem(id) {  // Right on a state: its last selected top item, else the first (Minder get_node_right on a root)
+  const mp = DZ.geo && DZ.geo.maps[id], tops = mp ? mp.items.filter(i => !i.edit && i.parent < 0) : [];
+  return tops.find(i => i.it.line === DZ.lastKid[`${id}:-1`]) || tops[0] || null;
+}
+function dzItemGo(dir) {  // Minder's node_select from an item: right a child, left the parent (a top item: the state), up/down a sibling
+  const { id, g, items } = dzCurItem(), i = items.indexOf(g), sib = items.filter(x => !x.edit && x.parent === g.parent);
+  const kids = items.filter(x => !x.edit && x.parent === i), at = sib.indexOf(g), n = sib.length;
+  const to = {
+    right: () => kids.find(x => x.it.line === DZ.lastKid[`${id}:${g.it.line}`]) || kids[0],
+    left: () => g.parent < 0 ? 'state' : items[g.parent],
+    up: () => sib[at - 1], down: () => sib[at + 1],
+    next: () => sib[(at + 1) % n], prev: () => sib[(at - 1 + n) % n],  // n / p, Page Up / Down wrap (sibling_node wrap)
+    root: () => 'state',
+  }[dir]();
+  if (to === 'state') return dzSelectState(id);
+  if (!to || to === g) { DZ.said = `no item ${{ right: 'under', left: 'above', up: 'above', down: 'below' }[dir] || 'beside'} this one`; return dzRender(); }
+  dzSelectItem(id, to.it.line);
+}
+function dzFoldDeep(id, key) {  // Shift+F: KEY and every branch under it, all one way (Minder set_fold deep)
+  const on = !DZ.folded.has(key), t = DZ.model.trees[id];
+  const walk = (its, path, inside) => {
+    for (const it of its) {
+      const p = [...path, it.text], k = dzKeyOf(id, p), here = inside || k === key;
+      if (here && it.children.length) DZ.folded[on ? 'add' : 'delete'](k);
+      walk(it.children, p, here);
+    }
+  };
+  if (key === id) DZ.folded[on ? 'add' : 'delete'](id);
+  walk(t.items, [], key === id);
+  dzRender(); dzSavePos();
+}
+function dzCentreBox(box, z = DZ.zoom) {
+  const v = $('#dz-canvas');
+  DZ.zoom = z;
+  dzPanTo((v.clientWidth || 600) / 2 - (box[0] + box[2]) / 2 * z, (v.clientHeight || 400) / 2 - (box[1] + box[3]) / 2 * z);
+  dzRender();
+}
+function dzCentreSel(z) { const c = dzCurItem(); if (c) dzCentreBox(c.g.box, z); else dzCentre(DZ.active, z); }  // Shift+C, Ctrl+2
+function dzItemKeyDown(e) {  // Minder's keys on a selected mind-map item (src/Shortcuts.vala); true when handled
+  const c = dzCurItem();
+  if (!c) return false;
+  const { id, g } = c, line = g.it.line, k = e.key, md = editor.value, sh = e.shiftKey;
+  if (e.altKey && !e.ctrlKey && !e.metaKey) {  // NODE_SWAP_*: Up/Down trade places with a sibling, Left out beside the parent, Right lifts the children
+    const r = { ArrowUp: () => DC.swapItem(md, line, -1), ArrowDown: () => DC.swapItem(md, line, 1), ArrowLeft: () => DC.outdentItem(md, line), ArrowRight: () => DC.liftChildren(md, line) }[k];
+    if (!r) return false;
+    if (!dzItemOp(id, r(), `moved an item of ${id}`)) { DZ.said = 'that item cannot move that way'; dzRender(); }
+    return true;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  const go = { ArrowRight: 'right', ArrowLeft: 'left', ArrowUp: 'up', ArrowDown: 'down', l: 'right', h: 'left', k: 'up', j: 'down',
+    c: 'right', a: 'left', n: 'next', p: 'prev', PageDown: 'next', PageUp: 'prev', m: 'root' }[k];
+  if (go && !sh) dzItemGo(go);
+  else if (k === 'Tab') dzEditSlot(id, sh ? { wrap: line } : { parent: line });
+  else if (k === 'Enter') dzEditSlot(id, sh ? { before: line } : { after: line });
+  else if (k === 'e' || k === 'F2') dzEditItem(id, g.it);
+  else if (k === 'Delete' || k === 'Backspace') dzItemOp(id, DC.deleteItem(md, line, sh), `${sh ? 'removed an item (its children stay)' : 'deleted an item'} of ${id}`);
+  else if (k === 'f') { if (g.it.children.length) dzFold(g.key); }
+  else if (k === 'F') { if (g.it.children.length) dzFoldDeep(id, g.key); }
+  else if (k === 'C') dzCentreSel();
+  else if (k === 'Escape' && !DZ.help) dzSelectState(id);  // back to the state
+  else return false;
+  return true;
+}
 function dzKey(e) {
-  if (e.target.closest?.('button')) return;  // native button activation and Tab remain available
+  if (e.target.closest?.('button')) return;  // native button activation remains available
   // the canvas's own keys; the editor, the New box and the terminal never see these
   const d = undoKey(e);
   if (d) {
@@ -3174,22 +3361,27 @@ function dzKey(e) {
     $('#dz-canvas').focus(); dzRefresh();
     return;
   }
-  const view = { 0: () => dzZoom(1 / DZ.zoom), 1: dzFitView, 2: () => dzCentre(DZ.active, 1) }[e.key];
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && view) { e.preventDefault(); e.stopPropagation(); view(); return; }  // Minder's actual size, fit, selected
-  if (e.ctrlKey || e.metaKey || e.altKey) return;  // Ctrl+S and friends keep their global meaning
-  const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  const mod = e.ctrlKey || e.metaKey;
+  const view = { 0: () => dzZoom(1 / DZ.zoom), 1: dzFitView, 2: () => dzCentreSel(1), '=': () => dzZoom(1.25), '+': () => dzZoom(1.25), '-': () => dzZoom(0.8) }[e.key];
+  if (view && !e.altKey && (mod || /[012=+-]/.test(e.key))) { e.preventDefault(); e.stopPropagation(); view(); return; }  // Minder's Ctrl+0/1/2/+/-; plain keys too, as Chrome keeps Ctrl+1/2
+  if (mod && e.key === '?') { e.preventDefault(); e.stopPropagation(); dzHelp(!DZ.help); return; }  // Minder's Ctrl+? (shortcuts)
+  if (dzItemKeyDown(e)) { e.preventDefault(); e.stopPropagation(); return; }
+  if (mod || e.altKey) return;  // Ctrl+S and friends keep their global meaning
+  const k = e.key, arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }, st = DZ.active && DZ.active !== '[*]';
   if (k === 'n' || k === 'a') dzAddNode(k === 'n');
   else if (k === '[' || k === ']') dzCycle(k === ']' ? 1 : -1);
   else if (k === 'Enter' && DZ.link && DZ.active) { const target = DZ.active; DZ.active = DZ.linkFrom || DZ.active; dzClick(target); }
-  else if (k === 'Enter' && DZ.active && DZ.active !== '[*]') dzEditNew(DZ.active, null);
+  else if (k === 'Enter') dzAddNode(e.shiftKey && !!DZ.active);  // a state is Minder's root: Enter another one, Shift+Enter one linked from it
+  else if (k === 'Tab' && !e.shiftKey && st) dzEditSlot(DZ.active, {});  // Minder's add child: a last top item of its mind map
   else if (k === 'F2' || k === 'e') dzStartRename(DZ.active);
   else if (k === 'l') { if (DZ.active) { DZ.link = !DZ.link; DZ.linkFrom = DZ.active; dzRender(); } }
   else if (k === '?') dzHelp(!DZ.help);
-  else if (k === 'Escape' && DZ.help) dzHelp(false);  // Esc closes the key list first, then cancels a link
+  else if (k === 'Escape' && DZ.help) dzHelp(false);  // Esc closes the key list first, then leaves an item, then cancels a link
   else if (k === 'Escape') { if (!DZ.link) return; DZ.link = false; dzRender(); }
   else if (k === 'Delete' || k === 'Backspace') dzDelete();
-  else if (k === 'f' && DZ.active && DZ.model && DZ.model.trees[DZ.active]) dzFold(DZ.active);
+  else if ((k === 'f' || k === 'F') && DZ.active && DZ.model && DZ.model.trees[DZ.active]) k === 'f' ? dzFold(DZ.active) : dzFoldDeep(DZ.active, DZ.active);
   else if (k === 'C' && DZ.active) dzCentre(DZ.active);
+  else if (k === 'ArrowRight' && !e.shiftKey && !DZ.link && DZ.active && !DZ.folded.has(DZ.active) && dzFirstItem(DZ.active)) dzSelectItem(DZ.active, dzFirstItem(DZ.active).it.line);
   else if (arrows[k] && !e.shiftKey) dzWalk(arrows[k]);
   else return;
   e.preventDefault(); e.stopPropagation();
@@ -3268,16 +3460,18 @@ function dzMap(id, x, y) {  // the mind map of state ID centred at X, Y: { box, 
   const build = (items, path) => {
     const list = [];
     for (const it of items) {
-      const p = [...path, it.text], key = dzKeyOf(id, p);
+      const p = [...path, it.text], key = dzKeyOf(id, p), slot = ed && ed.line == null;
+      if (slot && (ed.before === it.line || ed.wrap === it.line)) list.push(input());  // Shift+Enter, Shift+Tab: the new box above it
       const n = ed && ed.line === it.line ? { ...leaf(it.text), w: Math.max(170, dzTextW(ed.value) + 30), edit: 'item' } : leaf(it.text);
       Object.assign(n, { it, key, kids: build(it.children, p), folded: !ed && DZ.folded.has(key) && it.children.length > 0 });
+      if (slot && ed.parent === it.line) n.kids.push(input());  // Tab: its last child
       list.push(n);
-      if (ed && ed.line == null && ed.after === it.line) list.push(input());
+      if (slot && ed.after === it.line) list.push(input());
     }
     return list;
   };
   const roots = build(t ? t.items : [], []);
-  if (ed && ed.line == null && ed.after == null) roots.push(input());
+  if (ed && dzSlotTop(ed)) roots.push(input());
   const size = n => n.size ??= n.folded || !n.kids.length ? n.h : Math.max(n.h, n.kids.reduce((s, k) => s + size(k), 0) + DZM.SIB * (n.kids.length - 1));
   const place = (n, left, top, parent, hue, depth) => {  // TOP: the top of N's slot, size(N) high; N sits in its middle (Minder)
     const s = size(n), i = out.items.length, by = top + (s - n.h) / 2;
@@ -3539,8 +3733,13 @@ function dzRender() {
   $('#dz-start').hidden = !!m;
   $('#dz-emptytext').textContent = m ? 'An empty graph: press n to add the first node' : 'No mermaid or d2 state graph in this file yet';
   if (!m || !m.nodes.length) return;
+  if (DZ.cur && (DZ.cur.id !== DZ.active || !m.trees[DZ.cur.id] || !DC.findItem(m, DZ.cur.line) || DC.findItem(m, DZ.cur.line).tree.id !== DZ.cur.id)) DZ.cur = null;
   const G = DZ.geo = dzGeo();
   DZ.at = G.at;
+  for (let f; DZ.cur && !G.maps[DZ.cur.id].items.some(i => !i.edit && i.it.line === DZ.cur.line);) {  // folded away: its nearest shown parent
+    f = DC.findItem(m, DZ.cur.line);
+    DZ.cur = f.parent ? { id: DZ.cur.id, line: f.parent.line } : null;
+  }
   if (DZ.home) dzHome(G);  // the view moves only on open, on a key or button, by dragging, zooming, or to show what you work on
   const scene = DZ.sceneG = document.createElementNS(SVGNS, 'g');
   svg.append(scene);
@@ -3590,7 +3789,7 @@ function dzRenderMap(id, mp, [x, y, hw, hh], mk) {  // (b): links in the SVG, it
     const add = el('button', 'dz-add', '+');
     add.type = 'button';
     add.style.left = (x + hw - 6) + 'px'; add.style.top = (y - hh - 7) + 'px';
-    add.title = `Add an item to ${id}'s mind map (Enter)`;
+    add.title = `Add an item to ${id}'s mind map (Tab)`;
     add.onclick = () => dzEditNew(id, null);
     trees.append(add);
   }
@@ -3600,15 +3799,18 @@ function dzRenderMap(id, mp, [x, y, hw, hh], mk) {  // (b): links in the SVG, it
     const place = e => { e.style.left = it.box[0] + 'px'; e.style.top = it.box[1] + 'px'; e.style.width = (it.box[2] - it.box[0]) + 'px'; e.style.borderBottomColor = it.hue; return e; };
     if (it.edit) { const inp = place(dzInput()); inp.style.position = 'absolute'; inp.style.height = (it.box[3] - it.box[1]) + 'px'; trees.append(inp); }
     else {
-      const b = place(el('button', 'dz-item' + (active ? ' active' : ''), it.lines.join('\n')));
-      b.type = 'button';
+      const cur = !!DZ.cur && DZ.cur.id === id && DZ.cur.line === it.it.line;
+      const b = place(el('button', 'dz-item' + (active ? ' active' : '') + (cur ? ' current' : ''), it.lines.join('\n')));
+      b.type = 'button'; b.tabIndex = -1;  // the canvas keeps focus: the arrows walk the items (Minder)
       b.style.height = (it.box[3] - it.box[1]) + 'px';
-      b.onkeydown = e => {
-        if (e.key === 'Enter' || e.key === ' ' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); dzEditItem(id, it.it); }
+      b.title = `Line ${it.it.line + 1}: click selects it, double-click edits (e)`;
+      b.onmousedown = e => e.preventDefault();
+      b.onclick = ev => {  // a click selects the item; a second one soon after edits it (the item is redrawn, so no native dblclick)
+        const again = DZ.pressItem && DZ.pressItem.line === it.it.line && ev.timeStamp - DZ.pressItem.t < 400;
+        DZ.pressItem = again ? null : { line: it.it.line, t: ev.timeStamp };
+        if (again) return dzEditItem(id, it.it);
+        dzSelectItem(id, it.it.line); $('#dz-canvas').focus();
       };
-      b.onfocus = () => { DZ.active = id; dzReveal(it.it.line); };
-      b.title = `Click to show line ${it.it.line + 1} in the editor, double-click to edit`;
-      b.onclick = () => dzReveal(it.it.line);
       b.ondblclick = () => dzEditItem(id, it.it);
       trees.append(b);
     }
