@@ -225,6 +225,18 @@ def test_minimal_edit_and_layout(lib):
     assert out["b"]["Closed"] == [5, 5]  # fixed nodes stay put
     pts = list(out["a"].values())
     assert min(abs(p[0] - q[0]) + abs(p[1] - q[1]) for i, p in enumerate(pts) for q in pts[i + 1 :]) > 40
+    near = run(
+        lib,
+        "const p = D.layout(['A','B'], [{from:'A',to:'B'}], {}, null, 300, {A:40,B:40});"
+        "return Math.hypot(p.A[0]-p.B[0], p.A[1]-p.B[1]);",
+    )
+    far = run(
+        lib,
+        "const p = D.layout(['A','B'], [{from:'A',to:'B'}], {}, null, 300, {A:220,B:220});"
+        "return Math.hypot(p.A[0]-p.B[0], p.A[1]-p.B[1]);",
+    )
+    assert 60 < near < 120  # shorter side 40 -> ideal 72
+    assert far > 120  # a wide tree keeps a longer edge than a small node
 
 
 FM = "---\nname: door\ndescription: TODO - what this system is, and what each node's tree lists\ntreedit: design\n---\n"

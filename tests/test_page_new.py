@@ -56,3 +56,44 @@ def test_creation_has_no_second_dialog(page):
     body = js_function(page, "newAtDepth")
     assert "putModal" not in body and "dry_run" not in body
     assert "openModal('New'" in body
+    assert "lastDefinedFile(paths, r.entries)" in body
+    assert "made[0].kind === 'file'" not in body
+
+
+def defined_file(page, paths, entries):
+    fn = js_function(page, "lastDefinedFile")
+    prog = fn + f"\nprocess.stdout.write(JSON.stringify(lastDefinedFile({json.dumps(paths)}, {json.dumps(entries)})));"
+    raw = subprocess.run([NODE, "-e", prog], capture_output=True, text=True, check=True).stdout
+    return json.loads(raw)
+
+
+def test_done_opens_the_last_defined_file(page):
+    entries = [
+        {"action": "created", "kind": "dir", "path": "notes"},
+        {"action": "created", "kind": "file", "path": "notes/todo.md"},
+        {"action": "created", "kind": "dir", "path": "docs"},
+        {"action": "created", "kind": "file", "path": "docs/guide.md"},
+        {"action": "created", "kind": "dir", "path": "assets"},
+        {"action": "created", "kind": "dir", "path": "assets/img"},
+        {"action": "created", "kind": "dir", "path": "src"},
+        {"action": "created", "kind": "dir", "path": "src/pkg"},
+    ]
+    paths = ["notes/todo.md", "docs/guide.md", "assets/img/", "src/pkg"]
+    assert defined_file(page, paths, entries) == "docs/guide.md"
+
+
+def test_a_file_under_a_new_folder_is_the_file(page):
+    entries = [
+        {"action": "created", "kind": "dir", "path": "notes"},
+        {"action": "created", "kind": "file", "path": "notes/todo.md"},
+    ]
+    assert defined_file(page, ["notes/todo.md"], entries) == "notes/todo.md"
+
+
+def test_folders_only_opens_no_file(page):
+    entries = [
+        {"action": "created", "kind": "dir", "path": "docs"},
+        {"action": "created", "kind": "dir", "path": "v1.0"},
+        {"action": "created", "kind": "dir", "path": "src/pkg"},
+    ]
+    assert defined_file(page, ["docs/", "v1.0/", "src/pkg"], entries) is None

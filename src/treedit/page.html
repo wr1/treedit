@@ -233,13 +233,15 @@ body.wrap #editor{overflow-x:hidden}
 #designview[hidden]{display:none}
 #b-design.on{border-color:var(--accent);color:var(--accent)}
 #b-design.found:not(.on){color:var(--accent)}
-.dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px;flex-wrap:wrap}
-.dz-keys{border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
+.dz-top,.dz-keys{display:flex;gap:8px;align-items:center;padding:5px 10px;border-bottom:1px solid var(--line);font-size:12px}
+.dz-top{flex-wrap:nowrap;overflow:hidden}
+.dz-top>button,.dz-mode{flex:none}
+.dz-keys{flex:none;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;white-space:nowrap;border-bottom:0;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono)}
+.dz-keys::-webkit-scrollbar{height:0}
+.dz-keys span{flex:none;white-space:nowrap}
 .dz-keys kbd{border:1px solid var(--line);border-radius:3px;padding:0 4px;background:var(--panel)}
-#dz-canvas:not(:focus) ~ .dz-keys .dz-focus{display:inline}
-.dz-focus{display:none;color:var(--accent)}
 .dz-mode{font-weight:700;color:#fff;background:var(--accent);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
-#dz-link{font-weight:700;color:#fff;background:var(--fb);border-radius:4px;padding:1px 7px}
+#dz-link{flex:0 1 auto;min-width:0;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:#fff;background:var(--fb);border-radius:4px;padding:1px 7px}
 #dz-link[hidden]{display:none}
 #dz-said{color:var(--dim);font-family:var(--mono);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #dz-canvas{flex:1;position:relative;overflow:hidden;outline:none;min-height:0}
@@ -589,7 +591,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <button id="plot-src" hidden title="Switch between the picture and the SVG source">Source</button>
       </div>
       <div id="plotview" hidden><div id="plotstage"></div></div>
-      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit">Fit</button><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys"><span class="dz-focus">click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
+      <div id="editwrap"><div id="textside"><div id="ovr"></div><div id="marks"></div><div id="findhl"></div><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea></div><div id="mdview" hidden></div><div id="designview" hidden><div class="dz-top"><span class="dz-mode" title="Design mode: keys act on the graph while it has focus">DESIGN</span><span id="dz-link" title="Click a target, or [ / ] then Enter. Esc cancels">LINK: click a target, or [ / ] then Enter · Esc cancels</span><span id="dz-said"></span><button id="dz-add-node" title="Add a node linked from the selected node (n)">Add node</button><button id="dz-add-loose" title="Add an unlinked node (a)">Loose node</button><button id="dz-link-node" aria-pressed="false" title="Select a source, then choose a target (l)">Link</button><button id="dz-zoom-out" aria-label="Zoom out">−</button><button id="dz-zoom-in" aria-label="Zoom in">+</button><button id="dz-fit">Fit</button><button id="dz-layout" title="Run the force layout (positions only; the Markdown does not change)">Layout</button></div><div id="dz-canvas" tabindex="0"><svg id="dz-svg"></svg><div id="dz-trees"></div><div id="dz-empty" hidden><span id="dz-emptytext"></span><button id="dz-start" title="Add an empty mermaid state graph after the title (one undo step); n or a does the same and adds the first node">Start a state graph</button></div></div><div class="dz-keys" title="Scroll sideways for every graph key"><span>click the graph to use these keys ·</span><span><kbd>n</kbd> add node linked from the active one · <kbd>a</kbd> add a loose node (then type its name)</span><span><kbd>l</kbd> link</span><span><kbd>←↑↓→</kbd> walk the edges · <kbd>[</kbd>/<kbd>]</kbd> previous/next node · <kbd>Tab</kbd> tree controls</span><span>drag background to pan · scroll to zoom</span><span><kbd>Del</kbd> delete</span><span>click an edge: label it (empty removes)</span><span>click select · drag move with the nodes under it (<kbd>Shift</kbd>: only it)</span><span><kbd>e</kbd>/<kbd>F2</kbd>/dbl-click rename</span><span><kbd>Enter</kbd>/<kbd>+</kbd> add tree item · dbl-click item edit (<kbd>Enter</kbd> next, <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent, empty deletes)</span><span><kbd>Esc</kbd> cancel link</span><span><kbd>Ctrl+Z</kbd> undo</span></div></div></div>
       <div id="dirinfo" hidden></div>
       <div class="status"><span id="pos"></span><span id="filestate"></span><span id="unsaved" hidden title="Characters added or removed since the last save"></span><span class="spacer"></span><button id="b-wrap" title="Wrap long lines (Alt+Z)">Wrap</button><button id="b-undo" title="Undo (Ctrl+Z)" disabled>↶</button><button id="b-redo" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷</button><button id="save" class="primary">Save</button></div>
     </div>
@@ -1924,7 +1926,7 @@ function syncChrome() {
 
 /* ---------- Markdown preview (Mermaid locally, D2 through the server) ---------- */
 const MDP = { on: false, gen: 0, anchor: '', timer: 0 };
-const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, edit: null, press: null, rename: null, label: null };
+const DZ = { on: false, gen: 0, path: '', model: null, pos: {}, active: null, link: false, said: '', folded: new Set(), saveT: 0, timer: 0, drag: null, pinned: false, ox: 0, oy: 0, zoom: 1, spreadX: 1, spreadY: 1, edit: null, press: null, rename: null, label: null };
 const DC = designCore();
 const isMarkdown = path => /\.(md|markdown)$/i.test(path || '');
 const isTypst = path => /\.typ$/i.test(path || '');
@@ -2656,13 +2658,18 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
     return subs;
   }
   /* ---------- a small force-directed layout; FIXED ids keep their place ---------- */
-  function layout(ids, edges, pos, fixed, iters = 300) {
+  function layout(ids, edges, pos, fixed, iters = 300, span = null) {
     const P = {}, n = ids.length || 1;
     ids.forEach((id, i) => {
       const a = (2 * Math.PI * i) / n;
       P[id] = pos[id] ? { x: pos[id][0], y: pos[id][1] } : { x: 200 * Math.cos(a) + (i % 3) * 7, y: 200 * Math.sin(a) + (i % 5) * 5 };
     });
-    const K = 230;  // the ideal edge length; room for the tree overlays
+    // Ideal distance from the shorter side of each node. A tall tree must not stretch every edge;
+    // dzFit still separates whatever actually overlaps. Without sizes, a short default keeps a new graph compact.
+    const reach = (a, b) => {
+      if (!span || span[a] == null || span[b] == null) return 96;
+      return Math.max(72, Math.min(140, (span[a] + span[b]) / 2 + 28));
+    };
     for (let it = 0; it < iters; it++) {
       const F = {}, cool = 1 - it / iters;
       ids.forEach(id => { F[id] = { x: 0, y: 0 }; });
@@ -2670,14 +2677,14 @@ function designCore() {  // pure: parse / edit / serialize a design Markdown fil
         const A = P[ids[i]], B = P[ids[j]];
         let dx = A.x - B.x, dy = A.y - B.y, d2 = dx * dx + dy * dy;
         if (d2 < 0.01) { dx = 0.1 * (i - j); dy = 0.1; d2 = dx * dx + dy * dy; }
-        const d = Math.sqrt(d2), f = (K * K) / d / d;  // repulsion K²/d along the unit vector
+        const d = Math.sqrt(d2), K = reach(ids[i], ids[j]), f = (K * K) / d / d;  // repulsion K²/d along the unit vector
         F[ids[i]].x += dx * f; F[ids[i]].y += dy * f;
         F[ids[j]].x -= dx * f; F[ids[j]].y -= dy * f;
       }
       for (const e of edges) {
         if (e.from === e.to || !P[e.from] || !P[e.to]) continue;
         const A = P[e.from], B = P[e.to], dx = A.x - B.x, dy = A.y - B.y, d = Math.sqrt(dx * dx + dy * dy) || 0.1;
-        const f = (d * d) / K / d;
+        const K = reach(e.from, e.to), f = (d * d) / K / d;
         F[e.from].x -= dx * f; F[e.from].y -= dy * f; F[e.to].x += dx * f; F[e.to].y += dy * f;
       }
       for (const id of ids) {
@@ -2895,7 +2902,7 @@ async function setDesign(on) {
   if (!S.file || !isMarkdown(S.file.path)) return;
   if (MDP.on) resetMdPreview();
   const path = S.file.path, gen = ++DZ.gen;
-  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null, rename: null, label: null, zoom: 1, fitNext: true });
+  Object.assign(DZ, { on: true, path, link: false, said: '', pos: {}, active: null, drag: null, pinned: false, edit: null, press: null, rename: null, label: null, zoom: 1, spreadX: 1, spreadY: 1, fitNext: true });
   $('#designview').hidden = false; $('#editwrap').classList.add('dz-split');
   $('#b-design').classList.add('on');
   try { DZ.pos = (await api('GET', '/api/layout?path=' + encodeURIComponent(path))).nodes || {}; } catch { DZ.pos = {}; }
@@ -2910,8 +2917,8 @@ function dzRefresh() {  // re-read the buffer; nodes without a place get one fro
   DZ.model = m;
   if (m) {
     const ids = m.nodes.map(n => n.id), have = new Set(ids.filter(id => DZ.pos[id]));
-    if (!have.size && ids.length) DZ.pos = dzFit(DC.layout(ids, m.edges, {}, null));  // a first layout fits the pane
-    else if (have.size < ids.length) Object.assign(DZ.pos, DC.layout(ids, m.edges, DZ.pos, have));
+    if (!have.size && ids.length) DZ.pos = dzFit(DC.layout(ids, m.edges, {}, null, 300, dzSpans(ids)));  // a first layout fits the pane
+    else if (have.size < ids.length) Object.assign(DZ.pos, DC.layout(ids, m.edges, DZ.pos, have, 300, dzSpans(ids)));
     if (!ids.includes(DZ.active)) DZ.active = ids.find(id => id !== '[*]') || ids[0] || null;
   }
   dzRender();
@@ -2951,25 +2958,87 @@ function dzExtent(id) {  // [left, top, right, bottom] of a node and its tree ov
   const w = Math.min(276, Math.max(id.length + 8, ...rows) * 6.6 + 40), h = 22 + 17 * rows.reduce((sum, length) => sum + Math.max(1, Math.ceil(length * 6.6 / Math.max(40, w - 40))), 0);
   return [hw, hh, Math.max(hw, w - hw), hh + 4 + h];
 }
-function dzFit(pos) {  // keep full-size trees apart before fitting the viewport
-  const out = {}, gap = 24;
-  for (const [id, point] of Object.entries(pos)) {
-    let [x, y] = point;
+function dzSpans(ids) {  // shorter side of each node and its tree; passed into the force layout
+  const span = {};
+  for (const id of ids) {
     const [l, t, r, b] = dzExtent(id);
-    for (let pass = 0; pass <= Object.keys(out).length; pass++) {
-      let bottom = y;
-      for (const [other, [u, v]] of Object.entries(out)) {
-        const [ol, ot, or, ob] = dzExtent(other);
-        if (x - l < u + or + gap && x + r + gap > u - ol && y - t < v + ob + gap && y + b + gap > v - ot)
-          bottom = Math.max(bottom, v + ob + gap + t);
-      }
-      if (bottom === y) break;
-      y = bottom;
-    }
-    out[id] = [x, y];
+    span[id] = Math.min(l + r, t + b);
   }
+  return span;
+}
+function dzFit(pos) {  // keep full-size trees apart before fitting the viewport
+  const gap = 24, out = {};
+  for (const [id, point] of Object.entries(pos)) out[id] = [point[0], point[1]];
+  const ids = Object.keys(out);
+  for (let pass = 0; pass < 80; pass++) {
+    let moved = false;
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const a = ids[i], b = ids[j];
+      let [ax, ay] = out[a], [bx, by] = out[b];
+      const [al, at, ar, ab] = dzExtent(a), [bl, bt, br, bb] = dzExtent(b);
+      const ox = Math.min(ax + ar, bx + br) - Math.max(ax - al, bx - bl);
+      const oy = Math.min(ay + ab, by + bb) - Math.max(ay - at, by - bt);
+      if (ox + gap <= 0 || oy + gap <= 0) continue;
+      // Share the shorter separation. Pushing only downward stacked wide trees into a tall column
+      // and left the pane mostly empty once the view fitted that column.
+      const dist = (Math.min(ox, oy) + gap) / 2;
+      if (ox < oy) {
+        const dir = ax <= bx ? -1 : 1;
+        ax += dir * dist; bx -= dir * dist;
+      } else {
+        const dir = ay <= by ? -1 : 1;
+        ay += dir * dist; by -= dir * dist;
+      }
+      out[a] = [ax, ay]; out[b] = [bx, by];
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  for (const id of ids) out[id] = [Math.round(out[id][0]), Math.round(out[id][1])];
   DZ.fitNext = true;
   return out;
+}
+function dzFrame(boxes, W, H, zoom, fitZoom) {
+  // View only: the saved positions stay in layout units. zoom grows a graph that is smaller than the
+  // pane, up to 2.5. spreadX/spreadY move centres apart on the axis that still has room, so a tall
+  // graph fills a wide pane. Half-extents are not multiplied, and the scene scale stays uniform.
+  const pad = 48, roomW = Math.max(1, W - pad), roomH = Math.max(1, H - pad);
+  const bounds = (sx, sy) => {
+    let L = Infinity, T = Infinity, R = -Infinity, B = -Infinity;
+    for (const [x, y, l, t, r, b] of boxes) {
+      L = Math.min(L, x * sx - l); R = Math.max(R, x * sx + r);
+      T = Math.min(T, y * sy - t); B = Math.max(B, y * sy + b);
+    }
+    return [L, T, R, B];
+  };
+  if (!boxes.length) return { zoom: zoom || 1, spreadX: 1, spreadY: 1, ox: W / 2, oy: H / 2 };
+  let [L, T, R, B] = bounds(1, 1);
+  const bw = Math.max(1, R - L), bh = Math.max(1, B - T);
+  let z = zoom || 1;
+  if (fitZoom) z = Math.max(0.05, Math.min(2.5, roomW / bw, roomH / bh));
+  const fill = (axis, room) => {
+    const centres = boxes.map(box => box[axis]);
+    if (Math.max(...centres) - Math.min(...centres) < 1) return 1;  // one column or row: scaling centres opens no gap
+    const size = s => {
+      let lo = Infinity, hi = -Infinity;
+      for (const box of boxes) {
+        const c = box[axis] * s;
+        lo = Math.min(lo, c - box[axis + 2]); hi = Math.max(hi, c + box[axis + 4]);
+      }
+      return (hi - lo) * z;
+    };
+    if (size(1) >= room) return 1;
+    if (size(3) <= room) return 3;
+    let lo = 1, hi = 3;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (size(mid) <= room) lo = mid; else hi = mid;
+    }
+    return size(lo) <= room ? lo : 1;
+  };
+  const spreadX = fill(0, roomW), spreadY = fill(1, roomH);
+  [L, T, R, B] = bounds(spreadX, spreadY);
+  return { zoom: z, spreadX, spreadY, ox: W / 2 - (L + R) * z / 2, oy: H / 2 - (T + B) * z / 2 };
 }
 function dzZoom(factor, x, y) {
   const v = $('#dz-canvas'), old = DZ.zoom;
@@ -2982,7 +3051,8 @@ function dzZoom(factor, x, y) {
 function dzFitView() { DZ.fitNext = true; DZ.pinned = false; dzRender(); }
 function dzLayout() {
   if (!DZ.model) return;
-  DZ.pos = dzFit(DC.layout(DZ.model.nodes.map(n => n.id), DZ.model.edges, {}, null)); DZ.pinned = false;
+  const ids = DZ.model.nodes.map(n => n.id);
+  DZ.pos = dzFit(DC.layout(ids, DZ.model.edges, {}, null, 300, dzSpans(ids))); DZ.pinned = false;
   DZ.said = 'laid out the graph (positions only, the Markdown is unchanged)';
   dzRender(); dzSavePos();
 }
@@ -3041,8 +3111,9 @@ function dzPress(id, ev) {  // a click selects (or ends a link); a drag moves th
   const group = [id, ...(ev.shiftKey ? [] : DC.subtree(DZ.model, id))].filter(g => DZ.pos[g]);
   const x0 = ev.clientX, y0 = ev.clientY, start = new Map(group.map(g => [g, DZ.pos[g]])), drag = { id, moved: false };
   const mv = e => {
-    const dx = (e.clientX - x0) / DZ.zoom, dy = (e.clientY - y0) / DZ.zoom;
-    if (!drag.moved && Math.hypot(dx, dy) < 3) return;  // a shaky click is still a click
+    const sdx = e.clientX - x0, sdy = e.clientY - y0;
+    if (!drag.moved && Math.hypot(sdx, sdy) < 3) return;  // a shaky click is still a click
+    const dx = sdx / (DZ.zoom * (DZ.spreadX || 1)), dy = sdy / (DZ.zoom * (DZ.spreadY || 1));
     if (!drag.moved) { drag.moved = true; DZ.drag = drag; $('#dz-canvas').classList.add('dragging'); }
     for (const [g, p] of start) DZ.pos[g] = [Math.round(p[0] + dx), Math.round(p[1] + dy)];
     dzRender();
@@ -3205,10 +3276,11 @@ function dzCycle(direction) {
 function dzEnsureVisible() {
   const p = DZ.pos[DZ.active], v = $('#dz-canvas');
   if (!p) return;
-  const x = p[0] * DZ.zoom + DZ.ox, y = p[1] * DZ.zoom + DZ.oy;
+  const sx = DZ.spreadX || 1, sy = DZ.spreadY || 1;
+  const x = p[0] * sx * DZ.zoom + DZ.ox, y = p[1] * sy * DZ.zoom + DZ.oy;
   if (x < 40 || x > v.clientWidth - 40 || y < 40 || y > v.clientHeight - 40) {
-    DZ.ox = v.clientWidth / 2 - p[0] * DZ.zoom;
-    DZ.oy = v.clientHeight / 2 - p[1] * DZ.zoom;
+    DZ.ox = v.clientWidth / 2 - p[0] * sx * DZ.zoom;
+    DZ.oy = v.clientHeight / 2 - p[1] * sy * DZ.zoom;
     DZ.pinned = true; dzRender();
   }
 }
@@ -3221,7 +3293,7 @@ function dzWalk([dx, dy]) {  // along an edge (either way) to the neighbour lyin
   for (const e of m.edges) {
     const b = e.from === a ? e.to : e.to === a ? e.from : null;
     if (!b || b === a || !DZ.pos[b]) continue;
-    const vx = DZ.pos[b][0] - x0, vy = DZ.pos[b][1] - y0, d = Math.hypot(vx, vy) || 1, c = (vx * dx + vy * dy) / d;
+    const vx = (DZ.pos[b][0] - x0) * (DZ.spreadX || 1), vy = (DZ.pos[b][1] - y0) * (DZ.spreadY || 1), d = Math.hypot(vx, vy) || 1, c = (vx * dx + vy * dy) / d;
     if (c > 0.1 && d / (c * c) < score) { score = d / (c * c); best = b; }  // near and in line beats far or sideways
   }
   if (!best) { DZ.said = `no edge from ${a} leads that way`; return dzRender(); }
@@ -3263,15 +3335,13 @@ function dzRender() {
   if (!m || !m.nodes.length) return;
   const ids = m.nodes.map(n => n.id), W = v.clientWidth || 600, H = v.clientHeight || 400;
   if (!DZ.drag && (!DZ.pinned || DZ.fitNext)) {  // centre the graph with its trees; not mid-drag or after one, so a node stays where it was dropped
-    const ex = ids.map(id => { const [l, t, r, b] = dzExtent(id), [x, y] = DZ.pos[id]; return [x - l, y - t, x + r, y + b]; });
-    const left = Math.min(...ex.map(e => e[0])), right = Math.max(...ex.map(e => e[2]));
-    const top = Math.min(...ex.map(e => e[1])), bottom = Math.max(...ex.map(e => e[3]));
-    if (DZ.fitNext) { DZ.zoom = Math.max(0.05, Math.min(1, (W - 48) / (right - left || 1), (H - 48) / (bottom - top || 1))); DZ.fitNext = false; }
-    DZ.ox = W / 2 - (left + right) * DZ.zoom / 2;
-    DZ.oy = H / 2 - (top + bottom) * DZ.zoom / 2;
+    const boxes = ids.map(id => { const [l, t, r, b] = dzExtent(id), [x, y] = DZ.pos[id] || [0, 0]; return [x, y, l, t, r, b]; });
+    const frame = dzFrame(boxes, W, H, DZ.zoom, !!DZ.fitNext);
+    DZ.zoom = frame.zoom; DZ.spreadX = frame.spreadX; DZ.spreadY = frame.spreadY;
+    DZ.ox = frame.ox; DZ.oy = frame.oy; DZ.fitNext = false;
   }
-  const { ox, oy } = DZ;
-  const at = id => DZ.pos[id];
+  const { ox, oy } = DZ, sx = DZ.spreadX || 1, sy = DZ.spreadY || 1;
+  const at = id => { const p = DZ.pos[id] || [0, 0]; return [p[0] * sx, p[1] * sy]; };
   const scene = document.createElementNS(SVGNS, 'g');
   scene.setAttribute('transform', `translate(${ox} ${oy}) scale(${DZ.zoom})`); svg.append(scene);
   trees.style.transformOrigin = '0 0';
@@ -4683,6 +4753,17 @@ function newPaths(text) {  // one path per line (a comma also works), trimmed, d
   }
   return out;
 }
+function lastDefinedFile(paths, entries) {
+  // The last path the user typed that is a file. Created parents come first in
+  // entries, so the first created row is often a folder and would leave the editor empty.
+  const kind = new Map((entries || []).map(e => [e.path, e.kind]));
+  let file = null;
+  for (const raw of paths || []) {
+    const path = String(raw).replace(/\\/g, '/').split('/').filter(s => s && s !== '.').join('/');
+    if (kind.get(path) === 'file') file = path;
+  }
+  return file;
+}
 function newAtDepth() {
   const base = baseDir();
   const ta = el('textarea', 'newnames');
@@ -4702,13 +4783,14 @@ function newAtDepth() {
       $('#modal').close();
       const made = (r.entries || []).filter(x => x.action === 'created');
       if (!made.length) { toast('Nothing created — already there', true); return; }
-      const first = made[0].path;
-      expandTo(first);
+      const file = lastDefinedFile(paths, r.entries);  // open that file; else the first created row
+      const open = file || made[0].path;
+      expandTo(open);
       for (const e of made) if (e.kind === 'dir') S.expanded.add(e.path);
       await loadTree();
-      await select(first);
+      await select(open);
       toast(`Created ${made.length} entr${made.length === 1 ? 'y' : 'ies'}${r.log ? ` (log #${r.log.seq})` : ''}`);
-      if (made.length === 1 && made[0].kind === 'file' && S.file && S.file.path === first) editor.focus();
+      if (file && S.file && S.file.path === file) editor.focus();
     } catch (e) {
       create.disabled = false; create.textContent = 'Create';
       toast(e.message, true);
