@@ -2,12 +2,50 @@
 
 ## Unreleased
 
+- Design mode: Minder's mind-map keys (phase1geo/Minder defaults). The mind map now has its own
+  keyboard selection: click an item or press `→` on a state to enter it. On an item, `Tab` adds a child,
+  `Enter` adds a sibling after it (`Shift+Enter`: before) and `Shift+Tab` adds a parent. `→` / `←` go to
+  the child / parent and `↑` / `↓` to the siblings, without wrapping; `h j k l`, `a`, `c`, `m`, `n` / `p`
+  and PageUp / PageDown also work. `Alt+↑` / `Alt+↓` reorder, `Alt+←` moves an item out a level, and
+  `Alt+→` lifts its children. `Del` / Backspace deletes the branch (`Shift`: only the item, its children
+  stay), `f` folds it (`Shift+F`: the whole branch), `e` / `F2` edits it, `Shift+C` / `2` centres it, and
+  `Esc` goes back to the state. On a state, `Tab` adds a mind-map item and `Enter` adds a state
+  (`Shift+Enter`: a linked one). While typing, `Enter` opens the next sibling, `Tab` a child and
+  `Shift+Tab` a parent; `Esc` ends the edit and keeps the text. `0`, `1`, `=` and `-` zoom without
+  `Ctrl` (Chrome takes `Ctrl+1` / `Ctrl+2`). `Ctrl+?` toggles the key list, and `Ctrl+Shift+Z` redoes.
+  Every change is one undo step and touches only its own lines.
+  **Changed keys:** `Enter` on a state used to add a mind-map item (now `Tab`); `Tab` used to move to the
+  tree controls; `Tab` / `Shift+Tab` while typing used to indent / outdent; `Esc` while typing used to
+  discard the edit.
+
+- Design mode: the bar of keys under the canvas is now a small `?` button in the canvas corner. The full
+  list appears on hover, on keyboard focus, or with `?` while the graph has focus, and Esc hides it.
+  Clicking `?` leaves focus where it was, and typing in a name or item box never opens the list. The
+  drawing gets the space back: at 1366×768 the canvas is 495 px tall instead of 220. The DESIGN and
+  LINK badges are smaller.
+
+- Design mode now has two layout levels. **States** are laid out as a fixed tidy tree: one row per rank,
+  each parent over its children, and no edge crossings in the sample graphs. Saved positions are kept;
+  Layout gives the same picture every time. Each state's bullet tree is drawn as a **mind map**
+  branching to the right of the state, in Minder's style: even branch and sibling spacing, and a `−`/`+`
+  on each branch to fold it (`f` folds the active state's map). An unfolded map reserves its own space,
+  so it never covers another state, map or edge. Other states move only as far as needed, and folding
+  gives the space back. Fold state is saved as `"folded"` in `.treedit-layout.json`.
+- Design mode: the view no longer shrinks the graph to fit (this replaces the "shrink to fit" entry
+  below). It opens at actual size, and on an edit it pans only as far as needed to show the node, with
+  a 200 ms ease. Ctrl+0 is actual size, Ctrl+1 fits, and Shift+C centres. A new node goes to the
+  nearest free spot by its source, and a rename that makes a node wider moves only that node. Neither
+  pushes other states.
+- Design mode: fixed the name box losing focus right after `n`/`a` in Chrome. A redraw from the resize
+  observer blurred the input and committed the default name, so the next keys went to the canvas.
+
 - Design mode: click an edge to label it (state `A --> B : x`, flowchart `A -->|x| B`, d2 `a -> b: x`;
   empty removes it), and a new link opens its label box so the next typing labels it. **Start a
   state graph** writes skill-style front matter (`name` from the file name, a `description`
   placeholder, `treedit: design`); `treedit: design` lights the Design button and opens the file in
   Design mode unless you left it, and the parser never reads front matter as a node tree.
 - Design UX: visible node/link controls, background pan, zoom and Fit, tree-aware layout spacing, separate return-edge labels and visible self-loop labels. Keyboard users can cycle all nodes with `[` / `]`, link with Enter, and Tab to editable tree items.
+- Design mode: the key strip below the graph is one line, with **all keys** opening the full list over the graph. It no longer grows or shrinks with the pane, so resizing the window does not change the canvas height and re-centre the graph.
 
 - Design mode: drag nodes with the mouse (the view stays put after a drop; Layout or a resize
   re-centres it), and edit the node trees on the canvas: double-click an item to edit it (empty
